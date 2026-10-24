@@ -1,0 +1,57 @@
+"""
+Vaelkry Dev Labs - Gemini AI Service
+Provides asynchronous content generation with fallback models and error resilience.
+"""
+
+import logging
+from typing import List, Optional
+from google import genai
+from google.genai import errors
+
+logger = logging.getLogger("VaelkryDevLabs.Gemini")
+
+
+class GeminiService:
+    def __init__(self, api_key: str, candidate_models: Optional[List[str]] = None):
+        self.api_key = api_key
+        self.client = genai.Client(api_key=api_key)
+        self.candidate_models = candidate_models or [
+            "gemini-3.5-flash",
+            "gemini-3.1-flash-lite",
+            "gemini-3.8-flash",
+            "gemini-flash-latest",
+        ]
+
+    async def generate_response(self, prompt: str, agent_name: str) -> str:
+        """
+        Asynchronously generates a response using Gemini, cycling through candidate
+        models if any encounters high demand (503) or rate limits.
+        """
+        last_exception = None
+
+        for model in self.candidate_models:
+            try:
+                logger.info(f"Generating response for {agent_name} using model: {model}")
+                response = await self.client.aio.models.generate_content(
+                    model=model,
+                    contents=prompt,
+                )
+                if response and response.text:
+                    cleaned_text = response.text.strip()
+                    # Safeguard against Discord 2000 char limit
+                    if len(cleaned_text) > 1950:
+                        cleaned_text = cleaned_text[:1900] + "\n\n*(Content trimmed to fit Discord message limit)*"
+                    return cleaned_text
+                else:
+                    logger.warning(f"Empty response from model {model} for {agent_name}")
+            except (errors.APIError, errors.ClientError, Exception) as exc:
+                last_exception = exc
+                logger.warning(f"Model {model} failed for {agent_name}: {exc}. Trying next fallback...")
+                continue
+
+        logger.error(f"All Gemini models exhausted for {agent_name}: {last_exception}")
+        # In-character fallback if API experiences transient global outage
+        return (
+            f"**[{agent_name}]**: Ayyo nanba, network throttle konjam lag aaguthu! "
+            f"API busy-ah iruku, but namma plan lock aayiruchu! ⚡"
+        )
