@@ -137,7 +137,7 @@ ROUTINE_SHIFTS: List[ShiftDefinition] = [
         category_name="Tech Cafe",
         vc_name="The Hive",
         self_mute=False,
-        self_deaf=True,
+        self_deaf=False,
         activity_name="Power Nap ⚡",
         start_hour=11,
         end_hour=12,
@@ -204,16 +204,24 @@ def match_current_shift(now_ist: datetime.datetime) -> ShiftDefinition:
 class CompanyScheduler:
     """
     Coordinates lifecycle states (/start and /stop) and executes the 1-minute
-    background loop moving the 5 Team Vaasan bots according to IST shifts.
+    background loop moving Team Vaasan and Team Vijay bots according to IST shifts.
     """
 
     def __init__(self, orchestrator: "AgentOrchestrator"):
         self.orchestrator = orchestrator
-        self.team_keys = ["ttf_vasan", "pradeep", "mamitha", "kayadu", "muthazhagi"]
+        self.team_vasan_keys: List[str] = ["ttf_vasan", "pradeep", "mamitha", "kayadu", "muthazhagi"]
+        self.team_vijay_keys: List[str] = ["vijay", "sivakarthikeyan", "anirudh", "trisha", "lokesh"]
+        self.team_keys: List[str] = self.team_vasan_keys  # Backward compatibility
         self.is_active: bool = False
         self.current_shift_id: Optional[str] = None
         self._loop_task: Optional[asyncio.Task] = None
         self.assigned_sleep_rooms: Dict[str, int] = {}  # agent_key -> voice_channel_id
+        self.assigned_cafe_rooms: Dict[str, int] = {}   # agent_key -> voice_channel_id
+
+    @property
+    def all_dev_keys(self) -> List[str]:
+        """Returns all developer bot keys across Team Vaasan and Team Vijay."""
+        return self.team_vasan_keys + self.team_vijay_keys
 
     async def get_night_spend_voice_channels(self, guild: discord.Guild) -> List[discord.VoiceChannel]:
         """
@@ -242,6 +250,42 @@ class CompanyScheduler:
             return [r1, r2, r3]
         except Exception as exc:
             logger.error(f"Error provisioning fallback sleep rooms: {exc}")
+            if guild.voice_channels:
+                return [guild.voice_channels[0]]
+            return []
+
+    async def get_tech_cafe_voice_channels(self, guild: discord.Guild) -> List[discord.VoiceChannel]:
+        """
+        Dynamically fetches all 4 voice channels under the 'Tech Cafe' category:
+        'The Seven Slide', 'Byte & Bit', 'The Hive', 'The Hangout Zone'.
+        Auto-provisions or searches by name if category is missing.
+        """
+        tech_cafe_cat = discord.utils.find(
+            lambda c: c.name.strip().lower() == "tech cafe",
+            guild.categories,
+        )
+        if tech_cafe_cat and tech_cafe_cat.voice_channels:
+            return list(tech_cafe_cat.voice_channels)
+
+        expected_names = ["The Seven Slide", "Byte & Bit", "The Hive", "The Hangout Zone"]
+        # Fallback 1: match by name across guild
+        found = [vc for vc in guild.voice_channels if vc.name.strip().lower() in [n.lower() for n in expected_names]]
+        if found:
+            return found
+
+        # Fallback 2: auto-provision Tech Cafe category with all 4 rooms
+        try:
+            if not tech_cafe_cat:
+                tech_cafe_cat = await guild.create_category(name="Tech Cafe")
+            vcs = []
+            for name in expected_names:
+                vc = discord.utils.find(lambda v: v.name.strip().lower() == name.lower(), tech_cafe_cat.voice_channels)
+                if not vc:
+                    vc = await tech_cafe_cat.create_voice_channel(name=name)
+                vcs.append(vc)
+            return vcs
+        except Exception as exc:
+            logger.error(f"Error provisioning fallback Tech Cafe channels: {exc}")
             if guild.voice_channels:
                 return [guild.voice_channels[0]]
             return []
@@ -306,7 +350,19 @@ class CompanyScheduler:
         except Exception as exc:
             logger.warning(f"Failed to update activity for {client.user.name}: {exc}")
 
-        # 2. Voice connection and mute/deaf state update
+        # 2. Strict mute/deaf determination:
+        # Enforce False for all non-sleep shifts or when inside Tech Cafe / Working VCs
+        is_sleep = (shift.shift_id == "sleep")
+        target_mute = True if is_sleep else False
+        target_deaf = True if is_sleep else False
+
+        vc_name_lower = target_vc.name.lower()
+        cat_name_lower = target_vc.category.name.lower() if target_vc.category else ""
+        if "sleep" not in vc_name_lower and "night spend" not in cat_name_lower:
+            target_mute = False
+            target_deaf = False
+
+        # 3. Voice connection and mute/deaf state update
         is_in_voice = bool(bot_member and bot_member.voice and bot_member.voice.channel)
         voice_client = discord.utils.get(client.voice_clients, guild=guild)
 
@@ -315,8 +371,8 @@ class CompanyScheduler:
                 # Already in voice on Discord: change channel and mute/deaf via gateway
                 await guild.change_voice_state(
                     channel=target_vc,
-                    self_mute=shift.self_mute,
-                    self_deaf=shift.self_deaf,
+                    self_mute=target_mute,
+                    self_deaf=target_deaf,
                 )
             else:
                 if voice_client:
@@ -325,8 +381,8 @@ class CompanyScheduler:
                     except Exception:
                         pass
                 await target_vc.connect(
-                    self_mute=shift.self_mute,
-                    self_deaf=shift.self_deaf,
+                    self_mute=target_mute,
+                    self_deaf=target_deaf,
                     reconnect=True,
                 )
         except discord.errors.ClientException as ce:
@@ -334,8 +390,8 @@ class CompanyScheduler:
             try:
                 await guild.change_voice_state(
                     channel=target_vc,
-                    self_mute=shift.self_mute,
-                    self_deaf=shift.self_deaf,
+                    self_mute=target_mute,
+                    self_deaf=target_deaf,
                 )
             except Exception as e2:
                 logger.warning(f"Gateway change_voice_state fallback failed for {client.user.name}: {e2}")
@@ -344,14 +400,27 @@ class CompanyScheduler:
             try:
                 await guild.change_voice_state(
                     channel=target_vc,
-                    self_mute=shift.self_mute,
-                    self_deaf=shift.self_deaf,
+                    self_mute=target_mute,
+                    self_deaf=target_deaf,
                 )
             except Exception as retry_exc:
                 logger.error(f"Failed to connect {client.user.name} to {target_vc.name}: {retry_exc}")
 
+        # 4. Strictly enforce gateway ws.voice_state directly:
+        # await bot_instance.ws.voice_state(guild.id, vc.id, self_mute=False, self_deaf=False)
+        try:
+            if hasattr(client, "ws") and client.ws:
+                await client.ws.voice_state(
+                    guild.id,
+                    target_vc.id,
+                    self_mute=target_mute,
+                    self_deaf=target_deaf,
+                )
+        except Exception as ws_err:
+            logger.debug(f"Direct ws.voice_state update for {client.user.name}: {ws_err}")
+
     async def apply_shift(self, guild: discord.Guild, shift: ShiftDefinition):
-        """Applies the specified shift to all 5 Team Vaasan bots concurrently."""
+        """Applies the specified shift to Team Vaasan and Team Vijay bots concurrently."""
         now_ist = get_current_ist_time()
         logger.info(f"Applying Shift: [{shift.name}] at {now_ist.strftime('%H:%M:%S IST')}")
 
@@ -359,13 +428,14 @@ class CompanyScheduler:
 
         if shift.shift_id == "sleep":
             # ==================== SLEEP SHIFT (DISTRIBUTED ACROSS NIGHT SPEND) ====================
+            self.assigned_cafe_rooms.clear()
             sleep_channels = await self.get_night_spend_voice_channels(guild)
             if not sleep_channels:
                 logger.error("No sleep voice channels found in Night Spend.")
                 return
 
             logger.info(
-                f"Distributing 5 developer bots across {len(sleep_channels)} Night Spend room(s): "
+                f"Distributing developer bots across {len(sleep_channels)} Night Spend room(s): "
                 f"{[vc.name for vc in sleep_channels]}"
             )
 
@@ -374,7 +444,7 @@ class CompanyScheduler:
             random.shuffle(shuffled_rooms)
 
             self.assigned_sleep_rooms.clear()
-            for idx, key in enumerate(self.team_keys):
+            for idx, key in enumerate(self.all_dev_keys):
                 client = self.orchestrator.clients.get(key)
                 if not client or not client.is_ready():
                     continue
@@ -384,25 +454,70 @@ class CompanyScheduler:
                 logger.info(f"Sleep assignment: {client.user.name} -> {assigned_vc.name} (Night Spend)")
                 move_tasks.append(self.move_single_bot(client, assigned_vc, shift))
 
-        else:
-            # ==================== ACTIVE SPRINT / BREAK / WARMUP SHIFTS ====================
-            # Clear sleep assignments when transitioning to active/warmup shifts
+        elif (
+            shift.category_name.strip().lower() == "tech cafe"
+            or shift.shift_id.startswith("break")
+            or shift.shift_id == "warmup"
+        ):
+            # ==================== TECH CAFE BREAK / WARMUP SHIFTS (BALANCED RANDOM) ====================
+            # Clear sleep assignments
             self.assigned_sleep_rooms.clear()
 
-            target_vc = await self.find_or_provision_voice_channel(
+            cafe_channels = await self.get_tech_cafe_voice_channels(guild)
+            if not cafe_channels:
+                logger.error("No voice channels found under Tech Cafe.")
+                return
+
+            logger.info(
+                f"Randomly distributing developer bots across {len(cafe_channels)} Tech Cafe room(s): "
+                f"{[vc.name for vc in cafe_channels]}"
+            )
+
+            # Randomly shuffle Tech Cafe voice channels so bots are NOT dumped into 'The Hive'
+            shuffled_cafe = list(cafe_channels)
+            random.shuffle(shuffled_cafe)
+
+            self.assigned_cafe_rooms.clear()
+            for idx, key in enumerate(self.all_dev_keys):
+                client = self.orchestrator.clients.get(key)
+                if not client or not client.is_ready():
+                    continue
+
+                assigned_vc = shuffled_cafe[idx % len(shuffled_cafe)]
+                self.assigned_cafe_rooms[key] = assigned_vc.id
+                logger.info(f"Tech Cafe assignment: {client.user.name} -> {assigned_vc.name} (Tech Cafe)")
+                move_tasks.append(self.move_single_bot(client, assigned_vc, shift))
+
+        else:
+            # ==================== ACTIVE SPRINT / WORKING SHIFTS ====================
+            self.assigned_sleep_rooms.clear()
+            self.assigned_cafe_rooms.clear()
+
+            # 1. Team Vaasan Cabin
+            vasan_vc = await self.find_or_provision_voice_channel(
                 guild=guild,
                 category_name=shift.category_name,
                 vc_name=shift.vc_name,
             )
-            if not target_vc:
-                logger.error(f"Cannot apply shift {shift.name}: No voice channel found.")
-                return
+            if vasan_vc:
+                logger.info(f"Relocating Team Vaasan bots together to '{vasan_vc.name}' ({shift.category_name})")
+                for key in self.team_vasan_keys:
+                    client = self.orchestrator.clients.get(key)
+                    if client and client.is_ready():
+                        move_tasks.append(self.move_single_bot(client, vasan_vc, shift))
 
-            logger.info(f"Relocating all 5 bots together to '{target_vc.name}' ({shift.category_name})")
-            for key in self.team_keys:
-                client = self.orchestrator.clients.get(key)
-                if client and client.is_ready():
-                    move_tasks.append(self.move_single_bot(client, target_vc, shift))
+            # 2. Team Vijay Cabin ('Team Vijay' -> 'Working Vc 1')
+            vijay_vc = await self.find_or_provision_voice_channel(
+                guild=guild,
+                category_name="Team Vijay",
+                vc_name="Working Vc 1",
+            )
+            if vijay_vc:
+                logger.info(f"Relocating Team Vijay bots to '{vijay_vc.name}' (Team Vijay)")
+                for key in self.team_vijay_keys:
+                    client = self.orchestrator.clients.get(key)
+                    if client and client.is_ready():
+                        move_tasks.append(self.move_single_bot(client, vijay_vc, shift))
 
         if move_tasks:
             await asyncio.gather(*move_tasks, return_exceptions=True)
@@ -451,14 +566,15 @@ class CompanyScheduler:
 
     def get_status_embed(self, guild: discord.Guild) -> discord.Embed:
         """
-        Generates a live operational status log embed for TTF Vasan and Vaelkry Dev Labs.
-        Summarizes current IST time, active shift, scheduler state, and 5-bot VC locations.
+        Generates a live operational status log embed for Vaelkry Dev Labs.
+        Summarizes current IST time, active shift, scheduler state, and VC locations for
+        both Team Vaasan and Team Vijay.
         """
         now_ist = get_current_ist_time()
         shift = match_current_shift(now_ist) if self.is_active else None
 
         embed = discord.Embed(
-            title="📊 Vaelkry Dev Labs — TTF Vasan Operational Status",
+            title="📊 Vaelkry Dev Labs — Squad Operational Status",
             color=discord.Color.brand_green() if self.is_active else discord.Color.greyple(),
             timestamp=now_ist,
         )
@@ -478,20 +594,37 @@ class CompanyScheduler:
                 inline=True,
             )
 
-        # Developer squad location breakdown
-        loc_lines = []
-        for key in self.team_keys:
+        # Team Vaasan location breakdown
+        vasan_lines = []
+        for key in self.team_vasan_keys:
             client = self.orchestrator.clients.get(key)
             name = client.agent_config.name if (client and hasattr(client, "agent_config")) else key
             bot_guild = client.get_guild(guild.id) if client else guild
             bot_member = (bot_guild.me or bot_guild.get_member(client.user.id)) if (client and client.user and bot_guild) else None
             vc = bot_member.voice.channel if (bot_member and bot_member.voice) else None
             loc_str = f"🔊 `{vc.name}`" if vc else "*(Offline / Disconnected)*"
-            loc_lines.append(f"• **{name}:** {loc_str}")
+            vasan_lines.append(f"• **{name}:** {loc_str}")
 
         embed.add_field(
             name="Team Vaasan Real-Time VC Locations",
-            value="\n".join(loc_lines) if loc_lines else "No bots online",
+            value="\n".join(vasan_lines) if vasan_lines else "No bots online",
+            inline=False,
+        )
+
+        # Team Vijay location breakdown
+        vijay_lines = []
+        for key in self.team_vijay_keys:
+            client = self.orchestrator.clients.get(key)
+            name = client.agent_config.name if (client and hasattr(client, "agent_config")) else key
+            bot_guild = client.get_guild(guild.id) if client else guild
+            bot_member = (bot_guild.me or bot_guild.get_member(client.user.id)) if (client and client.user and bot_guild) else None
+            vc = bot_member.voice.channel if (bot_member and bot_member.voice) else None
+            loc_str = f"🔊 `{vc.name}`" if vc else "*(Offline / Disconnected)*"
+            vijay_lines.append(f"• **{name}:** {loc_str}")
+
+        embed.add_field(
+            name="Team Vijay Real-Time VC Locations",
+            value="\n".join(vijay_lines) if vijay_lines else "No bots online",
             inline=False,
         )
 
@@ -528,7 +661,7 @@ class CompanyScheduler:
                         shift_embed = discord.Embed(
                             title=f"🌙 [SHIFT UPDATE] Sleep (Night Spend) — {now_ist.strftime('%H:%M IST')}",
                             description=(
-                                "**All 5 developer bots dispersed across Night Spend rooms:**\n"
+                                "**All developer bots dispersed across Night Spend rooms:**\n"
                                 + "\n".join(room_lines)
                                 + "\n\n• **Voice State:** `self_mute=True`, `self_deaf=True`"
                                 + "\n• **Custom Status:** `Sleeping in Night Spend 💤`"
@@ -539,13 +672,41 @@ class CompanyScheduler:
                         shift_embed.set_footer(
                             text=f"CEO Channel Exclusive: #{CEO_NOTIFICATION_CHANNEL_NAME} • Clean #announcements"
                         )
+                    elif (
+                        current_shift.category_name.strip().lower() == "tech cafe"
+                        or current_shift.shift_id.startswith("break")
+                        or current_shift.shift_id == "warmup"
+                    ) and self.assigned_cafe_rooms:
+                        room_lines = []
+                        for k, rid in self.assigned_cafe_rooms.items():
+                            client = self.orchestrator.clients.get(k)
+                            ch = guild.get_channel(rid)
+                            name = client.user.name if (client and client.user) else k
+                            room_name = ch.name if ch else "Tech Cafe"
+                            room_lines.append(f"  • **{name}:** 🔊 `{room_name}`")
+
+                        shift_embed = discord.Embed(
+                            title=f"☕ [SHIFT UPDATE] {current_shift.name} — {now_ist.strftime('%H:%M IST')}",
+                            description=(
+                                "**Developer bots distributed across Tech Cafe rooms (The Seven Slide, Byte & Bit, The Hive, The Hangout Zone):**\n"
+                                + "\n".join(room_lines)
+                                + f"\n\n• **Prescribed Activity:** `{current_shift.activity_name}`"
+                                + "\n• **Voice State:** `self_mute=False`, `self_deaf=False` (Undeafened & Unmuted)"
+                            ),
+                            color=discord.Color.gold(),
+                            timestamp=now_ist,
+                        )
+                        shift_embed.set_footer(
+                            text=f"CEO Channel Exclusive: #{CEO_NOTIFICATION_CHANNEL_NAME} • Clean #announcements"
+                        )
                     else:
                         shift_embed = discord.Embed(
                             title=f"🔔 [SHIFT UPDATE] {current_shift.name} — {now_ist.strftime('%H:%M IST')}",
                             description=(
-                                f"All 5 developer bots relocated to `🔊 {current_shift.vc_name}` ({current_shift.category_name}).\n"
+                                f"• **Team Vaasan:** Relocated to `🔊 {current_shift.vc_name}` ({current_shift.category_name})\n"
+                                f"• **Team Vijay:** Relocated to `🔊 Working Vc 1` (Team Vijay)\n"
                                 f"• **Prescribed Activity:** `{current_shift.activity_name}`\n"
-                                f"• **Voice State:** `self_mute={current_shift.self_mute}`, `self_deaf={current_shift.self_deaf}`"
+                                f"• **Voice State:** `self_mute=False`, `self_deaf=False` (Undeafened & Unmuted)"
                             ),
                             color=discord.Color.blue(),
                             timestamp=now_ist,
@@ -581,22 +742,56 @@ class CompanyScheduler:
                                 )
                                 if not is_in_target:
                                     asyncio.create_task(self.move_single_bot(client, target_vc, current_shift))
+                    elif (
+                        current_shift.category_name.strip().lower() == "tech cafe"
+                        or current_shift.shift_id.startswith("break")
+                        or current_shift.shift_id == "warmup"
+                    ) and self.assigned_cafe_rooms:
+                        # Ensure bots remain in their assigned Tech Cafe room without bouncing
+                        for key, room_id in self.assigned_cafe_rooms.items():
+                            client = self.orchestrator.clients.get(key)
+                            target_vc = guild.get_channel(room_id)
+                            if client and client.is_ready() and target_vc:
+                                vc_conn = discord.utils.get(client.voice_clients, guild=guild)
+                                bot_member = guild.me or guild.get_member(client.user.id)
+                                is_in_target = (
+                                    (vc_conn and vc_conn.is_connected() and vc_conn.channel.id == target_vc.id)
+                                    or (bot_member and bot_member.voice and bot_member.voice.channel and bot_member.voice.channel.id == target_vc.id)
+                                )
+                                if not is_in_target:
+                                    asyncio.create_task(self.move_single_bot(client, target_vc, current_shift))
                     else:
-                        target_vc = await self.find_or_provision_voice_channel(
+                        # Active work shift alignment
+                        vasan_vc = await self.find_or_provision_voice_channel(
                             guild, current_shift.category_name, current_shift.vc_name
                         )
-                        if target_vc:
-                            for key in self.team_keys:
+                        vijay_vc = await self.find_or_provision_voice_channel(
+                            guild, "Team Vijay", "Working Vc 1"
+                        )
+                        if vasan_vc:
+                            for key in self.team_vasan_keys:
                                 client = self.orchestrator.clients.get(key)
                                 if client and client.is_ready():
                                     vc_conn = discord.utils.get(client.voice_clients, guild=guild)
                                     bot_member = guild.me or guild.get_member(client.user.id)
                                     is_in_target = (
-                                        (vc_conn and vc_conn.is_connected() and vc_conn.channel.id == target_vc.id)
-                                        or (bot_member and bot_member.voice and bot_member.voice.channel and bot_member.voice.channel.id == target_vc.id)
+                                        (vc_conn and vc_conn.is_connected() and vc_conn.channel.id == vasan_vc.id)
+                                        or (bot_member and bot_member.voice and bot_member.voice.channel and bot_member.voice.channel.id == vasan_vc.id)
                                     )
                                     if not is_in_target:
-                                        asyncio.create_task(self.move_single_bot(client, target_vc, current_shift))
+                                        asyncio.create_task(self.move_single_bot(client, vasan_vc, current_shift))
+                        if vijay_vc:
+                            for key in self.team_vijay_keys:
+                                client = self.orchestrator.clients.get(key)
+                                if client and client.is_ready():
+                                    vc_conn = discord.utils.get(client.voice_clients, guild=guild)
+                                    bot_member = guild.me or guild.get_member(client.user.id)
+                                    is_in_target = (
+                                        (vc_conn and vc_conn.is_connected() and vc_conn.channel.id == vijay_vc.id)
+                                        or (bot_member and bot_member.voice and bot_member.voice.channel and bot_member.voice.channel.id == vijay_vc.id)
+                                    )
+                                    if not is_in_target:
+                                        asyncio.create_task(self.move_single_bot(client, vijay_vc, current_shift))
             except asyncio.CancelledError:
                 logger.info("Scheduler background loop cancelled.")
                 break
@@ -609,7 +804,7 @@ class CompanyScheduler:
         """
         Activates the company lifecycle:
         1. Posts operational start status embed strictly to #yogesh-chat (1563622902744481812).
-        2. Evaluates current IST time and immediately relocates all 5 bots.
+        2. Evaluates current IST time and immediately relocates developer bots.
         3. Starts the 1-minute scheduler background loop.
         """
         if self.is_active:
@@ -637,8 +832,24 @@ class CompanyScheduler:
                 room_name = ch.name if ch else "Sleep Room"
                 room_lines.append(f"  • **{name}:** 🔊 `{room_name}`")
             vc_display = "Distributed across Night Spend rooms:\n" + "\n".join(room_lines)
+        elif (
+            initial_shift.category_name.strip().lower() == "tech cafe"
+            or initial_shift.shift_id.startswith("break")
+            or initial_shift.shift_id == "warmup"
+        ) and self.assigned_cafe_rooms:
+            room_lines = []
+            for k, rid in self.assigned_cafe_rooms.items():
+                client = self.orchestrator.clients.get(k)
+                ch = guild.get_channel(rid)
+                name = client.user.name if client and client.user else k
+                room_name = ch.name if ch else "Tech Cafe"
+                room_lines.append(f"  • **{name}:** 🔊 `{room_name}`")
+            vc_display = "Randomly distributed across Tech Cafe rooms:\n" + "\n".join(room_lines)
         else:
-            vc_display = f"`🔊 {initial_shift.vc_name}` ({initial_shift.category_name})"
+            vc_display = (
+                f"• Team Vaasan: `🔊 {initial_shift.vc_name}` ({initial_shift.category_name})\n"
+                f"• Team Vijay: `🔊 Working Vc 1` (Team Vijay)"
+            )
 
         ceo_ch = self.get_ceo_channel(guild)
         ceo_mention = ceo_ch.mention if ceo_ch else f"#{CEO_NOTIFICATION_CHANNEL_NAME}"
@@ -648,16 +859,17 @@ class CompanyScheduler:
             title="🚀 Vaelkry Dev Labs — Active Operation Started",
             description=(
                 "**Vaelkry Dev Labs is now officially in active operation!**\n"
-                "All 5 Team Vaasan bots are adhering to IST shift guidelines.\n\n"
+                "Both Team Vaasan and Team Vijay bots are adhering to IST shift guidelines.\n\n"
                 f"• **Operational Logs & Alerts:** Routed strictly to {ceo_mention}\n"
-                f"• **#announcements Status:** Kept strictly clean for official manual CEO announcements"
+                f"• **#announcements Status:** Kept strictly clean for official manual CEO announcements\n"
+                "• **Voice State Enforcement:** Strictly unmuted and undeafened during all working and break shifts!"
             ),
             color=discord.Color.brand_green(),
             timestamp=now_ist,
         )
         start_embed.add_field(name="Current IST Time", value=f"`{now_ist.strftime('%H:%M:%S IST')}`", inline=True)
         start_embed.add_field(name="Initial Active Shift", value=f"**{initial_shift.name}**", inline=True)
-        start_embed.add_field(name="Assigned Location", value=vc_display, inline=False)
+        start_embed.add_field(name="Assigned Locations", value=vc_display, inline=False)
         start_embed.add_field(name="Status Presence", value=f"`{initial_shift.activity_name}`", inline=False)
         if guild.icon:
             start_embed.set_thumbnail(url=guild.icon.url)
@@ -671,17 +883,17 @@ class CompanyScheduler:
             f"🚀 **Vaelkry Dev Labs Operations Started!**\n"
             f"• **Current Time:** `{now_ist.strftime('%H:%M:%S IST')}`\n"
             f"• **Current Shift:** `{initial_shift.name}`\n"
-            f"• **Assigned Location:** {vc_display}\n"
+            f"• **Assigned Location:**\n{vc_display}\n"
             f"• **Status:** `{initial_shift.activity_name}`\n"
             f"• **Operational Logs:** Routed exclusively to {ceo_mention} (#announcements kept clean)!\n"
-            f"All 5 Team Vaasan bots are aligned and the IST scheduler loop is active! ⚡"
+            f"Both Team Vaasan and Team Vijay are aligned and the IST scheduler loop is active! ⚡"
         )
 
     async def stop(self, guild: discord.Guild) -> str:
         """
         Deactivates company operations:
         1. Cancels scheduler loop.
-        2. Disconnects all 5 bots from voice channels cleanly.
+        2. Disconnects developer bots from voice channels cleanly.
         3. Posts pause notice embed exclusively to #yogesh-chat (1563622902744481812).
         """
         if not self.is_active:
@@ -695,10 +907,11 @@ class CompanyScheduler:
 
         self.current_shift_id = None
         self.assigned_sleep_rooms.clear()
+        self.assigned_cafe_rooms.clear()
 
-        # Cleanly disconnect all 5 bots and set standby presence
+        # Cleanly disconnect all developer bots and set standby presence
         disconnect_tasks = []
-        for key in self.team_keys:
+        for key in self.all_dev_keys:
             client = self.orchestrator.clients.get(key)
             if client:
                 for vc in list(client.voice_clients):
@@ -725,7 +938,7 @@ class CompanyScheduler:
             description=(
                 "**Vaelkry Dev Labs operations paused by CEO.**\n"
                 "• Routine scheduler background loop deactivated.\n"
-                "• All 5 Team Vaasan bots disconnected cleanly from voice channels.\n"
+                "• Team Vaasan & Team Vijay bots disconnected cleanly from voice channels.\n"
                 "• Presences reset to `Operations Paused ⏸️`.\n\n"
                 f"• Alert posted exclusively in {ceo_mention} (#announcements kept clean)."
             ),
@@ -733,7 +946,7 @@ class CompanyScheduler:
             timestamp=now_ist,
         )
         pause_embed.add_field(name="Paused At", value=f"`{now_ist.strftime('%H:%M:%S IST')}`", inline=True)
-        pause_embed.add_field(name="Team Vaasan State", value="`Disconnected from VC`", inline=True)
+        pause_embed.add_field(name="Squads Voice State", value="`Disconnected from VC`", inline=True)
         if guild.icon:
             pause_embed.set_thumbnail(url=guild.icon.url)
         pause_embed.set_footer(
@@ -745,6 +958,7 @@ class CompanyScheduler:
         return (
             "⏸️ **Vaelkry Dev Labs Operations Paused!**\n"
             "• Routine scheduler loop deactivated.\n"
-            "• All 5 Team Vaasan bots disconnected cleanly from voice channels.\n"
+            "• Team Vaasan & Team Vijay bots disconnected cleanly from voice channels.\n"
             f"• Notice posted exclusively in {ceo_mention} (#announcements kept clean)."
         )
+

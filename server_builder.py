@@ -53,6 +53,11 @@ BLUEPRINT_STRUCTURE: List[Dict[str, Any]] = [
         "voice_channels": ["Working Vc 1", "Working Vc 2"],
     },
     {
+        "category": "Team Vijay",
+        "text_channels": ["working-chat", "team-chat"],
+        "voice_channels": ["Working Vc 1", "Working Vc 2"],
+    },
+    {
         "category": "Night Spend",
         "text_channels": [],
         "voice_channels": ["Sleep Room 1", "Sleep Room 2", "Sleep Room 3"],
@@ -108,6 +113,56 @@ ENTERPRISE_ROLES: List[Dict[str, Any]] = [
         "hoist": True,
         "mentionable": True,
         "for_bots": ["muthazhagi"],
+    },
+    # Team Vijay Corporate Roles
+    {
+        "name": "👑 Team Lead | Team Vijay",
+        "color": discord.Color.dark_gold(),
+        "hoist": True,
+        "mentionable": True,
+        "for_bots": ["vijay"],
+    },
+    {
+        "name": "🎤 Entertainment & Timing Lead",
+        "color": discord.Color.gold(),
+        "hoist": True,
+        "mentionable": True,
+        "for_bots": ["sivakarthikeyan"],
+    },
+    {
+        "name": "🎵 Audio & Vibe Architect",
+        "color": discord.Color.blurple(),
+        "hoist": True,
+        "mentionable": True,
+        "for_bots": ["anirudh"],
+    },
+    {
+        "name": "💅 Creative & Brand Lead",
+        "color": discord.Color.pink(),
+        "hoist": True,
+        "mentionable": True,
+        "for_bots": ["trisha"],
+    },
+    {
+        "name": "🎬 Action & Operations Lead",
+        "color": discord.Color.dark_red(),
+        "hoist": True,
+        "mentionable": True,
+        "for_bots": ["lokesh"],
+    },
+    {
+        "name": "🔥 Team Vijay",
+        "color": discord.Color.dark_orange(),
+        "hoist": True,
+        "mentionable": True,
+        "for_bots": ["vijay", "sivakarthikeyan", "anirudh", "trisha", "lokesh"],
+    },
+    {
+        "name": "⚡ Team Vasan",
+        "color": discord.Color.blue(),
+        "hoist": True,
+        "mentionable": True,
+        "for_bots": ["ttf_vasan", "pradeep", "mamitha", "kayadu", "muthazhagi"],
     },
     {
         "name": "💻 Software Engineer",
@@ -206,7 +261,56 @@ async def ensure_enterprise_roles(
                     except Exception as exc:
                         logger.warning(f"Failed to assign '{se_role.name}' to {member.display_name}: {exc}")
 
+    # 4. Ensure Team Vijay category and channels exist
+    try:
+        await ensure_team_vijay_category(guild)
+    except Exception as exc:
+        logger.warning(f"Could not auto-ensure Team Vijay category: {exc}")
+
     return created_roles
+
+
+async def ensure_team_vijay_category(
+    guild: discord.Guild,
+) -> Tuple[discord.CategoryChannel, List[discord.abc.GuildChannel]]:
+    """
+    Ensures that the dedicated category 'Team Vijay' exists on Discord with:
+    - Text channels: 'working-chat', 'team-chat'
+    - Voice channels: 'Working Vc 1', 'Working Vc 2'
+    Positioned immediately adjacent to Team Vaasan.
+    """
+    cat = discord.utils.find(
+        lambda c: c.name.strip().lower() == "team vijay",
+        guild.categories,
+    )
+    if not cat:
+        vasan_cat = discord.utils.find(
+            lambda c: c.name.strip().lower() in ("team vaasan", "team vasan"),
+            guild.categories,
+        )
+        target_pos = (vasan_cat.position + 1) if vasan_cat else None
+        cat = await guild.create_category(name="Team Vijay", position=target_pos)
+        logger.info(f"Provisioned new category 'Team Vijay' in {guild.name}")
+
+    channels: List[discord.abc.GuildChannel] = []
+    # Ensure text channels
+    for ch_name in ["working-chat", "team-chat"]:
+        ch = discord.utils.find(lambda c: c.name.lower() == ch_name and c.category_id == cat.id, guild.text_channels)
+        if not ch:
+            ch = await cat.create_text_channel(name=ch_name)
+            logger.info(f"Created text channel #{ch_name} under Team Vijay")
+        channels.append(ch)
+
+    # Ensure voice channels
+    for vc_name in ["Working Vc 1", "Working Vc 2"]:
+        vc = discord.utils.find(lambda v: v.name.lower() == vc_name.lower() and v.category_id == cat.id, guild.voice_channels)
+        if not vc:
+            vc = await cat.create_voice_channel(name=vc_name)
+            logger.info(f"Created voice channel '{vc_name}' under Team Vijay")
+        channels.append(vc)
+
+    return cat, channels
+
 
 
 def is_admin_or_owner(member: discord.Member, guild: discord.Guild) -> bool:

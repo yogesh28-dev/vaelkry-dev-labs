@@ -27,6 +27,7 @@ class AgentConfig:
     name: str
     role: str
     category: str  # "developer" or "moderator"
+    team: str  # "team_vasan", "team_vijay", or "executives"
     env_token_key: str
     token: str = field(repr=False)
     next_tags: List[str] = field(default_factory=list)
@@ -55,11 +56,19 @@ class SystemConfig:
     def mod_agents(self) -> Dict[str, AgentConfig]:
         return {k: v for k, v in self.agents.items() if v.category == "moderator"}
 
+    @property
+    def team_vasan_agents(self) -> Dict[str, AgentConfig]:
+        return {k: v for k, v in self.agents.items() if v.team == "team_vasan"}
+
+    @property
+    def team_vijay_agents(self) -> Dict[str, AgentConfig]:
+        return {k: v for k, v in self.agents.items() if v.team == "team_vijay"}
+
 
 def load_config() -> SystemConfig:
     """
-    Validates and loads all 7 required bot credentials and server settings.
-    Raises ValueError with descriptive instructions if any are missing.
+    Validates and loads all configured bot credentials and server settings.
+    Supports both Team Vasan, Team Vijay, and Executive Moderator agents.
     """
     missing_vars: List[str] = []
 
@@ -75,37 +84,68 @@ def load_config() -> SystemConfig:
     if not channel_id_str:
         missing_vars.append("PROJECT_CHANNEL_ID")
 
-    # Developer Agents (5)
-    dev_definitions = [
-        ("ttf_vasan", "TTF Vasan", "Team Lead & Hype Commander", "developer", "BOT_TOKEN_TTF_VASAN", ["pradeep"]),
-        ("pradeep", "Pradeep Ranganathan", "Tech Lead & Solutions Architect", "developer", "BOT_TOKEN_PRADEEP", ["mamitha", "kayadu"]),
-        ("mamitha", "Mamitha", "UI/UX Designer", "developer", "BOT_TOKEN_MAMITHA", ["kayadu", "muthazhagi"]),
-        ("kayadu", "Kayadu", "Backend & DevOps Engineer", "developer", "BOT_TOKEN_KAYADU", ["muthazhagi"]),
-        ("muthazhagi", "Muthazhagi", "QA & Security Lead", "developer", "BOT_TOKEN_MUTHAZHAGI", []),
+    # Team Vasan Developer Agents (5) - Core Required
+    vasan_definitions = [
+        ("ttf_vasan", "TTF Vasan", "Team Lead & Hype Commander", "developer", "team_vasan", "BOT_TOKEN_TTF_VASAN", ["pradeep"]),
+        ("pradeep", "Pradeep Ranganathan", "Tech Lead & Solutions Architect", "developer", "team_vasan", "BOT_TOKEN_PRADEEP", ["mamitha", "kayadu"]),
+        ("mamitha", "Mamitha", "UI/UX Designer", "developer", "team_vasan", "BOT_TOKEN_MAMITHA", ["kayadu", "muthazhagi"]),
+        ("kayadu", "Kayadu", "Backend & DevOps Engineer", "developer", "team_vasan", "BOT_TOKEN_KAYADU", ["muthazhagi"]),
+        ("muthazhagi", "Muthazhagi", "QA & Security Lead", "developer", "team_vasan", "BOT_TOKEN_MUTHAZHAGI", []),
     ]
 
-    # Executive Moderator Agents (2)
+    # Team Vijay Developer Agents (5)
+    vijay_definitions = [
+        ("vijay", "Vijay", "Team Lead (Team Vijay) & Thalapathy Swagger", "developer", "team_vijay", "BOT_TOKEN_VIJAY", []),
+        ("sivakarthikeyan", "Sivakarthikeyan", "Timing Punch King & Chief Roaster", "developer", "team_vijay", "BOT_TOKEN_SIVA", []),
+        ("anirudh", "Anirudh", "Rockstar Vibe & BGM Lead", "developer", "team_vijay", "BOT_TOKEN_ANIRUDH", []),
+        ("trisha", "Trisha", "Cool Girl Sarcasm & Aesthetic Lead", "developer", "team_vijay", "BOT_TOKEN_TRISHA", []),
+        ("lokesh", "Lokesh", "Action-First & Dark Humor Director", "developer", "team_vijay", "BOT_TOKEN_LOKESH", []),
+    ]
+
+    # Executive Moderator Agents (2) - Core Required
     mod_definitions = [
-        ("sadie", "SadieSink", "Executive Moderator & Onboarding Lead", "moderator", "BOT_TOKEN_SADIE", []),
-        ("millie", "MillieBobbyBrown", "Executive Moderator & Chief Audit Officer", "moderator", "BOT_TOKEN_MILLIE", []),
+        ("sadie", "SadieSink", "Executive Moderator & Onboarding Lead", "moderator", "executives", "BOT_TOKEN_SADIE", []),
+        ("millie", "MillieBobbyBrown", "Executive Moderator & Chief Audit Officer", "moderator", "executives", "BOT_TOKEN_MILLIE", []),
     ]
-
-    all_definitions = dev_definitions + mod_definitions
 
     agent_configs: Dict[str, AgentConfig] = {}
-    for key, name, role, category, env_key, next_tags in all_definitions:
+
+    # Check and load core required bots (Team Vasan & Executive Suite)
+    for key, name, role, category, team, env_key, next_tags in vasan_definitions + mod_definitions:
         token = os.getenv(env_key, "").strip()
         if not token:
             missing_vars.append(env_key)
-        agent_configs[key] = AgentConfig(
-            key=key,
-            name=name,
-            role=role,
-            category=category,
-            env_token_key=env_key,
-            token=token,
-            next_tags=next_tags,
-        )
+        else:
+            agent_configs[key] = AgentConfig(
+                key=key,
+                name=name,
+                role=role,
+                category=category,
+                team=team,
+                env_token_key=env_key,
+                token=token,
+                next_tags=next_tags,
+            )
+
+    # Check and load Team Vijay bots (if tokens provided in .env, connect!)
+    for key, name, role, category, team, env_key, next_tags in vijay_definitions:
+        token = os.getenv(env_key, "").strip()
+        if token:
+            agent_configs[key] = AgentConfig(
+                key=key,
+                name=name,
+                role=role,
+                category=category,
+                team=team,
+                env_token_key=env_key,
+                token=token,
+                next_tags=next_tags,
+            )
+        else:
+            import logging
+            logging.getLogger("VaelkryDevLabs.Config").info(
+                f"Team Vijay bot token '{env_key}' is not set in .env. Bot '{name}' will connect once token is added."
+            )
 
     if missing_vars:
         raise ValueError(

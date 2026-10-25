@@ -29,6 +29,7 @@ from agents import AGENT_PROMPTS, build_agent_prompt, CASUAL_PLAYER_CHARACTERS
 from server_builder import (
     create_dynamic_team_category,
     ensure_enterprise_roles,
+    ensure_team_vijay_category,
     format_blueprint_directory,
     is_admin_or_owner,
     reset_and_build_server,
@@ -479,10 +480,39 @@ class VaelkryBotClient(discord.Client):
             await self.orchestrator.moderator_service.handle_follower_voice_update(member, before, after)
             await self.orchestrator.moderator_service.sync_moderator_voice_state(member, after)
 
+        # Force Undeafen & Unmute for our bots in Tech Cafe or Working VCs
+        if self.user and member.id == self.user.id and after.channel:
+            ch_name = after.channel.name.lower()
+            cat_name = after.channel.category.name.lower() if after.channel.category else ""
+            is_sleep = ("sleep" in ch_name or "night spend" in cat_name)
+            is_tech_cafe = (
+                "tech cafe" in cat_name
+                or ch_name in ("the seven slide", "byte & bit", "the hive", "the hangout zone")
+            )
+            is_working_vc = (
+                "working" in ch_name
+                or "team vaasan" in cat_name
+                or "team vasan" in cat_name
+                or "team vijay" in cat_name
+            )
+
+            if not is_sleep and (is_tech_cafe or is_working_vc):
+                if after.self_mute or after.self_deaf:
+                    try:
+                        if hasattr(self, "ws") and self.ws:
+                            await self.ws.voice_state(
+                                member.guild.id,
+                                after.channel.id,
+                                self_mute=False,
+                                self_deaf=False,
+                            )
+                    except Exception as exc:
+                        logger.debug(f"Could not enforce undeafen/unmute for {self.user.name}: {exc}")
+
 
 class AgentOrchestrator:
     """
-    Coordinates all 7 Discord bot clients, multi-agent AI sprints, server rebuilding,
+    Coordinates all configured Discord bot clients, multi-agent AI sprints, server rebuilding,
     executive moderation, and the automated 24h IST shift scheduler.
     """
 
@@ -514,11 +544,11 @@ class AgentOrchestrator:
         self.ready_events[agent_key].set()
 
     async def wait_until_all_ready(self, timeout: float = 35.0):
-        logger.info("Waiting for all 7 bots to connect to Discord gateway...")
+        logger.info(f"Waiting for all {len(self.ready_events)} bots to connect to Discord gateway...")
         tasks = [event.wait() for event in self.ready_events.values()]
         try:
             await asyncio.wait_for(asyncio.gather(*tasks), timeout=timeout)
-            logger.info("All 7 Vaelkry Dev Labs bots are online and operational!")
+            logger.info(f"All {len(self.ready_events)} Vaelkry Dev Labs bots are online and operational!")
         except asyncio.TimeoutError:
             missing = [k for k, ev in self.ready_events.items() if not ev.is_set()]
             logger.warning(f"Timeout waiting for bots: {missing}. Proceeding with available bots.")
@@ -529,7 +559,8 @@ class AgentOrchestrator:
             guild_obj = lead.get_guild(self.config.guild_id)
             if guild_obj:
                 self.moderator_service.start_patrol_loop(guild_obj)
-                # Automatically ensure and sync all 8 enterprise roles
+                # Automatically ensure Team Vijay category and sync all enterprise roles
+                asyncio.create_task(ensure_team_vijay_category(guild_obj))
                 asyncio.create_task(ensure_enterprise_roles(guild_obj, self.clients))
 
     # ==================== SERVER RESET & BLUEPRINT FLOW ====================
@@ -1004,7 +1035,7 @@ class AgentOrchestrator:
 
 
 async def main():
-    logger.info("Starting Vaelkry Dev Labs 7-Agent System...")
+    logger.info("Starting Vaelkry Dev Labs Multi-Agent System (Team Vaasan, Team Vijay & Executive Suite)...")
 
     try:
         config = load_config()
