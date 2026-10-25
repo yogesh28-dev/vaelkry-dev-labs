@@ -8,6 +8,7 @@ playful roasts, and multi-bot banter between:
 """
 
 import asyncio
+from collections import Counter, deque
 import logging
 import random
 import re
@@ -20,6 +21,9 @@ from agents import (
     EXECUTIVE_BOT_KEYS,
     TEAM_VASAN_KEYS,
     TEAM_VIJAY_KEYS,
+    DISCORD_SLANG_BUCKETS,
+    REGIONAL_TONES,
+    CRUTCH_WORDS,
     build_banter_exchange_prompt,
     build_casual_player_prompt,
     build_cross_team_clash_prompt,
@@ -37,9 +41,183 @@ def is_common_channel(channel: discord.abc.Messageable) -> bool:
     return any(k in name for k in ("team-chat", "working-chat", "lounge", "cafeteria", "hangout", "the-launchpad", "yogesh-chat"))
 
 
+class AntiRepetitionEngine:
+    """
+    Anti-Repetition Engine:
+    - Tracks recently used words, slangs, and sentence structure lengths per bot session and globally.
+    - Prevents bots from reusing crutch words (like 'sprint', 'dei', 'mapla', 'chai') repeatedly.
+    - Dynamically randomizes sentence lengths:
+      * 'ultra_short' (strictly 1-2 words like 'ketaaya' / 'seri' / 'apdiya' / 'mudila da')
+      * 'short' (3-8 words)
+      * 'two_liner' (2 natural lines / roasts)
+    - Dynamically injects fresh slang from 6 diverse real-world Tamil Discord buckets.
+    - Scores and filters fallback choices so bots never repeat the same canned responses.
+    """
+
+    def __init__(self):
+        self.recent_words: deque = deque(maxlen=60)
+        self.bot_recent_words: Dict[str, deque] = {}
+        self.recent_slangs: deque = deque(maxlen=30)
+        self.recent_length_modes: deque = deque(maxlen=6)
+        self.word_counts: Counter = Counter()
+        self.crutch_words: set = set(CRUTCH_WORDS)
+        self.length_modes: List[str] = ["ultra_short", "short", "two_liner"]
+
+    def record_message(self, character_key: Optional[str], text: str):
+        """
+        Ingests a message sent by a bot or user, updates word history,
+        detects multi-word slang matches, classifies sentence length,
+        and increments usage counters.
+        """
+        if not text:
+            return
+
+        clean_lower = text.lower()
+        words = re.findall(r"\b[a-z0-9\'-]+\b", clean_lower)
+        word_count = len(words)
+        line_count = len([l for l in text.splitlines() if l.strip()])
+
+        # Classify sentence length
+        if word_count <= 2:
+            mode = "ultra_short"
+        elif line_count >= 2 or word_count > 9:
+            mode = "two_liner"
+        else:
+            mode = "short"
+
+        self.recent_length_modes.append(mode)
+
+        # Update global and per-bot word tracking
+        char_k = (character_key or "default").lower().strip()
+        if char_k not in self.bot_recent_words:
+            self.bot_recent_words[char_k] = deque(maxlen=30)
+
+        for w in words:
+            if len(w) > 2:  # skip noise
+                self.recent_words.append(w)
+                self.bot_recent_words[char_k].append(w)
+                self.word_counts[w] += 1
+
+        # Check for slang bucket matches
+        for bucket_name, slangs in DISCORD_SLANG_BUCKETS.items():
+            for slang in slangs:
+                if slang in clean_lower:
+                    self.recent_slangs.append(slang)
+
+    def get_dynamic_guidance(self, character_key: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Generates dynamic anti-repetition guidance for prompt construction:
+        - Avoid words list: combines crutch words + recently repeated words.
+        - Dynamic target length mode: alternates between ultra-short, short, and two-liner.
+        - Fresh slang inspirations: samples 3-4 unused slangs across the 6 buckets.
+        - Regional tone: picks an evocative regional/atmospheric flavor.
+        """
+        char_k = (character_key or "default").lower().strip()
+
+        # 1. Build avoid list
+        avoid_set = set(self.crutch_words)
+        for w, cnt in self.word_counts.most_common(15):
+            if cnt >= 2:
+                avoid_set.add(w)
+        if char_k in self.bot_recent_words:
+            avoid_set.update(list(self.bot_recent_words[char_k])[-8:])
+
+        avoid_list = sorted(list(avoid_set))[:12]
+
+        # 2. Pick next alternating sentence length
+        last_modes = list(self.recent_length_modes)[-2:]
+        available_modes = [m for m in self.length_modes if m not in last_modes]
+        if not available_modes:
+            available_modes = self.length_modes
+        chosen_mode = random.choice(available_modes)
+
+        length_instructions = {
+            "ultra_short": "Ultra-short punch: strictly 1 to 2 words only (e.g., 'ketaaya', 'seri', 'apdiya', 'podhum', 'mudila', 'paravaala').",
+            "short": "Short & punchy: 3 to 8 words in casual lowercase.",
+            "two_liner": "Natural 2-line roast / comeback: 2 concise lines max with sharp timing.",
+        }
+        length_inst = length_instructions.get(chosen_mode, length_instructions["short"])
+
+        # 3. Sample fresh slangs from unvisited buckets
+        recent_slang_set = set(self.recent_slangs)
+        fresh_slangs = []
+        categories = list(DISCORD_SLANG_BUCKETS.keys())
+        random.shuffle(categories)
+        for cat in categories:
+            bucket = DISCORD_SLANG_BUCKETS[cat]
+            unused = [s for s in bucket if s not in recent_slang_set and not any(aw in s for aw in avoid_list)]
+            if unused:
+                fresh_slangs.append(random.choice(unused))
+            elif bucket:
+                fresh_slangs.append(random.choice(bucket))
+            if len(fresh_slangs) >= 4:
+                break
+
+        # 4. Regional / atmospheric tone
+        chosen_tone = random.choice(REGIONAL_TONES)
+
+        return {
+            "avoid_words": avoid_list,
+            "fresh_slangs": fresh_slangs,
+            "length_mode": chosen_mode,
+            "length_instruction": length_inst,
+            "tone_flavor": chosen_tone,
+        }
+
+    def filter_and_pick_fallback(
+        self,
+        candidates: List[str],
+        character_key: Optional[str] = None,
+    ) -> str:
+        """
+        Scores fallback candidates, penalizing recently repeated words
+        and crutch words ('sprint', 'mapla', 'dei', 'chai'),
+        awarding bonuses to candidates with fresh unused slangs.
+        Picks randomly among the lowest-penalty candidates.
+        """
+        if not candidates:
+            return "seri vidu"
+
+        char_k = (character_key or "default").lower().strip()
+        bot_history = set(self.bot_recent_words.get(char_k, []))
+        global_history = set(self.recent_words)
+        recent_slangs_set = set(self.recent_slangs)
+
+        scored: List[tuple[int, str]] = []
+        for cand in candidates:
+            penalty = 0
+            cand_lower = cand.lower()
+            words = re.findall(r"\b[a-z0-9\'-]+\b", cand_lower)
+
+            for w in words:
+                if w in self.crutch_words:
+                    penalty += 8
+                if w in global_history:
+                    penalty += 3
+                if w in bot_history:
+                    penalty += 5
+
+            for bucket in DISCORD_SLANG_BUCKETS.values():
+                for slang in bucket:
+                    if slang in cand_lower:
+                        if slang not in recent_slangs_set:
+                            penalty -= 4
+                        else:
+                            penalty += 3
+
+            scored.append((penalty, cand))
+
+        scored.sort(key=lambda x: x[0])
+        min_penalty = scored[0][0]
+        best_candidates = [c for p, c in scored if p <= min_penalty + 2]
+        chosen = random.choice(best_candidates)
+        return chosen
+
+
 class CasualPlayerService:
     def __init__(self, orchestrator: Any):
         self.orchestrator = orchestrator
+        self.anti_repetition_engine = AntiRepetitionEngine()
         self._webhook_cache: Dict[int, discord.Webhook] = {}
         self._chat_history: Dict[int, List[dict]] = {}
         self._banter_lock = asyncio.Lock()
@@ -95,6 +273,9 @@ class CasualPlayerService:
         """
         char_key = character_key.lower().strip()
         char_info = CASUAL_PLAYER_CHARACTERS.get(char_key, CASUAL_PLAYER_CHARACTERS["vijay"])
+
+        # Track message in AntiRepetitionEngine to update vocabulary history and length modes
+        self.anti_repetition_engine.record_message(char_key, text)
 
         # Human-like typing delay proportional to message length (1.5 to 3.5 seconds)
         char_count = len(text)
@@ -169,12 +350,14 @@ class CasualPlayerService:
         comeback_info = CASUAL_PLAYER_CHARACTERS.get(comeback_key, CASUAL_PLAYER_CHARACTERS["sivakarthikeyan"])
         ch_name = getattr(channel, "name", "channel")
 
+        guidance = self.anti_repetition_engine.get_dynamic_guidance(comeback_key)
         prompt = build_casual_player_prompt(
             character_key=comeback_key,
             message=previous_text,
             is_bot_reply=True,
             reply_to_bot=char_info.get("name", previous_char_key),
             channel_name=ch_name,
+            anti_rep_guidance=guidance,
         )
 
         try:
@@ -207,6 +390,7 @@ class CasualPlayerService:
         recent_ctx = self.get_recent_context(ch_id)
         self._record_message(ch_id, sender_name, message)
 
+        guidance = self.anti_repetition_engine.get_dynamic_guidance(char_key)
         prompt = build_casual_player_prompt(
             character_key=char_key,
             message=message,
@@ -214,6 +398,7 @@ class CasualPlayerService:
             recent_context=recent_ctx,
             is_roast=False,
             channel_name=ch_name,
+            anti_rep_guidance=guidance,
         )
 
         try:
@@ -235,7 +420,8 @@ class CasualPlayerService:
             return reply
         except Exception as exc:
             logger.exception(f"Error in casual chat for {char_key}: {exc}")
-            fallback = char_info.get("sample", "macha paathukalam vidu")
+            fallback_options = char_info.get("fallback_samples") or [char_info.get("sample", "seri vidu")]
+            fallback = self.anti_repetition_engine.filter_and_pick_fallback(fallback_options, char_key)
             await self.send_character_chat(channel, char_key, fallback)
             return fallback
 
@@ -259,6 +445,7 @@ class CasualPlayerService:
         ch_name = getattr(channel, "name", "channel")
         recent_ctx = self.get_recent_context(ch_id)
 
+        guidance = self.anti_repetition_engine.get_dynamic_guidance(char_key)
         prompt = build_casual_player_prompt(
             character_key=char_key,
             message=topic or "overall coding logic and scene podradhu",
@@ -267,6 +454,7 @@ class CasualPlayerService:
             is_roast=True,
             roast_target=target,
             channel_name=ch_name,
+            anti_rep_guidance=guidance,
         )
 
         try:
@@ -288,7 +476,15 @@ class CasualPlayerService:
             return roast_line
         except Exception as exc:
             logger.exception(f"Error in roast for {char_key}: {exc}")
-            fallback = f"dei {target}, scene podatha da mudila bro 😂"
+            fallback_options = [
+                f"un alapparai ku alave illama pochu {target} 😂",
+                f"idhellam over flex {target}, scene podaama veliya po 💅",
+                f"nalla comedy panra pa {target}, mudila bro 😂",
+                f"seruppadi counter varum {target}, over-ah valiyudhu thodachuko 💀",
+                f"single nu sollitu DM la pesradha paathom {target} 😂",
+                f"ketaaya {target}? comedy pannadha vidu.",
+            ]
+            fallback = self.anti_repetition_engine.filter_and_pick_fallback(fallback_options, char_key)
             await self.send_character_chat(channel, char_key, fallback)
             return fallback
 
@@ -305,7 +501,8 @@ class CasualPlayerService:
             return
 
         async with self._banter_lock:
-            prompt = build_banter_exchange_prompt(topic=topic)
+            guidance = self.anti_repetition_engine.get_dynamic_guidance()
+            prompt = build_banter_exchange_prompt(topic=topic, anti_rep_guidance=guidance)
             try:
                 raw_text = await self.orchestrator.gemini_service.generate_response(
                     prompt=prompt,
@@ -323,10 +520,10 @@ class CasualPlayerService:
 
                 if not parsed_turns:
                     parsed_turns = [
-                        ("sivakarthikeyan", f"dei un {topic} ah paatha server ke kannu verkum da 😂"),
-                        ("ttf_vasan", "nanba time waste panna koodadhu, 299 speed-la solve panrom!"),
-                        ("pradeep", "thalaiva wait panni paaru, logic puriyama kathatha bro 💀"),
-                        ("trisha", "ok boys whatever u say 💅"),
+                        ("sivakarthikeyan", f"un alapparai ku alave illama pochu da, {topic} pathi comedy panriya 😂"),
+                        ("ttf_vasan", "bayangara scene nanba! 299 speed-la solve panrom!"),
+                        ("pradeep", "thalaiva logic illama release panna internal marks poidum maari prod crash aagidum 💀"),
+                        ("trisha", "idhellam over flex, whatever u say 💅"),
                         ("lokesh", "pesunathu podhum, deploy pannitu pesunga."),
                     ]
 
@@ -351,7 +548,8 @@ class CasualPlayerService:
             return
 
         async with self._banter_lock:
-            prompt = build_cross_team_clash_prompt(topic=topic)
+            guidance = self.anti_repetition_engine.get_dynamic_guidance()
+            prompt = build_cross_team_clash_prompt(topic=topic, anti_rep_guidance=guidance)
             try:
                 raw_text = await self.orchestrator.gemini_service.generate_response(
                     prompt=prompt,
@@ -368,12 +566,12 @@ class CasualPlayerService:
 
                 if not parsed_turns:
                     parsed_turns = [
-                        ("ttf_vasan", f"nanba 299 speed-la {topic} solve panrom, Team Vasan mass da!"),
-                        ("sivakarthikeyan", "dei throttle twist panra speed-la code crash aagi client kannu verkum da 😂"),
+                        ("ttf_vasan", f"bayangara scene nanba! 299 speed-la {topic} solve panrom, Team Vasan mass da!"),
+                        ("sivakarthikeyan", "un alapparai ku alave illama pochu da, throttle twist panna server ke kannu verkum 😂"),
                         ("pradeep", "thalaiva wait panni paaru, logic puriyama comedy pannatha bro 💀"),
-                        ("vijay", "cool machan, timing super aana deploy mudinjutha illa thirumba bug ah?"),
-                        ("anirudh", "bgm podhum da, sprint marathon 3am beat drop aagudhu! 🎵"),
-                        ("trisha", "ok boys keep dreaming, whatever u say 💅"),
+                        ("vijay", "all is well machan, timing super aana deploy mudinjutha illa thirumba bug ah? 🦁"),
+                        ("anirudh", "vibe-eh vera level beats drop aagudhu, marathon code sprint mode on! 🎵"),
+                        ("trisha", "idhellam over flex boys, scene podaama veliya ponga 💅"),
                         ("lokesh", "pesunathu podhum da, deploy pannitu pesunga."),
                     ]
 
@@ -502,7 +700,7 @@ class CasualPlayerService:
     ):
         """
         Autonomous Late-Night Banter Loop:
-        Runs every 8-15 minutes during 'Night Spend' shift:
+        Runs every 12-25 minutes during 'Night Spend' or break shifts:
         - 2 to 4 random bots sneak out of Sleep Rooms into #cafeteria.
         - Injects rich human-like emotions (Happy, Angry, Playful, Bored, Flirty, Sarcastic, Sleepy).
         - Dynamic scenarios:
@@ -528,29 +726,26 @@ class CasualPlayerService:
 
         scenario = custom_scenario or random.choice(["boy_girl_flirt", "sports_flex", "muthazhagi_raid", "midnight_craving"])
 
-        # Pick 2 to 4 characters based on scenario
-        if scenario == "boy_girl_flirt":
-            boys = random.sample(["pradeep", "sivakarthikeyan", "ttf_vasan"], k=random.choice([1, 2]))
-            girls = random.sample(["mamitha", "trisha", "kayadu"], k=random.choice([1, 2]))
-            characters = boys + girls
-        elif scenario == "sports_flex":
-            characters = random.choice([
-                ["ronaldo", "messi", "neymar"],
-                ["virat", "rohit", "dhoni"],
-                ["ronaldo", "virat", "ttf_vasan"],
-                ["messi", "haaland", "mbappe"],
-            ])
-        elif scenario == "muthazhagi_raid":
-            sneakers = random.sample(["ttf_vasan", "pradeep", "sivakarthikeyan", "anirudh", "rohit", "neymar"], k=random.choice([2, 3]))
-            characters = ["muthazhagi"] + sneakers
-        else:  # midnight_craving
-            characters = random.sample(["kayadu", "mamitha", "ttf_vasan", "anirudh", "rohit", "neymar", "pradeep"], k=random.choice([3, 4]))
+        # Cross-Squad Selection: Pick 2 to 4 bots from different squads
+        # (Team Vaasan, Team Vijay, Team Messi, Team Dhoni) to ensure fresh dynamics each time
+        num_bots = random.randint(2, 4)
+        squad_pool = [
+            ("team_vasan", ["ttf_vasan", "pradeep", "mamitha", "kayadu", "muthazhagi"]),
+            ("team_vijay", ["vijay", "sivakarthikeyan", "anirudh", "trisha", "lokesh"]),
+            ("team_messi", ["messi", "ronaldo", "neymar", "haaland", "mbappe"]),
+            ("team_dhoni", ["dhoni", "virat", "rohit", "jadeja", "hardik"]),
+        ]
+        chosen_squads = random.sample(squad_pool, k=num_bots)
+        characters = [random.choice(members) for _, members in chosen_squads]
+        random.shuffle(characters)
 
         async with self._banter_lock:
             parsed_turns: List[tuple[str, str]] = []
+            guidance = self.anti_repetition_engine.get_dynamic_guidance()
             prompt = build_night_spend_chatter_prompt(
                 characters=characters,
                 scenario_type=scenario,
+                anti_rep_guidance=guidance,
             )
 
             try:
@@ -568,12 +763,39 @@ class CasualPlayerService:
             except Exception as exc:
                 logger.warning(f"Error generating late-night AI banter: {exc}")
 
-            if len(parsed_turns) < 2:
+            # Enforce crisp 3 to 5 multi-turn exchanges
+            if len(parsed_turns) < 3:
                 # Use curated authentic presets with rich emotions
                 preset_options = NIGHT_CHATTER_PRESETS.get(scenario, NIGHT_CHATTER_PRESETS["boy_girl_flirt"])
-                parsed_turns = random.choice(preset_options)
+                parsed_turns = list(random.choice(preset_options))[:5]
+            elif len(parsed_turns) > 5:
+                parsed_turns = parsed_turns[:5]
 
-            logger.info(f"Delivering late-night #{cafeteria_ch.name} chatter ({scenario}, {len(parsed_turns)} turns)")
+            # Natural ending wrap-up check:
+            # Ensure the conversation concludes naturally with someone suggesting to get back to sleep
+            # or avoid getting caught by Muthazhagi
+            last_speaker, last_text = parsed_turns[-1]
+            has_natural_closing = any(
+                w in last_text.lower()
+                for w in ("sleep", "thoong", "padu", "bed", "curfew", "muthu", "muthazhagi", "log", "escape", "room", "lights out", "shhh", "discipline")
+            )
+            if not has_natural_closing:
+                closing_speaker = random.choice([c for c in characters if c != last_speaker] or characters)
+                closing_lines = [
+                    "shhh muthazhagi akka dorm door sound kekudhu, silent-ah sleep room-ku escape aagidalam 🏃‍♂️💨",
+                    "podhum da 3 AM aachu, alarm vaikala na sethom, thoonga polam 😴",
+                    "seri lights off, dark circles confirm aagidum, sleep room-ku odunga 💤",
+                    "ketaaya? muthazhagi akka round-up vara maari iruku, sleep room poiduvom 🤫",
+                    "kannu eriudhu, bed-la saanjaachu, quiet-ah sleep room polam 🌙",
+                    "bayangara scene aagidum maatuna, sleep room escape! 🏃‍♂️💨",
+                ]
+                closing_pick = self.anti_repetition_engine.filter_and_pick_fallback(closing_lines, closing_speaker)
+                if len(parsed_turns) < 5:
+                    parsed_turns.append((closing_speaker, closing_pick))
+                else:
+                    parsed_turns[-1] = (closing_speaker, closing_pick)
+
+            logger.info(f"Delivering late-night #{cafeteria_ch.name} chatter ({scenario}, {len(parsed_turns)} crisp turns across squads: {characters})")
 
             # Deliver messages sequentially with Discord delays and typing indicator
             for char_key, msg in parsed_turns:
@@ -609,93 +831,199 @@ class CasualPlayerService:
 
         night_fallback_pool: Dict[str, List[str]] = {
             "sivakarthikeyan": [
-                "shhh silent-ah pesu bro, Muthazhagi akka kettuta log potruvaanga 💀",
-                "enna thalaiva 3 AM ku cafeteria la shouting ah? Thoongalaam vidu 😂",
-                "paal kudikka vandhiya bro? Sound kekama pesu Muthazhagi akka round-up varanga 🥛",
+                "kannu eriudhu bro, alarm vaikala na sethom morning standup-ku 😴",
+                "seri, silent-ah irunga, muthazhagi akka kettuta kola gaandu aagiduvaanga 💀",
+                "single nu sollitu DM la pesradha paathom, cafeteria la enna scene? 😂",
+                "valo lobby la clutch panna maari cafeteria fridge lock open panniten 🎮",
+                "seruppadi comedy pannadha bro, tea stall-ku nadakka mudiyadhu, thoonga polam ☕",
+                "dark circles confirm aaiduchu, blanket-kulla poiduvom 💤",
+                "ketaaya? muthazhagi akka dorm door sound kekudhu, silent! 🤫",
+                "canteen samosa kooda kedaikala, midnight hunger trigger vera 🥲",
             ],
             "pradeep": [
-                "dei night spend shift la cafeteria ku vandhu ping panriya? thookam pochu da 😂",
-                "shhh silent! Overthinking script eludhi mudichutu paduka poren, neeyum padu 😴",
-                "3 AM ku coffee machine kooda thoongudhu bro, morning pesalam vidu ☕",
+                "mudila bro, internal marks poidum maari prod bug tension eluppudhu 💀",
+                "idhellam over flex bro, 3 AM ku cafeteria la scene podaama veliya po 😂",
+                "thala suthudhu, bed-la saanjaachu, silent mode on 😴",
+                "apdiya? 300ms ping la bgmi clutch aada maari cafeteria la tea theduriya ☕",
+                "over-ah valiyudhu thodachuko, blanket-kulla scroll pannitu iruken 📱",
+                "seri vidu, sem exam tension maari muthazhagi raid bayam iruku 🏃‍♂️💨",
+                "dark circles confirm, overthinking script close pannitu paduka poren 💤",
+                "ez win nu nenachen, fridge-la dairy milk kooda illa 🍫",
             ],
             "ttf_vasan": [
-                "nanba silent mode! 299 speed la tea kudichutu sleep room poidurom, neeyum padu 🤫",
-                "shhh satham podadha mapla, cold water kudikka vandhen, odidurom! 🏍️",
-                "nanba curfew time! 2 minutes la sleep room pogalana incident log confirm ⚠️",
+                "bayangara scene nanba! 299 throttle twist speed la bed-la saanjaachu 🏍️",
+                "seri, mid-night hunger trigger aaiduchu, quick snack eduthutu escape! 🤫",
+                "kannu eriudhu nanba, tea stall-ku nadakka mudiyadhu, sleep room poiduvom 💤",
+                "kola gaandu aagida koodadhu muthazhagi akka, silent mode! ⚠️",
+                "valo lobby clutch maari corner hairpin bend la sleep room odidurom 🏍️💨",
+                "un alapparai ku alave illama pochu, lights out poiduvom! 😴",
+                "podhum, alarm vaikala na sethom, good night! 🌙",
             ],
             "mamitha": [
-                "aiyoo silent ah pesunga bro, fridge la chocolate theditu irukom ✨🍫",
-                "shhh lights out bro, Muthazhagi akka raid vara poranga 🌸",
-                "good night bro, cafeteria aesthetic dark vibe enjoy pannitu sleep ponga 😴",
+                "aiyoo dark circles confirm! aesthetic skin care waste aagidum 🌸",
+                "un alapparai ku alave illama pochu bro, fridge la dairy milk theda vidunga 🍫✨",
+                "blanket-kulla scroll pannitu iruken, silent ah pesunga 😴",
+                "kannu eriudhu, sem exam tension maari muthazhagi akka raid bayangara scene 💀",
+                "scene podaama veliya po bro, bed-la saanjaachu 🌸💅",
+                "apdiya? tea stall-ku nadakka mudiyadhu, cafeteria kettle off pannitu thoongunga ☕",
+                "mudila, aesthetic sleep mode on ✨💤",
             ],
             "trisha": [
-                "why r u pinging everyone at 3 am go to sleep 💅",
-                "shhh stop making noise in cafeteria, take a coffee and sleep ☕",
-                "whatever u say bro, but keep it quiet 😴💅",
+                "over-ah valiyudhu thodachuko, go to bed already 💅",
+                "single nu sollitu DM la pesradha paathom, stop whispering in cafeteria 💀",
+                "dark circles confirm for you, bed-la saanjaachu, bye 😴",
+                "idhellam over flex bro, silent-ah escape aagidunga 💅",
+                "canteen samosa kooda kedaikala maari drama podadheenga, sleep room polam ☕",
+                "ketaaya? muthazhagi akka footstep kekudhu, run 💅",
+                "seri, lights off.",
             ],
             "muthazhagi": [
-                "NILLU! Yaaru adhu midnight ping panradhu? Security incident log file panniduven! 🛡️",
-                "Sleep shift-la silent mode follow pannunga, sleep room-ku ponga! ⚠️",
-                "Bedtime curfew strictly enforced! Odunga da! 🛡️",
+                "NILLU! seruppadi vangama sleep room-ku odunga da! Curfew strictly enforced! 🛡️",
+                "kola gaandu aakama padunga! Security incident log file panren! ⚠️",
+                "assignment submit pannala na professor thitta poraaru maari Yogesh brother kitta complain podren! 🛡️",
+                "bayangara scene podra yaaru adhu midnight cafeteria la? Bed-la saanjaachu ponga! 💥",
+                "thala suthudhu ungalala, silent mode follow pannalana mute panniduven! 🛑",
+                "podhum un alappara! sleep room-ku escape aagu! 🛡️",
             ],
             "ronaldo": [
-                "sleep is essential for 100% performance! No late night noise! SIUUU 💤",
-                "rest now, wake up at 5 AM and crush code! Good night 💪",
+                "sleep is essential for 100% performance! SIUUU 💤",
+                "dark circles confirm if you don't sleep now! Zero warnings discipline! 💪",
+                "bgmi clutch maari morning 5 AM workout wait panren! Bed-la saanjaachu 🏋️‍♂️",
+                "ez win requires 8 hours sleep! No cafeteria noise! SIUUU ⚡",
+                "seri, lights out!",
             ],
             "virat": [
-                "bro sleep room recovery time! Aggressive sleeping strictly required! 😴",
-                "lights out machan, 100% focus for tomorrow's sprint! 🏏",
+                "aggressive recovery mode on! Kannu eriudhu boys, sleep room polam 🏏",
+                "alarm vaikala na sethom morning practice-ku! No midnight wandering! 🔥",
+                "clutch or kick situation in cafeteria, muthazhagi akka vara poraanga, sleep room poiduvom 💀",
+                "sem exam tension maari intensity venum code-la, ipo thoongunga 🏏💤",
+                "podhum, bed-la saanjaachu!",
             ],
             "anirudh": [
-                "machan low volume! BGM kooda mute-la vachuruken 🎧",
-                "3 AM beats drop aagudhu, silent-ah enjoy pannu bro 🎵",
+                "vibe-eh vera at 3 AM synth loop mind la, aana kannu eriudhu 🎵",
+                "mid-night hunger trigger aachu, aana tea stall-ku nadakka mudiyadhu ☕🎧",
+                "bakkunu aaiduchu muthazhagi akka door sound kettutu! Sleep room escape 🎹",
+                "dark circles confirm, acoustic lullaby beat potu thoonga poren 😴",
+                "seri vidu, silent mode.",
             ],
             "rohit": [
-                "bro pantry fridge la vadapav theditu irukom, silent-ah join pannu 🍔",
-                "shhh silent-ah padunga ya, match 20th over mudinjudhu 💤",
+                "pantry fridge la vadapav theditu iruken ya, mid-night hunger trigger 🍔",
+                "thala suthudhu, ping 300ms aagudhu maari brain slow aachu, bed-la saanjaachu 💤",
+                "clutch or kick tension edhuku? Match 20th over mudinjudhu, relax ya 🍔",
+                "canteen samosa kooda kedaikala, silent-ah thoonga vidunga ya 😴",
+                "seri, lights out ya.",
+            ],
+            "messi": [
+                "calm down boys, O(1) logic thavira midnight-la no scene ⚽",
+                "dark circles confirm aagida koodadhu, sleep room polam 🎧",
+                "bed-la saanjaachu, quiet coffee sip pannitu padunga ☕💤",
+                "seri, good night.",
+            ],
+            "vijay": [
+                "nanba alappara podhum, silent-ah sleep room poiduvom 🦁",
+                "kannu eriudhu, morning fresh-ah mission thookuvom, bed-la saanju rest edunga 💤",
+                "idhellam over flex, muthazhagi akka log potruvaanga, sleep mode on 🦁",
+                "seri, all is well.",
+            ],
+            "kayadu": [
+                "sappa matter, cluster healthy. silent-ah sleep room escape aagidalam.",
+                "thala suthudhu nu tension aagadheenga, kettle off pannitu padunga.",
+                "bed-la saanju rest edunga, backend safe dhaan.",
+                "seri, good night.",
+            ],
+            "lokesh": [
+                "pesunathu podhum, 3 AM ku sleep room poidunga.",
+                "action speaks, midnight scene podaama escape.",
+                "clutch or kick, muthazhagi raid start aagudhu.",
+                "seri, time aachu.",
             ],
         }
 
         day_fallback_pool: Dict[str, List[str]] = {
-            "ttf_vasan": [
-                "En nanba! Vaa vaa, 299 speed sprint mudichutu cafeteria tea kudikrom! 🔥",
-                "Nanba cafeteria vibe semma! Hot chai ready, sprint thookuvom! ☕🏍️",
-            ],
             "sivakarthikeyan": [
-                "Hi thalaiva! Cafeteria biscuit packet open pannitom, neeyum vaa 😂",
-                "Vaa machan, tea kudichute oru comedy script discuss pannuvom ☕",
+                "Hi thalaiva! Cafeteria biscuit packet open pannitom, vaa galaatta pannuvom 😂",
+                "valo lobby clutch maari tea cup handle panren paaru ☕🎮",
+                "single nu sollitu DM la pesradha paathom, cafeteria la enna comedy? 😂",
+                "un alapparai ku alave illama pochu, hot chai ready ☕",
+                "canteen samosa kooda kedaikala bro, biscuit-oda adjust pannuvom 🍪",
+                "seri, vaa pesuvom.",
             ],
             "pradeep": [
                 "Wassup bro, coffee kudichute database logic analyze panren ☕",
-                "Hi mapla, cafeteria break mudinju adutha PR merge pannanum 🧠",
+                "internal marks poidum maari staging bug tension aachu, tea kudikrom 💀",
+                "idhellam over flex bro, scene podaama cafeteria coffee enjoy pannu 😂",
+                "thala suthudhu logic eludhi, quick break eduthutu PR merge pannanum 🧠",
+                "ez win dhaan, next sprint architecture ready 💻",
+                "apdiya? vaa join pannu.",
+            ],
+            "ttf_vasan": [
+                "bayangara scene nanba! 299 speed la tea break mudikrom! 🔥🏍️",
+                "Nanba cafeteria vibe semma! Hot chai ready, sprint thookuvom! ☕",
+                "un alapparai ku alave illama pochu mapla, rocket speed deploy! 🚀",
+                "kola gaandu aakama cafeteria tea kudichutu energetic-ah vaanga! 🏍️",
+                "valo lobby clutch maari corner bend la cafeteria arrive aayitom 🏍️",
+                "seri, vaa nanba!",
             ],
             "mamitha": [
                 "Hello hello! Cafeteria aesthetic vibe 10/10, coffee enjoy pannu bro ✨",
-                "Hi! Glassmorphic tea cup ready, welcome! 🌸",
+                "over-ah valiyudhu thodachuko bro, glassmorphic tea cup ready 🌸☕",
+                "un alapparai ku alave illama pochu, clean UI vibes enjoy pannunga ✨",
+                "canteen samosa kedaikala nu feel pannadha bro, pastry order panniduvom 🥐",
+                "vibe-eh vera level aesthetic in cafeteria today 🌸",
+                "seri, welcome!",
             ],
             "trisha": [
                 "hey! grab a coffee and chill with us ☕💅",
-                "hello! break time high fashion vibes only ✨",
+                "idhellam over flex bro, high fashion break vibes only ✨",
+                "single nu sollitu DM la pesradha paathom, cafeteria la cool look 💅",
+                "scene podaama veliya po nu solla maaten, take a latte ☕",
+                "seri, enjoy your coffee.",
             ],
             "vijay": [
                 "Hi nanba, calm-ah break eduthutu adutha mission start pannuvom 🦁",
-                "Wassup nanba, tea break peaceful-ah pogudhu ☕",
+                "Wassup nanba, tea break peaceful-ah pogudhu, all is well ☕",
+                "idhellam over flex machan, cool-ah execute pannuvom 🦁",
+                "sappa matter, break mudinju masterclass code release panrom 🦁",
+                "seri, enjoy the tea.",
             ],
             "anirudh": [
-                "Vibe high bro! Coffee beat drop aagudhu, join the rhythm! 🎵",
-                "Wassup machan, tea and music mode on 🎧",
+                "vibe-eh vera! coffee beat drop aagudhu, join the rhythm! 🎵",
+                "Wassup machan, tea and music mode on full volume 🎧",
+                "bakkunu aaiduchu cafeteria playlist super-ah iruku 🎹",
+                "acoustic vibes + hot chai = next blockbuster track 🔥☕",
+                "seri, vibe on.",
             ],
             "virat": [
                 "Wassup bro! Quick high-energy tea break, back to 100% focus soon! 🏏",
-                "Energy level 100%! Ready for the next sprint 🔥",
+                "Energy level 100%! Clutch or kick intensity for next sprint 🔥",
+                "sem exam tension maari aggression code-la venum, take quick fuel 💥",
+                "zero sloppy code, 100% precision! Tea kudichutu adippom 🏏",
+                "seri, lets go!",
             ],
             "rohit": [
                 "Snacks kedaichudha bro? Vadapav or tea eduthutu chill pannu 🍔",
-                "Hi ya, relaxed energy always gives best output! ☕",
+                "Hi ya, relaxed energy always gives best output! Oru vadapav saapdu ☕",
+                "canteen samosa kooda kedaikala na vadapav dhaan solution 🍔",
+                "tension edhuku ya? match control-la iruku, tea kudipom 🍟",
+                "seri ya, chill.",
             ],
             "messi": [
-                "Calm coffee break brother, all good ⚽",
-                "Hi brother, simple clean coffee and we continue ☕",
+                "Calm coffee break brother, simple clean execution ⚽",
+                "Hi brother, O(1) logic thavira break-la pure peace ☕",
+                "no flex needed, benchmark results speak ⚽",
+                "seri, take coffee.",
+            ],
+            "kayadu": [
+                "cool-ah irunga, cafeteria kettle on panniten. hot tea ready ☕",
+                "sappa matter, cluster deployment healthy. peaceful break.",
+                "relax, production safe dhaan, tea enjoy pannunga.",
+                "seri, all good.",
+            ],
+            "muthazhagi": [
+                "tea kudichutu odane test cases verify pannanum! zero bugs allowed! 🛡️",
+                "assignment submit pannala maari break time-la lag aagadha da! ⚠️",
+                "kola gaandu aakama quick tea mudichutu PR review-ku vaanga 🛡️",
+                "seri, tea kudichutu vela paaru.",
             ],
         }
 
@@ -716,13 +1044,19 @@ class CasualPlayerService:
                     if is_sleep_shift
                     else "Daytime Cafeteria Break"
                 )
+                guidance = self.anti_repetition_engine.get_dynamic_guidance(bot_key)
+                avoids = guidance.get("avoid_words", [])
+                avoid_str = f"Strictly avoid reusing these words: {', '.join(avoids)}." if avoids else ""
+
                 prompt = (
-                    f"You are {char_name} in Vaelkry Dev Labs Discord.\\n"
-                    f"Vibe: {char_info.get('vibe', '')}\\n"
-                    f"Current context: {shift_context}.\\n"
-                    f"User '{message.author.display_name}' just said in #cafeteria: '{user_prompt_text}'.\\n"
-                    f"Reply naturally in 1 short casual Tanglish sentence (max 8-12 words). "
-                    f"Output ONLY the raw message."
+                    f"You are {char_name} in Vaelkry Dev Labs Discord.\n"
+                    f"Vibe: {char_info.get('vibe', '')}\n"
+                    f"Current context: {shift_context}.\n"
+                    f"User '{message.author.display_name}' just said in #cafeteria: '{user_prompt_text}'.\n"
+                    f"{avoid_str}\n"
+                    f"Target length: {guidance.get('length_instruction', '')}\n"
+                    f"Atmospheric tone: {guidance.get('tone_flavor', '')}\n"
+                    f"Reply naturally in authentic Tanglish. Output ONLY the raw message."
                 )
                 reply_text = await self.orchestrator.gemini_service.generate_casual_chat(
                     prompt=prompt,
@@ -734,6 +1068,6 @@ class CasualPlayerService:
             if not reply_text:
                 pool = night_fallback_pool if is_sleep_shift else day_fallback_pool
                 bot_lines = pool.get(bot_key, [f"hi {message.author.display_name}, cafeteria la chill panrom!"])
-                reply_text = random.choice(bot_lines)
+                reply_text = self.anti_repetition_engine.filter_and_pick_fallback(bot_lines, bot_key)
 
             await self.send_character_chat(message.channel, bot_key, reply_text)

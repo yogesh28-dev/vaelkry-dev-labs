@@ -945,7 +945,7 @@ class CompanyScheduler:
         self.assigned_sleep_rooms: Dict[str, int] = {}  # agent_key -> voice_channel_id
         self.assigned_cafe_rooms: Dict[str, int] = {}   # agent_key -> voice_channel_id
         self._night_chatter_timer: int = 0
-        self._next_night_chatter_interval: int = random.randint(8, 15)
+        self._next_night_chatter_interval: int = random.randint(12, 25)
 
     @property
     def all_dev_keys(self) -> List[str]:
@@ -1935,16 +1935,23 @@ class CompanyScheduler:
                                                 )
                                             )
 
-                # Autonomous late-night banter loop during Night Spend shift (every 8-15 mins)
-                if current_shift.shift_id == "sleep":
+                # Autonomous banter loop during Night Spend (sleep) and Break (Tech Cafe) shifts (every 12-25 mins)
+                is_break_or_night = (
+                    current_shift.shift_id == "sleep"
+                    or current_shift.shift_id.startswith("break")
+                    or current_shift.shift_id in ("warmup", "rest_1", "rest_2", "rest_3", "rest_4")
+                    or current_shift.category_name.strip().lower() == "tech cafe"
+                )
+
+                if is_break_or_night:
                     self._night_chatter_timer += 1
                     if self._night_chatter_timer >= self._next_night_chatter_interval:
                         logger.info(
-                            f"Night Spend banter interval reached ({self._night_chatter_timer}m / {self._next_night_chatter_interval}m). "
-                            "Triggering autonomous late-night chatter in #cafeteria..."
+                            f"Autonomous banter interval reached ({self._night_chatter_timer}m / {self._next_night_chatter_interval}m) "
+                            f"during {current_shift.name}. Triggering cross-squad banter in #cafeteria..."
                         )
                         self._night_chatter_timer = 0
-                        self._next_night_chatter_interval = random.randint(8, 15)
+                        self._next_night_chatter_interval = random.randint(12, 25)
                         if hasattr(self.orchestrator, "casual_player_service") and self.orchestrator.casual_player_service:
                             asyncio.create_task(
                                 self.orchestrator.casual_player_service.run_autonomous_night_chatter(guild)
