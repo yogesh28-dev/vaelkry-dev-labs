@@ -634,6 +634,21 @@ class VaelkryBotClient(discord.Client):
             else:
                 await interaction.followup.send("⚠️ Autonomous sprint skipped (client project currently in progress).")
 
+        @self.tree.command(
+            name="night_chatter",
+            description="Late-Night Banter: Simulates 2-4 bots sneaking out into #cafeteria for late-night chat",
+        )
+        async def night_chatter_slash(interaction: discord.Interaction):
+            if not interaction.guild:
+                await interaction.response.send_message("⚠️ Run within a corporate server!", ephemeral=True)
+                return
+
+            await interaction.response.defer()
+            await interaction.followup.send("🌙 **Late-Night Banter initiated in #cafeteria!** 🤫☕")
+            asyncio.create_task(
+                self.orchestrator.casual_player_service.run_autonomous_night_chatter(interaction.guild)
+            )
+
     async def on_ready(self):
         logger.info(
             f"Agent '{self.agent_config.name}' connected as {self.user} (ID: {self.user.id})"
@@ -1008,6 +1023,18 @@ class AgentOrchestrator:
 
         content = message.content.strip()
 
+        # 2. Late-Night & Cafeteria User Chat / @everyone Trigger Support:
+        # When a user types in #cafeteria or pings @everyone, 1-2 random awake bots reply back naturally
+        ch_name = getattr(message.channel, "name", "").lower()
+        is_cafeteria = ch_name in ("cafeteria", "common-pantry", "pantry")
+        is_everyone_ping = message.mention_everyone
+
+        if (is_cafeteria or is_everyone_ping) and not content.startswith("!"):
+            asyncio.create_task(
+                self.casual_player_service.handle_cafeteria_user_chat(message)
+            )
+            return
+
         # Prefix command: !start
         if content.startswith("!start"):
             if not message.guild:
@@ -1296,6 +1323,16 @@ class AgentOrchestrator:
             )
             return
 
+        # Late-Night Banter Command: !nightchatter, !night_chatter
+        if content.startswith(("!nightchatter", "!night_chatter")):
+            if not message.guild:
+                return
+            await message.channel.send("🌙 **Late-night chatter initiated in #cafeteria!** 🤫☕")
+            asyncio.create_task(
+                self.casual_player_service.run_autonomous_night_chatter(message.guild)
+            )
+            return
+
         # AI Sprint Command: !project <idea>
         if content.startswith("!project"):
             ch_name = getattr(message.channel, "name", "").lower()
@@ -1474,14 +1511,16 @@ class AgentOrchestrator:
             "☕ **Common Pantry & Cafeteria (#cafeteria):**\n"
             "• `/coffee` (or `!coffee`, `!chai`, `!break`): Launch a fun 5-agent Tanglish coffee/chai break banter.\n"
             "• `/pantrydebate [topic]` (or `!pantrydebate`): Start an interactive debate with 🅰️ vs 🅱️ voting.\n"
-            "• `/watercooler` (or `!watercooler`): Post daily pantry snack special & workplace trivia.\n\n"
+            "• `/watercooler` (or `!watercooler`): Post daily pantry snack special & workplace trivia.\n"
+            "• `/night_chatter` (or `!nightchatter`): Late-Night Banter with 2-4 sneaky bots in #cafeteria during Night Spend.\n\n"
             "💬 **Real Discord Player Chat & Roasts:**\n"
             "• `/chat <character> <message>` (or `!chat`): Chat casually in Tanglish with Vijay, SK, Anirudh, Trisha, etc.\n"
             "• `/roast <target> [character]` (or `!roast`): Drop a savage Tanglish roast on a teammate or code.\n"
             "• `/banter [topic]` (or `!banter`): Launch a 4-line mini banter battle between community characters.\n"
             "• `/clash [topic]` (or `!clash`): Full Team Vasan vs Team Vijay witty roast battle.\n"
             "• Shortcuts: `!v <msg>`, `!sk <msg>`, `!ani <msg>`, `!trisha <msg>`, `!loki <msg>`.\n"
-            "• Direct mentions: Tag any bot (`@TTF Vasan`, `@Pradeep`, `@SadieSink`, etc.) for an instant comeback!\n\n"
+            "• Direct mentions: Tag any bot (`@TTF Vasan`, `@Pradeep`, `@SadieSink`, etc.) for an instant comeback!\n"
+            "• Cafeteria chatter: Type in `#cafeteria` or ping `@everyone` for natural instant bot replies!\n\n"
             "**Squad Leadership:**\n"
             "• 🏍️ **TTF Vasan**: Team Lead & Hype Commander\n"
             "• 🧠 **Pradeep Ranganathan**: Tech Lead & Solutions Architect\n"

@@ -944,6 +944,8 @@ class CompanyScheduler:
         self._loop_task: Optional[asyncio.Task] = None
         self.assigned_sleep_rooms: Dict[str, int] = {}  # agent_key -> voice_channel_id
         self.assigned_cafe_rooms: Dict[str, int] = {}   # agent_key -> voice_channel_id
+        self._night_chatter_timer: int = 0
+        self._next_night_chatter_interval: int = random.randint(8, 15)
 
     @property
     def all_dev_keys(self) -> List[str]:
@@ -1932,6 +1934,23 @@ class CompanyScheduler:
                                                     self_deaf=False,
                                                 )
                                             )
+
+                # Autonomous late-night banter loop during Night Spend shift (every 8-15 mins)
+                if current_shift.shift_id == "sleep":
+                    self._night_chatter_timer += 1
+                    if self._night_chatter_timer >= self._next_night_chatter_interval:
+                        logger.info(
+                            f"Night Spend banter interval reached ({self._night_chatter_timer}m / {self._next_night_chatter_interval}m). "
+                            "Triggering autonomous late-night chatter in #cafeteria..."
+                        )
+                        self._night_chatter_timer = 0
+                        self._next_night_chatter_interval = random.randint(8, 15)
+                        if hasattr(self.orchestrator, "casual_player_service") and self.orchestrator.casual_player_service:
+                            asyncio.create_task(
+                                self.orchestrator.casual_player_service.run_autonomous_night_chatter(guild)
+                            )
+                else:
+                    self._night_chatter_timer = 0
 
                 # Periodic 15-minute dynamic presence rotation so bots never look cloned or repetitive
                 if loop_ticks % 15 == 0:

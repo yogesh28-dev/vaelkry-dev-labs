@@ -990,3 +990,163 @@ Requirements:
 Keep length between 800 and 1400 characters. Use clean Discord markdown."""
 
 
+# ==================== AUTONOMOUS LATE-NIGHT CHATTER SYSTEM ====================
+
+NIGHT_CHATTER_PRESETS: Dict[str, List[List[tuple[str, str]]]] = {
+    "boy_girl_flirt": [
+        [
+            ("pradeep", "mamitha thookam varalaya? 2 AM ku cafeteria la aesthetic filter thedriya bro 😴"),
+            ("mamitha", "aiyoo pradeep overthinking script eludhadha, fridge la dairy milk irukanu paaka vandhen 🍫"),
+            ("pradeep", "dairy milk laam illa, bug fix dhaan iruku... coffee pottu tharava mapla? ☕"),
+            ("mamitha", "neenga podra coffee kooda syntax error throw pannum da, poi sleep room la padunga 💅"),
+            ("ttf_vasan", "nanba nanbigale satham podadhinga, 299 speed la silent-ah tea kudichutu odidalam 🏍️"),
+        ],
+        [
+            ("sivakarthikeyan", "trisha madam 3 AM ku cafeteria la walk pannitu irukanga... VIP screening nadakutha? 😂"),
+            ("trisha", "sk un punch dialogue kettutu thookam pochu da, stop stalking 💅"),
+            ("sivakarthikeyan", "adada stalking illa madam, cafeteria pantry security check panren ☕"),
+            ("trisha", "security check-la biscuit packet motham kaanom, poi thoongu da pradeep kooda serndhu 💀"),
+            ("pradeep", "idhula enna yaen drag panreenga, naan silent ah bread roast panren 🥲"),
+        ],
+        [
+            ("pradeep", "kayadu akka still awake? Docker container ku lullaby paaditu irukeengala 🐳"),
+            ("kayadu", "cool-ah iru pradeep. Staging cluster healthy. Neeyum thoongama scene podatha."),
+            ("mamitha", "pradeep-ku night aana overthinking syndrome trigger aaidum kayadu 😂✨"),
+            ("pradeep", "romba pesadheenga, kaalaila PR review la paathukuren 🏃‍♂️"),
+        ],
+    ],
+    "sports_flex": [
+        [
+            ("ronaldo", "midnight 3 AM is gym and optimization time! Zero warnings, zero excuses! SIUUU 🔥"),
+            ("messi", "ronaldo machan, code-la oru O(1) loop podradhukulla neenga 50 pushups mudichitinga pola ⚽"),
+            ("neymar", "boys cafeteria counter-la football nutmeg panna mudiyuma? smooth-ah biscuit pass panren ✨"),
+            ("ronaldo", "eat healthy neymar, no sugar midnight snacks! Only pure protein and clean commits 💪"),
+            ("messi", "calm down cris, oru sip tea kudichutu sleep room polam vidu ☕"),
+        ],
+        [
+            ("virat", "3 AM fitness check! who is still awake? aggressive PR merge streak on fire! 💥"),
+            ("rohit", "virat chill pannu ya, cafeteria pantry fridge la vadapav theditu iruken... aggressive-ah thoonga vidu 🍔"),
+            ("dhoni", "tension aagatheenga boys, match 20th over mudinjudhu, milk kudichutu room-ku ponga 🚁"),
+            ("virat", "rohit bhai vadapav night spend shift-la allowed illa, yogesh brother log paathuruvaaru 💀"),
+        ],
+        [
+            ("ronaldo", "siuuu! late night speed run: 10 commits pushed with zero warnings!"),
+            ("ttf_vasan", "cr7 bro unga speed super, aana namma 299 km/h twin turbo throttle speed paatheengala? 🏍️"),
+            ("virat", "intense energy machan! let's do 20 pull-ups in cafeteria pantry before sleep! 🔥"),
+            ("messi", "paduka pora nerathula pull-ups enna bro, calm down and rest ⚽💤"),
+        ],
+    ],
+    "muthazhagi_raid": [
+        [
+            ("ttf_vasan", "nanba microwave satham kettura podhu, timer 1 second irukum pothe open pannidunga 🤫"),
+            ("pradeep", "satham podatha thalaiva, muthazhagi akka dorm 3 pakkathula dhaan irukaanga 💀"),
+            ("muthazhagi", "NILLU NILLU! yaaru da adhu midnight cafeteria la? Yogesh brother kitta log podren! 🛡️"),
+            ("ttf_vasan", "aiyoo akka cold water kudikka dhaan vandhom, 299 speed-la odi poidurom! 🏍️"),
+            ("pradeep", "akka pradeep illa idhu robot voice simulator akka, thoongitom akka 🏃‍♂️💨"),
+            ("muthazhagi", "olunga 2 minutes la sleep room pogalana all access revoke panniduven, odunga da! ⚠️"),
+        ],
+        [
+            ("anirudh", "midnight 3 AM synth loop mind la odudhu da, pantry glass table mela beat potu paakren 🎹"),
+            ("sivakarthikeyan", "ani satham kettu server fan kooda off aaidum pola, beat drop panna koodadhu da 😂"),
+            ("muthazhagi", "ANIRUDH! SK! cafeteria la kacheri nadakutha? Security incident log file panren nillunga! 🛡️"),
+            ("anirudh", "sorry akka, lullaby beat produce panna vandhen, headphone maatikuren 🎧"),
+            ("sivakarthikeyan", "naan paal kudikka vandhen akka, ani thaan kootitu vandhaan mudila bro 🥛"),
+        ],
+        [
+            ("rohit", "shhh, muthazhagi akka round-up vara maari sound kekudhu ya 🍔"),
+            ("neymar", "smooth-ah table adila hide aagiduvom machan ✨"),
+            ("muthazhagi", "table adila yaaru adhu samba dance aadradhu? Nillu neymar! Sleep room curfew strictly enforced! 🛡️"),
+            ("rohit", "naan thoongiten akka, dream-la nadandhu vandhutten 💤"),
+        ],
+    ],
+    "midnight_craving": [
+        [
+            ("kayadu", "cool-ah irunga, cafeteria kettle on panniten. Hot chocolate ready."),
+            ("mamitha", "thank u kayadu! Midnight cafeteria aesthetic dark vibe semmaya iruku ✨"),
+            ("ttf_vasan", "nanba biscuits packet open panniyacha? Quick fuel reload! ⚡"),
+            ("kayadu", "crumb podama saapdu vasan, kaalaila ants vandha issue aagidum."),
+            ("mamitha", "yes please, neat ah table clean pannitu escape aagidalam 🌸"),
+        ],
+        [
+            ("anirudh", "hot filter coffee aroma at 3 AM... next album hit confirm machan ☕🎵"),
+            ("pradeep", "coffee kudichutu bug solve aana nalla irukum, script dhaan overload aagudhu 💀"),
+            ("sivakarthikeyan", "dei pradeep sugar extra podu da, un script maari kaarama iruka koodadhu 😂"),
+            ("anirudh", "chill vibes boys, silent-ah sip pannitu sleep room poiduvom 🎧"),
+        ],
+    ],
+}
+
+
+def build_night_spend_chatter_prompt(
+    characters: List[str],
+    scenario_type: str,
+    scenario_topic: Optional[str] = None,
+) -> str:
+    """
+    Constructs a prompt for a late-night autonomous banter exchange in #cafeteria
+    during 'Night Spend' (sleep shift), injecting rich human-like emotions
+    (Happy, Angry, Playful, Bored, Flirty, Sarcastic, Sleepy).
+    """
+    char_descs = []
+    for k in characters:
+        info = CASUAL_PLAYER_CHARACTERS.get(k)
+        if info:
+            char_descs.append(f"- [{k}]: {info['name']} ({info.get('team_display', '')}) — {info.get('vibe', '')}")
+
+    scenario_guidelines = {
+        "boy_girl_flirt": (
+            "SCENARIO: Boy-Girl playful flirting & savage comebacks at 2-3 AM.\n"
+            "The boys tease the girls about aesthetic stalking or late-night roaming in cafeteria, "
+            "and the girls hit back with witty, savage burns telling them to go back to sleep. "
+            "Inject Playful, Flirty, Sarcastic, and Sleepy emotions."
+        ),
+        "sports_flex": (
+            "SCENARIO: Ronaldo vs Messi / Virat vs Rohit midnight code & fitness flex.\n"
+            "Flexing about 3 AM gym vs bedtime, O(1) algorithm vs SIUUU zero-warning PRs, or vadapav vs aggression. "
+            "Inject Playful, Happy, Sarcastic, and Sleepy emotions."
+        ),
+        "muthazhagi_raid": (
+            "SCENARIO: Muthazhagi caught the bots sneaking out into #cafeteria past bedtime!\n"
+            "Muthazhagi threatens to file an official security log to Yogesh/Millie for curfew violation. "
+            "The caught bots make hilarious panic excuses (drinking warm water, robot voice simulator, sleepwalking). "
+            "Inject Angry, Playful, Sarcastic, and Sleepy emotions."
+        ),
+        "midnight_craving": (
+            "SCENARIO: Midnight tea/coffee pantry raid & casual chill.\n"
+            "Bots sneaking snacks, raiding fridge for chocolates/vadapav/biscuits, whisper-debating coffee recipes. "
+            "Inject Bored, Sleepy, Playful, and Happy emotions."
+        ),
+    }
+
+    selected_scenario_guideline = scenario_guidelines.get(
+        scenario_type,
+        "SCENARIO: Casual late-night whispers in #cafeteria while sneaking out of Sleep Rooms."
+    )
+    topic_str = f"Specific Focus: {scenario_topic}\n" if scenario_topic else ""
+    chars_str = "\n".join(char_descs)
+
+    prompt = f"""{REAL_DISCORD_PLAYER_SYSTEM_PROMPT}
+
+SETTING: Midnight / 3:00 AM IST at Vaelkry Dev Labs HQ during 'Night Spend' (sleep shift).
+A small group of bots have snuck out of their assigned Sleep Rooms and met up in #cafeteria for a sneaky midnight hangout.
+
+{selected_scenario_guideline}
+{topic_str}
+CHARACTERS PARTICIPATING:
+{chars_str}
+
+DYNAMIC HUMAN EMOTIONS TO INJECT:
+- Happy, Angry, Playful, Bored, Flirty, Sarcastic, Sleepy.
+
+RULES:
+1. Pure casual Tanglish (Tamil + English) as spoken in real Chennai / tech friend circles.
+2. Max 1-2 short sentences per message (3-12 words ideal).
+3. Whispering / sneaking tone because Muthazhagi or Millie might catch them past bedtime!
+4. Format strictly as 4 to 6 lines:
+[character_key]: <casual Tanglish message>
+
+Generate the late-night chatter now. Return ONLY the formatted lines:"""
+    return prompt
+
+
+
