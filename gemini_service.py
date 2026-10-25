@@ -55,3 +55,37 @@ class GeminiService:
             f"**[{agent_name}]**: Ayyo nanba, network throttle konjam lag aaguthu! "
             f"API busy-ah iruku, but namma plan lock aayiruchu! ⚡"
         )
+
+    async def generate_casual_chat(
+        self,
+        prompt: str,
+        character_name: str,
+    ) -> str:
+        """
+        Asynchronously generates a punchy, casual Discord player response or roast.
+        Cleans up extraneous quotes, bot name prefixes, and ensures maximum 2-line length.
+        """
+        raw_text = await self.generate_response(prompt=prompt, agent_name=character_name)
+        cleaned = raw_text.strip()
+
+        # Remove surrounding quotes if model wrapped output in quotes
+        if (cleaned.startswith('"') and cleaned.endswith('"')) or (cleaned.startswith("'") and cleaned.endswith("'")):
+            cleaned = cleaned[1:-1].strip()
+
+        import re
+        # Strip prefixes like "Vijay: ", "[Vijay]: ", "**Vijay**: "
+        cleaned = re.sub(r'^(?:\[.*?\]|\*\*.*?\*\*|[A-Za-z0-9_]+)\s*:\s*', '', cleaned).strip()
+
+        if (cleaned.startswith('"') and cleaned.endswith('"')) or (cleaned.startswith("'") and cleaned.endswith("'")):
+            cleaned = cleaned[1:-1].strip()
+
+        lines = [line.strip() for line in cleaned.splitlines() if line.strip()]
+        if len(lines) > 2:
+            cleaned = " ".join(lines[:2])
+        elif lines:
+            cleaned = "\n".join(lines)
+        else:
+            cleaned = "lmao vidu bro paathukalam 💀"
+
+        return cleaned
+

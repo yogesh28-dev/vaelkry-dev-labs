@@ -25,7 +25,7 @@ from discord import app_commands
 
 from config import AgentConfig, SystemConfig, load_config
 from gemini_service import GeminiService
-from agents import AGENT_PROMPTS, build_agent_prompt
+from agents import AGENT_PROMPTS, build_agent_prompt, CASUAL_PLAYER_CHARACTERS
 from server_builder import (
     create_dynamic_team_category,
     ensure_enterprise_roles,
@@ -35,6 +35,7 @@ from server_builder import (
 )
 from moderator_service import ModeratorService
 from cafeteria_service import CafeteriaService, find_cafeteria_channel
+from casual_player_service import CasualPlayerService
 from scheduler_service import (
     CEO_NOTIFICATION_CHANNEL_ID,
     CEO_NOTIFICATION_CHANNEL_NAME,
@@ -308,6 +309,123 @@ class VaelkryBotClient(discord.Client):
             else:
                 await interaction.followup.send("🥐 Bon appétit!", ephemeral=True)
 
+        @self.tree.command(
+            name="chat",
+            description="Chat casually in Discord player Tanglish with Vijay, Sivakarthikeyan, Anirudh, Trisha, etc.",
+        )
+        @app_commands.describe(
+            character="Select which community character or bot to chat with",
+            message="Your message to them",
+        )
+        @app_commands.choices(
+            character=[
+                app_commands.Choice(name="👑 Vijay (Swagger & Calm)", value="vijay"),
+                app_commands.Choice(name="🎤 Sivakarthikeyan (Timing Punch & Trolling)", value="sivakarthikeyan"),
+                app_commands.Choice(name="🎵 Anirudh (Rockstar Vibe & BGM)", value="anirudh"),
+                app_commands.Choice(name="💅 Trisha (Sarcastic Aesthetic Burns)", value="trisha"),
+                app_commands.Choice(name="🎬 Lokesh (Action & Dark Humour)", value="lokesh"),
+                app_commands.Choice(name="🏍️ TTF Vasan (299 km/h Hype)", value="ttf_vasan"),
+                app_commands.Choice(name="🧠 Pradeep Ranganathan (Sarcastic Logic)", value="pradeep"),
+                app_commands.Choice(name="🎨 Mamitha (Aesthetic Teasing)", value="mamitha"),
+                app_commands.Choice(name="⚙️ Kayadu (Calm DevOps Savage)", value="kayadu"),
+                app_commands.Choice(name="🛡️ Muthazhagi (Strict QA Fire)", value="muthazhagi"),
+            ]
+        )
+        async def chat_slash(interaction: discord.Interaction, character: str, message: str):
+            if not interaction.guild:
+                await interaction.response.send_message("⚠️ Run within a corporate server!", ephemeral=True)
+                return
+
+            await interaction.response.defer()
+            await interaction.followup.send(f"💬 *Connecting to {character}...*", ephemeral=True)
+            sender_name = interaction.user.display_name
+            await self.orchestrator.casual_player_service.chat(
+                character_key=character,
+                message=message,
+                sender_name=sender_name,
+                channel=interaction.channel,
+            )
+
+        @self.tree.command(
+            name="roast",
+            description="Drop a savage Tanglish roast on a teammate, code snippet, or topic",
+        )
+        @app_commands.describe(
+            target="Who or what to roast (e.g., @User or 'Friday production deploy')",
+            character="Select who should deliver the roast",
+            topic="Optional reason or context for the roast",
+        )
+        @app_commands.choices(
+            character=[
+                app_commands.Choice(name="🎤 Sivakarthikeyan (Timing Punch Roast)", value="sivakarthikeyan"),
+                app_commands.Choice(name="👑 Vijay (Calm Savage Swagger)", value="vijay"),
+                app_commands.Choice(name="💅 Trisha (Cool Girl Aesthetic Burn)", value="trisha"),
+                app_commands.Choice(name="🎬 Lokesh (Action-Driven Dark Roast)", value="lokesh"),
+                app_commands.Choice(name="🧠 Pradeep (Sarcastic Tech Logic)", value="pradeep"),
+                app_commands.Choice(name="🏍️ TTF Vasan (299 km/h Hype Roast)", value="ttf_vasan"),
+                app_commands.Choice(name="🛡️ Muthazhagi (Strict QA Fire)", value="muthazhagi"),
+            ]
+        )
+        async def roast_slash(
+            interaction: discord.Interaction,
+            target: str,
+            character: Optional[str] = "sivakarthikeyan",
+            topic: Optional[str] = None,
+        ):
+            if not interaction.guild:
+                await interaction.response.send_message("⚠️ Run within a corporate server!", ephemeral=True)
+                return
+
+            await interaction.response.defer()
+            await interaction.followup.send("🔥 *Roast incoming...*", ephemeral=True)
+            await self.orchestrator.casual_player_service.roast(
+                character_key=character or "sivakarthikeyan",
+                target=target,
+                topic=topic or "overall coding logic and scene",
+                sender_name=interaction.user.display_name,
+                channel=interaction.channel,
+            )
+
+        @self.tree.command(
+            name="banter",
+            description="Sparks an interactive 4-line mini roast battle / banter between characters",
+        )
+        @app_commands.describe(topic="Debate or banter topic (e.g., Tabs vs Spaces, Friday Deploy)")
+        async def banter_slash(interaction: discord.Interaction, topic: Optional[str] = None):
+            if not interaction.guild:
+                await interaction.response.send_message("⚠️ Run within a corporate server!", ephemeral=True)
+                return
+
+            debate_topic = topic or "tabs vs spaces and deploy logic"
+            await interaction.response.defer()
+            await interaction.followup.send(f"⚔️ **Sparks flying! Community Banter initiated on: '{debate_topic}'**")
+            asyncio.create_task(
+                self.orchestrator.casual_player_service.banter(
+                    topic=debate_topic,
+                    channel=interaction.channel,
+                )
+            )
+
+        @self.tree.command(
+            name="clash",
+            description="Team Vasan vs Team Vijay full-squad witty roast battle",
+        )
+        @app_commands.describe(topic="Debate or roast topic (e.g., High-speed Deploy vs Clean Logic)")
+        async def clash_slash(interaction: discord.Interaction, topic: Optional[str] = None):
+            if not interaction.guild:
+                await interaction.response.send_message("⚠️ Run within a corporate server!", ephemeral=True)
+                return
+
+            debate_topic = topic or "299 speed vs clean logic and deploy war"
+            await interaction.response.defer()
+            await interaction.followup.send(f"⚔️ **TEAM VASAN VS TEAM VIJAY ROAST CLASH ON: '{debate_topic}'!** 🔥")
+            asyncio.create_task(
+                self.orchestrator.casual_player_service.clash(
+                    topic=debate_topic,
+                    channel=interaction.channel,
+                )
+            )
+
     async def on_ready(self):
         logger.info(
             f"Agent '{self.agent_config.name}' connected as {self.user} (ID: {self.user.id})"
@@ -377,6 +495,7 @@ class AgentOrchestrator:
         self.moderator_service = ModeratorService(self)
         self.cafeteria_service = CafeteriaService(self)
         self.scheduler_service = CompanyScheduler(self)
+        self.casual_player_service = CasualPlayerService(self)
         self.clients: Dict[str, VaelkryBotClient] = {}
         self.bot_user_ids: Dict[int, str] = {}
         self.bot_mentions: Dict[str, str] = {}
@@ -485,6 +604,19 @@ class AgentOrchestrator:
 
     async def handle_incoming_message(self, listener_client: VaelkryBotClient, message: discord.Message):
         if message.author.bot or message.author.id in self.bot_user_ids:
+            return
+
+        # 1. Interactive Discord Player Mentions & Direct Replies
+        # Allows all dev bots (TTF Vasan, Pradeep, Mamitha, Kayadu, Muthazhagi) to casually reply
+        if (
+            not message.mention_everyone
+            and listener_client.user
+            and (
+                listener_client.user in message.mentions
+                or (message.reference and getattr(message.reference.resolved, "author", None) == listener_client.user)
+            )
+        ):
+            await self.casual_player_service.handle_mention_reply(listener_client, message)
             return
 
         # Ensure only TTF Vasan handles commands
@@ -642,6 +774,94 @@ class AgentOrchestrator:
             await self.cafeteria_service.post_watercooler_snack(cafeteria_ch)
             return
 
+        # Casual Player Chat Command: !chat <character> <message>
+        if content.startswith("!chat"):
+            parts = content.split(maxsplit=2)
+            if len(parts) < 3:
+                await message.channel.send("⚠️ Usage: `!chat <character> <message>`\nCharacters: `vijay`, `sivakarthikeyan`, `anirudh`, `trisha`, `lokesh`, `pradeep`, `vasan`, `mamitha`")
+                return
+            char_key = parts[1].lower()
+            msg_text = parts[2].strip()
+            asyncio.create_task(
+                self.casual_player_service.chat(
+                    character_key=char_key,
+                    message=msg_text,
+                    sender_name=message.author.display_name,
+                    channel=message.channel,
+                )
+            )
+            return
+
+        # Fast character shortcuts: !v, !sk, !ani, !trisha, !loki
+        if content.startswith(("!v ", "!sk ", "!ani ", "!trisha ", "!loki ")):
+            prefix, msg_text = content.split(maxsplit=1)
+            char_map = {
+                "!v": "vijay",
+                "!sk": "sivakarthikeyan",
+                "!ani": "anirudh",
+                "!trisha": "trisha",
+                "!loki": "lokesh",
+            }
+            char_key = char_map.get(prefix.lower(), "vijay")
+            asyncio.create_task(
+                self.casual_player_service.chat(
+                    character_key=char_key,
+                    message=msg_text,
+                    sender_name=message.author.display_name,
+                    channel=message.channel,
+                )
+            )
+            return
+
+        # Casual Player Roast Command: !roast [character] <target>
+        if content.startswith("!roast"):
+            parts = content.split(maxsplit=2)
+            if len(parts) < 2:
+                await message.channel.send("⚠️ Usage: `!roast <target>` or `!roast <character> <target>`")
+                return
+            possible_char = parts[1].lower()
+            if possible_char in CASUAL_PLAYER_CHARACTERS and len(parts) > 2:
+                char_key = possible_char
+                target = parts[2].strip()
+            else:
+                char_key = "sivakarthikeyan"
+                target = content[len("!roast"):].strip()
+
+            asyncio.create_task(
+                self.casual_player_service.roast(
+                    character_key=char_key,
+                    target=target,
+                    topic="roast them playfully",
+                    sender_name=message.author.display_name,
+                    channel=message.channel,
+                )
+            )
+            return
+
+        # Mini Banter Command: !banter [topic]
+        if content.startswith("!banter"):
+            topic = content[len("!banter"):].strip() or "tabs vs spaces and deploy logic"
+            await message.channel.send(f"⚔️ **Community Banter initiated on: '{topic}'**")
+            asyncio.create_task(
+                self.casual_player_service.banter(
+                    topic=topic,
+                    channel=message.channel,
+                )
+            )
+            return
+
+        # Squad Clash Command: !clash [topic]
+        if content.startswith(("!clash", "!teamclash")):
+            topic_str = content.split(maxsplit=1)[1].strip() if len(content.split(maxsplit=1)) > 1 else "299 speed vs clean logic and deploy war"
+            await message.channel.send(f"⚔️ **TEAM VASAN VS TEAM VIJAY ROAST CLASH ON: '{topic_str}'!** 🔥")
+            asyncio.create_task(
+                self.casual_player_service.clash(
+                    topic=topic_str,
+                    channel=message.channel,
+                )
+            )
+            return
+
         # AI Sprint Command: !project <idea>
         if content.startswith("!project"):
             ch_name = getattr(message.channel, "name", "").lower()
@@ -691,6 +911,13 @@ class AgentOrchestrator:
             "• `/coffee` (or `!coffee`, `!chai`, `!break`): Launch a fun 5-agent Tanglish coffee/chai break banter.\n"
             "• `/pantrydebate [topic]` (or `!pantrydebate`): Start an interactive debate with 🅰️ vs 🅱️ voting.\n"
             "• `/watercooler` (or `!watercooler`): Post daily pantry snack special & workplace trivia.\n\n"
+            "💬 **Real Discord Player Chat & Roasts:**\n"
+            "• `/chat <character> <message>` (or `!chat`): Chat casually in Tanglish with Vijay, SK, Anirudh, Trisha, etc.\n"
+            "• `/roast <target> [character]` (or `!roast`): Drop a savage Tanglish roast on a teammate or code.\n"
+            "• `/banter [topic]` (or `!banter`): Launch a 4-line mini banter battle between community characters.\n"
+            "• `/clash [topic]` (or `!clash`): Full Team Vasan vs Team Vijay witty roast battle.\n"
+            "• Shortcuts: `!v <msg>`, `!sk <msg>`, `!ani <msg>`, `!trisha <msg>`, `!loki <msg>`.\n"
+            "• Direct mentions: Tag any bot (`@TTF Vasan`, `@Pradeep`, `@SadieSink`, etc.) for an instant comeback!\n\n"
             "**Squad Leadership:**\n"
             "• 🏍️ **TTF Vasan**: Team Lead & Hype Commander\n"
             "• 🧠 **Pradeep Ranganathan**: Tech Lead & Solutions Architect\n"
