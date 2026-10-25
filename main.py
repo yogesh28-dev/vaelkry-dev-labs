@@ -33,6 +33,7 @@ from server_builder import (
     format_blueprint_directory,
     is_admin_or_owner,
     reset_and_build_server,
+    sync_server_category_layout,
 )
 from moderator_service import ModeratorService
 from cafeteria_service import CafeteriaService, find_cafeteria_channel
@@ -250,6 +251,36 @@ class VaelkryBotClient(discord.Client):
             )
 
         @self.tree.command(
+            name="sync_layout",
+            description="Enforces strict category layout ordering and cleans duplicate voice channels (CEO/Admin only)",
+        )
+        async def sync_layout_slash(interaction: discord.Interaction):
+            if not interaction.guild:
+                await interaction.response.send_message("⚠️ Run within a corporate server!", ephemeral=True)
+                return
+
+            mem = interaction.guild.get_member(interaction.user.id) or interaction.user
+            if not is_admin_or_owner(mem, interaction.guild):
+                await interaction.response.send_message(
+                    "🛑 **Access Denied:** Only the CEO or Admin can synchronize server category layout!",
+                    ephemeral=True,
+                )
+                return
+
+            await interaction.response.defer()
+            ordered_cats = await sync_server_category_layout(interaction.guild)
+            cat_list = "\n".join(f"• `pos {idx}` **{c.name}**" for idx, c in enumerate(ordered_cats))
+            await interaction.followup.send(
+                f"✅ **Category Layout & Voice Channels Synchronized!**\n\n"
+                f"**Enforced Server Hierarchy (Top to Bottom):**\n"
+                f"{cat_list}\n\n"
+                f"• Cleaned duplicate voice channels under `Team Vijay` (strictly `Working Vc 1` and `Working Vc 2`).\n"
+                f"• Team categories positioned strictly above `Night Spend`.\n"
+                f"• `Night Spend` positioned directly above `Vaelkry logs`.\n"
+                f"• `Vaelkry logs` positioned at the absolute bottom."
+            )
+
+        @self.tree.command(
             name="coffee",
             description="Launches a fun 5-agent Tanglish coffee/chai break banter in #cafeteria",
         )
@@ -455,6 +486,8 @@ class VaelkryBotClient(discord.Client):
                 target_guild = None
 
         if target_guild:
+            if self.agent_config.key == "ttf_vasan":
+                asyncio.create_task(sync_server_category_layout(target_guild))
             asyncio.create_task(
                 self.orchestrator.scheduler_service.handle_bot_login_voice(
                     self.agent_config.key, self, target_guild
@@ -574,7 +607,8 @@ class AgentOrchestrator:
             guild_obj = lead.get_guild(self.config.guild_id)
             if guild_obj:
                 self.moderator_service.start_patrol_loop(guild_obj)
-                # Automatically ensure Team Vijay category and sync all enterprise roles
+                # Automatically enforce strict category layout order and sync all enterprise roles on startup
+                asyncio.create_task(sync_server_category_layout(guild_obj))
                 asyncio.create_task(ensure_enterprise_roles(guild_obj, self.clients))
 
     # ==================== SERVER RESET & BLUEPRINT FLOW ====================
@@ -778,6 +812,27 @@ class AgentOrchestrator:
             )
             return
 
+        # Prefix command: !sync_layout, !synclayout
+        if content.startswith(("!sync_layout", "!synclayout")):
+            if not message.guild:
+                return
+            member = message.guild.get_member(message.author.id) or message.author
+            if not is_admin_or_owner(member, message.guild):
+                await message.channel.send("🛑 **Access Denied:** Administrator rights required!")
+                return
+            ordered_cats = await sync_server_category_layout(message.guild)
+            cat_list = "\n".join(f"• `pos {idx}` **{c.name}**" for idx, c in enumerate(ordered_cats))
+            await message.channel.send(
+                f"✅ **Category Layout & Voice Channels Synchronized!**\n\n"
+                f"**Enforced Server Hierarchy (Top to Bottom):**\n"
+                f"{cat_list}\n\n"
+                f"• Cleaned duplicate voice channels under `Team Vijay` (strictly `Working Vc 1` and `Working Vc 2`).\n"
+                f"• Team categories positioned strictly above `Night Spend`.\n"
+                f"• `Night Spend` positioned directly above `Vaelkry logs`.\n"
+                f"• `Vaelkry logs` positioned at the absolute bottom."
+            )
+            return
+
         # Prefix commands: !coffee, !chai, !break
         if content.startswith(("!coffee", "!chai", "!break")):
             if not message.guild:
@@ -945,6 +1000,7 @@ class AgentOrchestrator:
             "• `/stop` (or `!stop`): Pause operations & disconnect bots from voice.\n"
             "• `/status` (or `!status`): Generate live TTF Vasan status logs routed to #yogesh-chat.\n"
             "• `/reset_and_build_server` (or `!reset_and_build_server`): Build CEO Handwritten Blueprint.\n"
+            "• `/sync_layout` (or `!sync_layout`): Enforce strict category hierarchy & clean duplicate voice channels.\n"
             "• `/teamcategory <name>` (or `!teamcategory <name>`): Dynamically scale a new team category.\n"
             "• `/follow` (or `!follow`): SadieSink & MillieBobbyBrown escort CEO in voice.\n"
             "• `/unfollow` (or `!unfollow`): Disengage executive voice escort.\n"

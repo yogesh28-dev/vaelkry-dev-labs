@@ -274,94 +274,51 @@ async def ensure_enterprise_roles(
 _team_vijay_lock = asyncio.Lock()
 
 
-async def ensure_team_vijay_category(
+async def sync_server_category_layout(
     guild: discord.Guild,
-) -> Tuple[discord.CategoryChannel, List[discord.abc.GuildChannel]]:
+) -> List[discord.CategoryChannel]:
     """
-    Thread-safe / task-safe wrapper to ensure Team Vijay category and channels exist.
+    Enforces the strict corporate category hierarchy on Discord:
+    Strict Category Hierarchy from Bottom to Top:
+    1. Absolute Last Category (bottom of server): 'Vaelkry logs'
+    2. Second from Bottom (directly above 'Vaelkry logs'): 'Night Spend'
+    3. Above 'Night Spend': All team categories ('Team Vaasan', 'Team Vijay', and future teams)
+    4. Top of server: Executive & Tech Cafe categories ('Yogesh Space', 'Circular', 'Common Pantry', 'Tech Cafe')
+
+    Implementation details:
+    - Explicitly updates category positions in Discord so that:
+      * Team categories have lower position indices than 'Night Spend'.
+      * 'Night Spend' sits right below all team categories.
+      * 'Vaelkry logs' sits at the very bottom.
+    - Under 'Team Vijay', finds and deletes duplicate 'Working Vc 2' voice channels
+      so that only one 'Working Vc 1' and one 'Working Vc 2' remain.
     """
     async with _team_vijay_lock:
-        return await _ensure_team_vijay_category_internal(guild)
+        return await _sync_server_category_layout_internal(guild)
 
 
-async def _ensure_team_vijay_category_internal(
+async def _sync_server_category_layout_internal(
     guild: discord.Guild,
-) -> Tuple[discord.CategoryChannel, List[discord.abc.GuildChannel]]:
-    """
-    Ensures that the dedicated category 'Team Vijay' exists on Discord with:
-    - Text channels: strictly 'working-chat', 'team-chat' (cleans up any duplicates)
-    - Voice channels: strictly 'Working Vc 1', 'Working Vc 2' (cleans up any duplicates, e.g. duplicate 'Working Vc 2')
-    - Positioned strictly ABOVE 'Night Spend' and immediately below 'Team Vaasan'.
-    """
-    cat = discord.utils.find(
+) -> List[discord.CategoryChannel]:
+    """Internal implementation to enforce category ordering and channel cleanup."""
+    # 0. Ensure guild channels/categories are populated in cache
+    if not guild.categories:
+        try:
+            await guild.fetch_channels()
+        except Exception:
+            pass
+
+    # 1. Ensure 'Team Vijay' category exists
+    cat_vijay = discord.utils.find(
         lambda c: c.name.strip().lower() == "team vijay",
         guild.categories,
     )
+    if not cat_vijay:
+        cat_vijay = await guild.create_category(name="Team Vijay")
+        logger.info(f"Provisioned missing category 'Team Vijay' in {guild.name}")
 
-    # 1. Discover surrounding categories to enforce strict layout:
-    # Team Vaasan -> Team Vijay -> Night Spend -> Vaelkry logs
-    night_spend_cat = discord.utils.find(
-        lambda c: c.name.strip().lower() == "night spend",
-        guild.categories,
-    )
-    vasan_cat = discord.utils.find(
-        lambda c: c.name.strip().lower() in ("team vaasan", "team vasan"),
-        guild.categories,
-    )
-    logs_cat = discord.utils.find(
-        lambda c: "log" in c.name.strip().lower(),
-        guild.categories,
-    )
-
-    # Target position: immediately above Night Spend (below Team Vaasan)
-    target_pos = None
-    if night_spend_cat:
-        target_pos = night_spend_cat.position
-    elif vasan_cat:
-        target_pos = vasan_cat.position + 1
-
-    if not cat:
-        if target_pos is not None:
-            cat = await guild.create_category(name="Team Vijay", position=target_pos)
-        else:
-            cat = await guild.create_category(name="Team Vijay")
-        logger.info(f"Provisioned new category 'Team Vijay' at position {cat.position} in {guild.name}")
-
-    # Enforce strict category ordering:
-    # 1. Ensure all team categories (e.g. 'Team Vaasan', 'Team Vijay') are strictly positioned ABOVE 'Night Spend'.
-    # 2. Fetch the position of 'Night Spend'. Set the position of 'Team Vijay' so it appears immediately above 'Night Spend' (below 'Team Vaasan').
-    try:
-        if night_spend_cat:
-            # Step A: Ensure Team Vaasan and any other team categories are strictly positioned ABOVE 'Night Spend'
-            if vasan_cat and vasan_cat.position >= night_spend_cat.position:
-                await vasan_cat.edit(position=max(0, night_spend_cat.position - 1))
-
-            for other_team in list(guild.categories):
-                if other_team.id not in (cat.id, (vasan_cat.id if vasan_cat else None)):
-                    if other_team.name.strip().lower().startswith("team") and other_team.position >= night_spend_cat.position:
-                        await other_team.edit(position=max(0, night_spend_cat.position - 1))
-
-            # Step B: Fetch the position of 'Night Spend'. Set the position of 'Team Vijay' so it appears immediately above 'Night Spend' (below 'Team Vaasan')
-            night_spend_pos = night_spend_cat.position
-            desired_vijay_pos = night_spend_pos
-            if vasan_cat and desired_vijay_pos <= vasan_cat.position:
-                desired_vijay_pos = vasan_cat.position + 1
-
-            await cat.edit(position=desired_vijay_pos)
-
-            # Step C: Ensure Night Spend is positioned strictly below Team Vijay
-            if night_spend_cat.position <= cat.position:
-                await night_spend_cat.edit(position=cat.position + 1)
-        elif vasan_cat:
-            await cat.edit(position=vasan_cat.position + 1)
-
-        # Keep logs at the bottom
-        if logs_cat:
-            await logs_cat.edit(position=len(guild.categories) + 5)
-    except Exception as pos_exc:
-        logger.warning(f"Failed to adjust category ordering for Team Vijay: {pos_exc}")
-
-    # 2. Clean up duplicate voice channels & ensure strictly 'Working Vc 1' and 'Working Vc 2'
+    # 2. Under 'Team Vijay', find and delete duplicate 'Working Vc 2' voice channels
+    # so that only one 'Working Vc 1' and one 'Working Vc 2' remain.
     expected_vc_names = ["Working Vc 1", "Working Vc 2"]
     kept_voice_channels: Dict[str, discord.VoiceChannel] = {}
 
@@ -373,10 +330,9 @@ async def _ensure_team_vijay_category_internal(
             return "Working Vc 2"
         return None
 
-    # Retrieve all voice channels belonging to Team Vijay (both from category and guild cache)
-    cat_vcs = [vc for vc in guild.voice_channels if vc.category_id == cat.id]
+    cat_vcs = [vc for vc in guild.voice_channels if vc.category_id == cat_vijay.id]
     if not cat_vcs:
-        cat_vcs = list(cat.voice_channels)
+        cat_vcs = list(cat_vijay.voice_channels)
 
     for vc in cat_vcs:
         matched_target = classify_vc(vc.name)
@@ -389,16 +345,15 @@ async def _ensure_team_vijay_category_internal(
                     except Exception:
                         pass
             else:
-                # Duplicate voice channel found (e.g. extra 'Working Vc 2') -> Delete it!
+                # Duplicate voice channel found (e.g. duplicate 'Working Vc 2') -> Delete it!
                 try:
-                    logger.info(f"Deleting duplicate voice channel '{vc.name}' (ID: {vc.id}) under '{cat.name}'")
-                    await vc.delete(reason="Cleanup duplicate voice channel in Team Vijay")
+                    logger.info(f"Deleting duplicate voice channel '{vc.name}' (ID: {vc.id}) under '{cat_vijay.name}'")
+                    await vc.delete(reason="Cleanup duplicate Working Vc 2 in Team Vijay")
                 except Exception as del_exc:
                     logger.warning(f"Failed to delete duplicate voice channel {vc.name}: {del_exc}")
         else:
-            # Extraneous voice channel under Team Vijay -> delete to keep strictly Working Vc 1 and Working Vc 2
             try:
-                logger.info(f"Deleting extraneous voice channel '{vc.name}' (ID: {vc.id}) under '{cat.name}'")
+                logger.info(f"Deleting extraneous voice channel '{vc.name}' (ID: {vc.id}) under '{cat_vijay.name}'")
                 await vc.delete(reason="Keep strictly Working Vc 1 and Working Vc 2 in Team Vijay")
             except Exception as del_exc:
                 logger.warning(f"Failed to delete extraneous voice channel {vc.name}: {del_exc}")
@@ -407,19 +362,19 @@ async def _ensure_team_vijay_category_internal(
     for vc_name in expected_vc_names:
         if vc_name not in kept_voice_channels:
             try:
-                new_vc = await cat.create_voice_channel(name=vc_name)
+                new_vc = await cat_vijay.create_voice_channel(name=vc_name)
                 logger.info(f"Created missing voice channel '{vc_name}' under Team Vijay")
                 kept_voice_channels[vc_name] = new_vc
             except Exception as create_exc:
                 logger.error(f"Failed to create voice channel '{vc_name}': {create_exc}")
 
-    # 3. Clean up duplicate text channels & ensure strictly 'working-chat', 'team-chat'
+    # Text channels under Team Vijay
     expected_text_names = ["working-chat", "team-chat"]
     kept_text_channels: Dict[str, discord.TextChannel] = {}
 
-    cat_tcs = [tc for tc in guild.text_channels if tc.category_id == cat.id]
+    cat_tcs = [tc for tc in guild.text_channels if tc.category_id == cat_vijay.id]
     if not cat_tcs:
-        cat_tcs = list(cat.text_channels)
+        cat_tcs = list(cat_vijay.text_channels)
 
     for tc in cat_tcs:
         norm_name = tc.name.strip().lower()
@@ -428,31 +383,134 @@ async def _ensure_team_vijay_category_internal(
             if matched_expected not in kept_text_channels:
                 kept_text_channels[matched_expected] = tc
             else:
-                # Duplicate text channel found -> Delete it!
                 try:
-                    logger.info(f"Deleting duplicate text channel '#{tc.name}' (ID: {tc.id}) under '{cat.name}'")
+                    logger.info(f"Deleting duplicate text channel '#{tc.name}' (ID: {tc.id}) under '{cat_vijay.name}'")
                     await tc.delete(reason="Cleanup duplicate text channel in Team Vijay")
                 except Exception as del_exc:
                     logger.warning(f"Failed to delete duplicate text channel #{tc.name}: {del_exc}")
         else:
             try:
-                logger.info(f"Deleting extraneous text channel '#{tc.name}' (ID: {tc.id}) under '{cat.name}'")
+                logger.info(f"Deleting extraneous text channel '#{tc.name}' (ID: {tc.id}) under '{cat_vijay.name}'")
                 await tc.delete(reason="Keep strictly working-chat and team-chat in Team Vijay")
             except Exception as del_exc:
                 logger.warning(f"Failed to delete extraneous text channel #{tc.name}: {del_exc}")
 
-    # Ensure missing text channels are created
     for tc_name in expected_text_names:
         if tc_name not in kept_text_channels:
             try:
-                new_tc = await cat.create_text_channel(name=tc_name)
+                new_tc = await cat_vijay.create_text_channel(name=tc_name)
                 logger.info(f"Created missing text channel #{tc_name} under Team Vijay")
                 kept_text_channels[tc_name] = new_tc
             except Exception as create_exc:
                 logger.error(f"Failed to create text channel #{tc_name}: {create_exc}")
 
-    channels: List[discord.abc.GuildChannel] = list(kept_text_channels.values()) + list(kept_voice_channels.values())
-    return cat, channels
+    # 3. Discover or ensure 'Night Spend' and 'Vaelkry logs' categories
+    night_spend_cat = discord.utils.find(
+        lambda c: c.name.strip().lower() == "night spend",
+        guild.categories,
+    )
+    if not night_spend_cat:
+        night_spend_cat = await guild.create_category(name="Night Spend")
+        logger.info(f"Provisioned missing category 'Night Spend' in {guild.name}")
+
+    logs_cat = discord.utils.find(
+        lambda c: "log" in c.name.strip().lower(),
+        guild.categories,
+    )
+    if not logs_cat:
+        logs_cat = await guild.create_category(name="Vaelkry logs")
+        logger.info(f"Provisioned missing category 'Vaelkry logs' in {guild.name}")
+
+    # 4. Partition categories into the 4 strict tiers:
+    # Tier 1 (Top): Executive & Tech Cafe categories
+    # Tier 2 (Above Night Spend): All team categories ('Team Vaasan', 'Team Vijay', and future teams)
+    # Tier 3 (Second from Bottom): 'Night Spend' (sits right below all team categories)
+    # Tier 4 (Absolute Last Category): 'Vaelkry logs' (sits at the very bottom)
+    top_categories: List[discord.CategoryChannel] = []
+    team_categories: List[discord.CategoryChannel] = []
+
+    for c in list(guild.categories):
+        c_name = c.name.strip().lower()
+        if c.id == logs_cat.id or "log" in c_name:
+            continue
+        elif c.id == night_spend_cat.id or c_name == "night spend":
+            continue
+        elif c_name.startswith("team") or c_name in ("team vaasan", "team vasan", "team vijay"):
+            team_categories.append(c)
+        else:
+            top_categories.append(c)
+
+    # Sort Tier 1: Blueprint top order
+    blueprint_top_order = ["yogesh space", "circular", "common pantry", "tech cafe"]
+    def top_cat_sort_key(c: discord.CategoryChannel) -> int:
+        c_name = c.name.strip().lower()
+        for idx, bp in enumerate(blueprint_top_order):
+            if bp in c_name:
+                return idx
+        return len(blueprint_top_order) + getattr(c, "position", 0)
+
+    top_categories.sort(key=top_cat_sort_key)
+
+    # Sort Tier 2: Team Vaasan first -> dynamic teams -> Team Vijay (sitting right above Night Spend)
+    def team_cat_sort_key(c: discord.CategoryChannel) -> int:
+        c_name = c.name.strip().lower()
+        if c_name in ("team vaasan", "team vasan"):
+            return 0
+        if c_name == "team vijay":
+            return 999999
+        return 10 + getattr(c, "position", 0)
+
+    team_categories.sort(key=team_cat_sort_key)
+
+    # 5. Assemble the final strict order
+    ordered_categories: List[discord.CategoryChannel] = []
+    seen_ids = set()
+    for cat in top_categories + team_categories + [night_spend_cat] + [logs_cat]:
+        if cat and cat.id not in seen_ids:
+            seen_ids.add(cat.id)
+            ordered_categories.append(cat)
+
+    # 6. Explicitly update category positions in Discord
+    payload = [{"id": c.id, "position": idx} for idx, c in enumerate(ordered_categories)]
+
+    try:
+        if hasattr(guild, "_state") and hasattr(guild._state, "http"):
+            await guild._state.http.bulk_channel_update(
+                guild.id,
+                payload,
+                reason="Strict Category Layout Hierarchy (CEO Blueprint)",
+            )
+            for idx, c in enumerate(ordered_categories):
+                c.position = idx
+            logger.info(
+                f"Successfully updated atomic category layout in {guild.name}: "
+                f"{[f'{c.name} (pos {idx})' for idx, c in enumerate(ordered_categories)]}"
+            )
+    except Exception as bulk_exc:
+        logger.warning(f"bulk_channel_update failed ({bulk_exc}). Falling back to category.edit...")
+        for idx, c in enumerate(ordered_categories):
+            try:
+                await c.edit(position=idx)
+            except Exception as e:
+                logger.warning(f"Failed to edit position for {c.name}: {e}")
+
+    return ordered_categories
+
+
+async def ensure_team_vijay_category(
+    guild: discord.Guild,
+) -> Tuple[discord.CategoryChannel, List[discord.abc.GuildChannel]]:
+    """
+    Ensures that the dedicated category 'Team Vijay' exists on Discord with:
+    - Text channels: strictly 'working-chat', 'team-chat' (cleans up any duplicates)
+    - Voice channels: strictly 'Working Vc 1', 'Working Vc 2' (cleans up duplicate 'Working Vc 2')
+    - Positioned strictly ABOVE 'Night Spend' and immediately below 'Team Vaasan'.
+    """
+    async with _team_vijay_lock:
+        ordered_cats = await _sync_server_category_layout_internal(guild)
+        cat = discord.utils.find(lambda c: c.name.strip().lower() == "team vijay", ordered_cats or guild.categories)
+        channels = list(getattr(cat, "channels", None) or (list(getattr(cat, "text_channels", [])) + list(getattr(cat, "voice_channels", [])))) if cat else []
+        return cat, channels
 
 
 
@@ -613,19 +671,11 @@ async def create_dynamic_team_category(
     v2 = await category.create_voice_channel(name="Working Vc 2")
     created_channels.extend([v1, v2])
 
-    # Ensure team categories remain strictly above 'Night Spend'
-    if night_spend_cat and night_spend_cat.position <= category.position:
-        try:
-            await night_spend_cat.edit(position=category.position + 1)
-        except Exception:
-            pass
-
-    # Ensure 'Vaelkry logs' remains at the bottom
-    if logs_cat:
-        try:
-            await logs_cat.edit(position=len(guild.categories) + 5)
-        except Exception:
-            pass
+    # Strictly sync and enforce category hierarchy (Executive -> Teams -> Night Spend -> Logs)
+    try:
+        await sync_server_category_layout(guild)
+    except Exception as sync_exc:
+        logger.warning(f"Failed to auto-sync category layout after creating team {team_name}: {sync_exc}")
 
     return category, created_channels
 
