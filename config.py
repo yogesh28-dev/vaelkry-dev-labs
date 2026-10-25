@@ -65,10 +65,79 @@ class SystemConfig:
         return {k: v for k, v in self.agents.items() if v.team == "team_vijay"}
 
 
+    @property
+    def team_messi_agents(self) -> Dict[str, AgentConfig]:
+        return {k: v for k, v in self.agents.items() if v.team == "team_messi"}
+
+    @property
+    def team_dhoni_agents(self) -> Dict[str, AgentConfig]:
+        return {k: v for k, v in self.agents.items() if v.team == "team_dhoni"}
+
+
+# Corporate Engineering Squads Catalog
+SQUADS: Dict[str, dict] = {
+    "team_vasan": {
+        "name": "Team Vaasan",
+        "lead": "ttf_vasan",
+        "members": ["ttf_vasan", "pradeep", "mamitha", "kayadu", "muthazhagi"],
+        "domain": "Full-Stack Web3 & Rapid Product Delivery",
+    },
+    "team_vijay": {
+        "name": "Team Vijay",
+        "lead": "vijay",
+        "members": ["vijay", "sivakarthikeyan", "anirudh", "trisha", "lokesh"],
+        "domain": "Cross-Platform Ecosystems, Cinematic Media & Performance",
+    },
+    "team_messi": {
+        "name": "Team Messi",
+        "lead": "messi",
+        "members": ["messi", "ronaldo", "neymar", "haaland", "mbappe"],
+        "domain": "High-Speed Systems, Micro-Optimizations & Algorithm Architecture",
+    },
+    "team_dhoni": {
+        "name": "Team Dhoni",
+        "lead": "dhoni",
+        "members": ["dhoni", "virat", "rohit", "jadeja", "hardik"],
+        "domain": "Clutch Incident Management, High-Pressure Production Fixes & Core Reliability",
+    },
+}
+
+# Bot Token Environment Variable Catalog
+BOT_TOKENS: Dict[str, str] = {
+    # Team Vaasan
+    "ttf_vasan": os.getenv("BOT_TOKEN_TTF_VASAN", "").strip(),
+    "pradeep": os.getenv("BOT_TOKEN_PRADEEP", "").strip(),
+    "mamitha": os.getenv("BOT_TOKEN_MAMITHA", "").strip(),
+    "kayadu": os.getenv("BOT_TOKEN_KAYADU", "").strip(),
+    "muthazhagi": os.getenv("BOT_TOKEN_MUTHAZHAGI", "").strip(),
+    # Team Vijay
+    "vijay": os.getenv("BOT_TOKEN_VIJAY", "").strip(),
+    "sivakarthikeyan": os.getenv("BOT_TOKEN_SIVA", "").strip(),
+    "anirudh": os.getenv("BOT_TOKEN_ANIRUDH", "").strip(),
+    "trisha": os.getenv("BOT_TOKEN_TRISHA", "").strip(),
+    "lokesh": os.getenv("BOT_TOKEN_LOKESH", "").strip(),
+    # Executive Suite
+    "sadie": os.getenv("BOT_TOKEN_SADIE", "").strip(),
+    "millie": os.getenv("BOT_TOKEN_MILLIE", "").strip(),
+    # Team Messi
+    "messi": os.getenv("BOT_TOKEN_MESSI", "").strip(),
+    "ronaldo": os.getenv("BOT_TOKEN_RONALDO", "").strip(),
+    "neymar": os.getenv("BOT_TOKEN_NEYMAR", "").strip(),
+    "haaland": os.getenv("BOT_TOKEN_HAALAND", "").strip(),
+    "mbappe": os.getenv("BOT_TOKEN_MBAPPE", "").strip(),
+    # Team Dhoni
+    "dhoni": os.getenv("BOT_TOKEN_DHONI", "").strip(),
+    "virat": os.getenv("BOT_TOKEN_VIRAT", "").strip(),
+    "rohit": os.getenv("BOT_TOKEN_ROHIT", "").strip(),
+    "jadeja": os.getenv("BOT_TOKEN_JADEJA", "").strip(),
+    "hardik": os.getenv("BOT_TOKEN_HARDIK", "").strip(),
+}
+
+
 def load_config() -> SystemConfig:
     """
     Validates and loads all configured bot credentials and server settings.
-    Supports both Team Vasan, Team Vijay, and Executive Moderator agents.
+    Supports Team Vaasan, Team Vijay, Team Messi, Team Dhoni, and Executive Suite.
     """
     missing_vars: List[str] = []
 
@@ -102,6 +171,24 @@ def load_config() -> SystemConfig:
         ("lokesh", "Lokesh", "Action-First & Dark Humor Director", "developer", "team_vijay", "BOT_TOKEN_LOKESH", []),
     ]
 
+    # Team Messi Developer Agents (5) - High-Speed Systems & Algorithms
+    messi_definitions = [
+        ("messi", "Messi", "Team Lead & Algorithmic Maestro", "developer", "team_messi", "BOT_TOKEN_MESSI", []),
+        ("ronaldo", "Ronaldo", "High-Performance Engineer & Deploy Striker", "developer", "team_messi", "BOT_TOKEN_RONALDO", []),
+        ("neymar", "Neymar", "Motion Dynamics & Creative Frontend Specialist", "developer", "team_messi", "BOT_TOKEN_NEYMAR", []),
+        ("haaland", "Haaland", "Big Data Cruncher & Latency Destroyer", "developer", "team_messi", "BOT_TOKEN_HAALAND", []),
+        ("mbappe", "Mbappe", "Ultra-Fast Edge Routing & Microservices Lead", "developer", "team_messi", "BOT_TOKEN_MBAPPE", []),
+    ]
+
+    # Team Dhoni Developer Agents (5) - Clutch Incident Management & Reliability
+    dhoni_definitions = [
+        ("dhoni", "Dhoni", "Team Lead & Clutch Reliability Commander", "developer", "team_dhoni", "BOT_TOKEN_DHONI", []),
+        ("virat", "Virat", "High-Intensity Code Reviewer & Core Performance Engineer", "developer", "team_dhoni", "BOT_TOKEN_VIRAT", []),
+        ("rohit", "Rohit", "Chief Solutions Architect & Vadapav Chill Engineer", "developer", "team_dhoni", "BOT_TOKEN_ROHIT", []),
+        ("jadeja", "Jadeja", "Sharp Defense, Security & Memory Leak Hunter", "developer", "team_dhoni", "BOT_TOKEN_JADEJA", []),
+        ("hardik", "Hardik", "Swagger All-Rounder & Production Hotfix Specialist", "developer", "team_dhoni", "BOT_TOKEN_HARDIK", []),
+    ]
+
     # Executive Moderator Agents (2) - Core Required
     mod_definitions = [
         ("sadie", "SadieSink", "Executive Moderator & Onboarding Lead", "moderator", "executives", "BOT_TOKEN_SADIE", []),
@@ -127,25 +214,34 @@ def load_config() -> SystemConfig:
                 next_tags=next_tags,
             )
 
-    # Check and load Team Vijay bots (if tokens provided in .env, connect!)
-    for key, name, role, category, team, env_key, next_tags in vijay_definitions:
-        token = os.getenv(env_key, "").strip()
-        if token:
-            agent_configs[key] = AgentConfig(
-                key=key,
-                name=name,
-                role=role,
-                category=category,
-                team=team,
-                env_token_key=env_key,
-                token=token,
-                next_tags=next_tags,
-            )
-        else:
-            import logging
-            logging.getLogger("VaelkryDevLabs.Config").info(
-                f"Team Vijay bot token '{env_key}' is not set in .env. Bot '{name}' will connect once token is added."
-            )
+    # Check and load optional squads (Team Vijay, Team Messi, Team Dhoni)
+    optional_squads = [
+        ("Team Vijay", vijay_definitions),
+        ("Team Messi", messi_definitions),
+        ("Team Dhoni", dhoni_definitions),
+    ]
+
+    import logging
+    cfg_logger = logging.getLogger("VaelkryDevLabs.Config")
+
+    for squad_name, definitions in optional_squads:
+        for key, name, role, category, team, env_key, next_tags in definitions:
+            token = os.getenv(env_key, "").strip()
+            if token:
+                agent_configs[key] = AgentConfig(
+                    key=key,
+                    name=name,
+                    role=role,
+                    category=category,
+                    team=team,
+                    env_token_key=env_key,
+                    token=token,
+                    next_tags=next_tags,
+                )
+            else:
+                cfg_logger.debug(
+                    f"{squad_name} bot token '{env_key}' is not set in .env. Bot '{name}' will connect once token is added."
+                )
 
     if missing_vars:
         raise ValueError(

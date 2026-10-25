@@ -488,8 +488,15 @@ class VaelkryBotClient(discord.Client):
 
             await interaction.response.defer()
             target_team = classify_task_domain(domain, task_description)
-            team_display = "Team Vaasan" if target_team == "team_vasan" else "Team Vijay"
-            lead_key = "ttf_vasan" if target_team == "team_vasan" else "vijay"
+            team_map = {
+                "team_vasan": ("Team Vaasan", "ttf_vasan", discord.Color.brand_green()),
+                "team_vijay": ("Team Vijay", "vijay", discord.Color.gold()),
+                "team_messi": ("Team Messi", "messi", discord.Color.from_rgb(0, 168, 255)),
+                "team_dhoni": ("Team Dhoni", "dhoni", discord.Color.from_rgb(255, 204, 0)),
+            }
+            team_display, lead_key, team_color = team_map.get(
+                target_team, ("Team Vaasan", "ttf_vasan", discord.Color.brand_green())
+            )
 
             team_cat = discord.utils.find(
                 lambda c: c.name.strip().lower() == team_display.lower(),
@@ -532,7 +539,7 @@ class VaelkryBotClient(discord.Client):
                     f"• **Channel:** {target_channel.mention}\n\n"
                     f"The team lead has received the assignment and delegated sub-tasks to the squad!"
                 ),
-                color=discord.Color.brand_green() if target_team == "team_vasan" else discord.Color.gold(),
+                color=team_color,
                 timestamp=datetime.datetime.now(datetime.timezone.utc),
             )
             await interaction.followup.send(embed=confirm_embed)
@@ -708,9 +715,7 @@ class VaelkryBotClient(discord.Client):
             )
             is_working_vc = (
                 "working" in ch_name
-                or "team vaasan" in cat_name
-                or "team vasan" in cat_name
-                or "team vijay" in cat_name
+                or any(t in cat_name for t in ("team vaasan", "team vasan", "team vijay", "team messi", "team dhoni"))
             )
 
             if not is_sleep and (is_tech_cafe or is_working_vc):
@@ -862,8 +867,14 @@ class AgentOrchestrator:
             logger.info("Client project sprint active. Skipping autonomous sprint cycle.")
             return None
 
-        team = random.choice(["team_vasan", "team_vijay"])
-        team_cat_name = "Team Vaasan" if team == "team_vasan" else "Team Vijay"
+        team = random.choice(["team_vasan", "team_vijay", "team_messi", "team_dhoni"])
+        team_cat_map = {
+            "team_vasan": "Team Vaasan",
+            "team_vijay": "Team Vijay",
+            "team_messi": "Team Messi",
+            "team_dhoni": "Team Dhoni",
+        }
+        team_cat_name = team_cat_map.get(team, "Team Vaasan")
         team_cat = discord.utils.find(lambda c: c.name.strip().lower() == team_cat_name.lower(), guild.categories)
         if not team_cat:
             return None
@@ -1171,7 +1182,11 @@ class AgentOrchestrator:
         if content.startswith("!chat"):
             parts = content.split(maxsplit=2)
             if len(parts) < 3:
-                await message.channel.send("⚠️ Usage: `!chat <character> <message>`\nCharacters: `vijay`, `sivakarthikeyan`, `anirudh`, `trisha`, `lokesh`, `pradeep`, `vasan`, `mamitha`")
+                await message.channel.send(
+                    "⚠️ Usage: `!chat <character> <message>`\n"
+                    "Characters: `messi`, `ronaldo`, `neymar`, `haaland`, `mbappe`, `dhoni`, `virat`, `rohit`, `jadeja`, `hardik`, "
+                    "`vijay`, `sivakarthikeyan`, `anirudh`, `trisha`, `lokesh`, `vasan`, `pradeep`, `mamitha`"
+                )
                 return
             char_key = parts[1].lower()
             msg_text = parts[2].strip()
@@ -1185,8 +1200,14 @@ class AgentOrchestrator:
             )
             return
 
-        # Fast character shortcuts: !v, !sk, !ani, !trisha, !loki
-        if content.startswith(("!v ", "!sk ", "!ani ", "!trisha ", "!loki ")):
+        # Fast character shortcuts for all squads
+        fast_shortcuts = (
+            "!v ", "!sk ", "!ani ", "!trisha ", "!loki ",
+            "!messi ", "!cr7 ", "!ronaldo ", "!neymar ", "!haaland ", "!mbappe ",
+            "!dhoni ", "!msd ", "!virat ", "!vk ", "!rohit ", "!hitman ", "!jaddu ", "!jadeja ", "!hardik ",
+            "!vasan ", "!pradeep ", "!mamitha ", "!kayadu ", "!muthu "
+        )
+        if content.startswith(fast_shortcuts):
             prefix, msg_text = content.split(maxsplit=1)
             char_map = {
                 "!v": "vijay",
@@ -1194,6 +1215,26 @@ class AgentOrchestrator:
                 "!ani": "anirudh",
                 "!trisha": "trisha",
                 "!loki": "lokesh",
+                "!messi": "messi",
+                "!cr7": "ronaldo",
+                "!ronaldo": "ronaldo",
+                "!neymar": "neymar",
+                "!haaland": "haaland",
+                "!mbappe": "mbappe",
+                "!dhoni": "dhoni",
+                "!msd": "dhoni",
+                "!virat": "virat",
+                "!vk": "virat",
+                "!rohit": "rohit",
+                "!hitman": "rohit",
+                "!jaddu": "jadeja",
+                "!jadeja": "jadeja",
+                "!hardik": "hardik",
+                "!vasan": "ttf_vasan",
+                "!pradeep": "pradeep",
+                "!mamitha": "mamitha",
+                "!kayadu": "kayadu",
+                "!muthu": "muthazhagi",
             }
             char_key = char_map.get(prefix.lower(), "vijay")
             asyncio.create_task(
