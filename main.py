@@ -446,6 +446,21 @@ class VaelkryBotClient(discord.Client):
             except Exception as exc:
                 logger.error(f"Failed to sync slash commands for TTF Vasan: {exc}")
 
+        # Auto-join voice immediately upon login during work shifts (especially Team Vijay)
+        target_guild = self.get_guild(self.orchestrator.config.guild_id)
+        if not target_guild:
+            try:
+                target_guild = await self.fetch_guild(self.orchestrator.config.guild_id)
+            except Exception:
+                target_guild = None
+
+        if target_guild:
+            asyncio.create_task(
+                self.orchestrator.scheduler_service.handle_bot_login_voice(
+                    self.agent_config.key, self, target_guild
+                )
+            )
+
     async def on_message(self, message: discord.Message):
         await self.orchestrator.handle_incoming_message(self, message)
 
@@ -560,7 +575,6 @@ class AgentOrchestrator:
             if guild_obj:
                 self.moderator_service.start_patrol_loop(guild_obj)
                 # Automatically ensure Team Vijay category and sync all enterprise roles
-                asyncio.create_task(ensure_team_vijay_category(guild_obj))
                 asyncio.create_task(ensure_enterprise_roles(guild_obj, self.clients))
 
     # ==================== SERVER RESET & BLUEPRINT FLOW ====================

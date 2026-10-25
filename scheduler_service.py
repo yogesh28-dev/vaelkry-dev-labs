@@ -223,6 +223,92 @@ class CompanyScheduler:
         """Returns all developer bot keys across Team Vaasan and Team Vijay."""
         return self.team_vasan_keys + self.team_vijay_keys
 
+    async def handle_bot_login_voice(
+        self,
+        agent_key: str,
+        client: discord.Client,
+        guild: discord.Guild,
+    ):
+        """
+        Immediately routes a developer bot to its assigned VC upon login.
+        Specifically ensures that as soon as the 5 Team Vijay bots (Vijay, Sivakarthikeyan, Anirudh, Trisha, Lokesh)
+        log in during work shifts, they immediately join 'Team Vijay' -> 'Working Vc 1'
+        with self_mute=False and self_deaf=False.
+        """
+        try:
+            # Settle briefly to ensure Discord gateway cache is populated
+            await asyncio.sleep(0.5)
+
+            # Ensure guild has channels and categories loaded
+            bot_guild = client.get_guild(guild.id) or guild
+            if not bot_guild.categories:
+                try:
+                    await bot_guild.fetch_channels()
+                except Exception:
+                    pass
+
+            now_ist = get_current_ist_time()
+            current_shift = match_current_shift(now_ist)
+            is_work_shift = current_shift.shift_id.startswith("work_")
+
+            if agent_key in self.team_vijay_keys:
+                if is_work_shift:
+                    logger.info(
+                        f"Team Vijay bot '{agent_key}' ({client.user.name if client.user else agent_key}) "
+                        f"logged in during work shift ({current_shift.name}). Immediate auto-join to 'Working Vc 1'!"
+                    )
+                    # Automatically ensure Team Vijay category ordering and channel cleanup (Working Vc 1 and 2 only)
+                    try:
+                        from server_builder import ensure_team_vijay_category
+                        await ensure_team_vijay_category(bot_guild)
+                    except Exception as cat_err:
+                        logger.warning(f"Could not auto-ensure Team Vijay category during login: {cat_err}")
+
+                    vijay_vc = await self.find_or_provision_voice_channel(
+                        guild=bot_guild,
+                        category_name="Team Vijay",
+                        vc_name="Working Vc 1",
+                    )
+                    if vijay_vc:
+                        await self.move_single_bot(client, vijay_vc, current_shift)
+                elif self.is_active:
+                    if current_shift.shift_id == "sleep":
+                        sleep_channels = await self.get_night_spend_voice_channels(bot_guild)
+                        if sleep_channels:
+                            assigned = self.assigned_sleep_rooms.get(agent_key)
+                            if not assigned:
+                                assigned = random.choice(sleep_channels).id
+                                self.assigned_sleep_rooms[agent_key] = assigned
+                            target_vc = bot_guild.get_channel(assigned) or sleep_channels[0]
+                            if target_vc:
+                                await self.move_single_bot(client, target_vc, current_shift)
+                    elif (
+                        current_shift.category_name.strip().lower() == "tech cafe"
+                        or current_shift.shift_id.startswith("break")
+                        or current_shift.shift_id == "warmup"
+                    ):
+                        cafe_channels = await self.get_tech_cafe_voice_channels(bot_guild)
+                        if cafe_channels:
+                            assigned = self.assigned_cafe_rooms.get(agent_key)
+                            if not assigned:
+                                assigned = random.choice(cafe_channels).id
+                                self.assigned_cafe_rooms[agent_key] = assigned
+                            target_vc = bot_guild.get_channel(assigned) or random.choice(cafe_channels)
+                            if target_vc:
+                                await self.move_single_bot(client, target_vc, current_shift)
+
+            elif agent_key in self.team_vasan_keys and (self.is_active or is_work_shift):
+                if is_work_shift:
+                    vasan_vc = await self.find_or_provision_voice_channel(
+                        guild=bot_guild,
+                        category_name=current_shift.category_name,
+                        vc_name=current_shift.vc_name,
+                    )
+                    if vasan_vc:
+                        await self.move_single_bot(client, vasan_vc, current_shift)
+        except Exception as exc:
+            logger.error(f"Error handling login voice auto-join for {agent_key}: {exc}")
+
     async def get_night_spend_voice_channels(self, guild: discord.Guild) -> List[discord.VoiceChannel]:
         """
         Dynamically fetches all voice channels under the 'Night Spend' category.
@@ -300,6 +386,14 @@ class CompanyScheduler:
         Dynamically searches for a voice channel within a category,
         falling back to guild-wide search or auto-provisioning if missing.
         """
+        # If searching under Team Vijay, auto-ensure category, ordering, and channel cleanup
+        if category_name.strip().lower() == "team vijay":
+            try:
+                from server_builder import ensure_team_vijay_category
+                await ensure_team_vijay_category(guild)
+            except Exception as cat_err:
+                logger.warning(f"Could not auto-ensure Team Vijay category in find_or_provision: {cat_err}")
+
         category = discord.utils.find(
             lambda c: c.name.strip().lower() == category_name.strip().lower(),
             guild.categories,
@@ -341,14 +435,19 @@ class CompanyScheduler:
     ):
         """Moves a single bot to target_vc, updates mute/deaf, and sets custom activity."""
         guild = client.get_guild(target_vc.guild.id) or target_vc.guild
-        bot_member = guild.me or guild.get_member(client.user.id)
+        bot_member = guild.get_member(client.user.id) if client.user else None
+        if not bot_member and client.user:
+            try:
+                bot_member = await target_vc.guild.fetch_member(client.user.id)
+            except Exception:
+                bot_member = None
 
         # 1. Set custom status activity
         try:
             activity = discord.CustomActivity(name=shift.activity_name)
             await client.change_presence(activity=activity)
         except Exception as exc:
-            logger.warning(f"Failed to update activity for {client.user.name}: {exc}")
+            logger.warning(f"Failed to update activity for {client.user.name if client.user else 'bot'}: {exc}")
 
         # 2. Strict mute/deaf determination:
         # Enforce False for all non-sleep shifts or when inside Tech Cafe / Working VCs
@@ -362,18 +461,41 @@ class CompanyScheduler:
             target_mute = False
             target_deaf = False
 
+        # Strictly enforce unmuted & undeafened for Team Vijay and all work shifts
+        if "team vijay" in cat_name_lower or "working" in vc_name_lower or shift.shift_id.startswith("work_"):
+            target_mute = False
+            target_deaf = False
+
         # 3. Voice connection and mute/deaf state update
         is_in_voice = bool(bot_member and bot_member.voice and bot_member.voice.channel)
         voice_client = discord.utils.get(client.voice_clients, guild=guild)
 
         try:
-            if is_in_voice or (voice_client and voice_client.is_connected()):
-                # Already in voice on Discord: change channel and mute/deaf via gateway
-                await guild.change_voice_state(
-                    channel=target_vc,
-                    self_mute=target_mute,
-                    self_deaf=target_deaf,
-                )
+            if is_in_voice:
+                if bot_member.voice.channel.id != target_vc.id:
+                    if voice_client and voice_client.is_connected():
+                        await voice_client.move_to(target_vc)
+                    else:
+                        await guild.change_voice_state(
+                            channel=target_vc,
+                            self_mute=target_mute,
+                            self_deaf=target_deaf,
+                        )
+                else:
+                    await guild.change_voice_state(
+                        channel=target_vc,
+                        self_mute=target_mute,
+                        self_deaf=target_deaf,
+                    )
+            elif voice_client and voice_client.is_connected():
+                if voice_client.channel.id != target_vc.id:
+                    await voice_client.move_to(target_vc)
+                else:
+                    await guild.change_voice_state(
+                        channel=target_vc,
+                        self_mute=target_mute,
+                        self_deaf=target_deaf,
+                    )
             else:
                 if voice_client:
                     try:
@@ -386,7 +508,7 @@ class CompanyScheduler:
                     reconnect=True,
                 )
         except discord.errors.ClientException as ce:
-            logger.info(f"ClientException for {client.user.name} ({ce}). Falling back to gateway state change...")
+            logger.info(f"ClientException for {client.user.name if client.user else 'bot'} ({ce}). Falling back to gateway state change...")
             try:
                 await guild.change_voice_state(
                     channel=target_vc,
@@ -394,9 +516,9 @@ class CompanyScheduler:
                     self_deaf=target_deaf,
                 )
             except Exception as e2:
-                logger.warning(f"Gateway change_voice_state fallback failed for {client.user.name}: {e2}")
+                logger.warning(f"Gateway change_voice_state fallback failed for {client.user.name if client.user else 'bot'}: {e2}")
         except Exception as exc:
-            logger.warning(f"Voice state update failed for {client.user.name}: {exc}. Retrying...")
+            logger.warning(f"Voice state update failed for {client.user.name if client.user else 'bot'}: {exc}. Retrying...")
             try:
                 await guild.change_voice_state(
                     channel=target_vc,
@@ -404,10 +526,9 @@ class CompanyScheduler:
                     self_deaf=target_deaf,
                 )
             except Exception as retry_exc:
-                logger.error(f"Failed to connect {client.user.name} to {target_vc.name}: {retry_exc}")
+                logger.error(f"Failed to connect {client.user.name if client.user else 'bot'} to {target_vc.name}: {retry_exc}")
 
         # 4. Strictly enforce gateway ws.voice_state directly:
-        # await bot_instance.ws.voice_state(guild.id, vc.id, self_mute=False, self_deaf=False)
         try:
             if hasattr(client, "ws") and client.ws:
                 await client.ws.voice_state(
@@ -417,7 +538,7 @@ class CompanyScheduler:
                     self_deaf=target_deaf,
                 )
         except Exception as ws_err:
-            logger.debug(f"Direct ws.voice_state update for {client.user.name}: {ws_err}")
+            logger.debug(f"Direct ws.voice_state update for {client.user.name if client.user else 'bot'}: {ws_err}")
 
     async def apply_shift(self, guild: discord.Guild, shift: ShiftDefinition):
         """Applies the specified shift to Team Vaasan and Team Vijay bots concurrently."""
@@ -735,9 +856,10 @@ class CompanyScheduler:
                             target_vc = guild.get_channel(room_id)
                             if client and client.is_ready() and target_vc:
                                 vc_conn = discord.utils.get(client.voice_clients, guild=guild)
-                                bot_member = guild.me or guild.get_member(client.user.id)
+                                bot_guild = client.get_guild(guild.id) or guild
+                                bot_member = bot_guild.get_member(client.user.id) if client.user else None
                                 is_in_target = (
-                                    (vc_conn and vc_conn.is_connected() and vc_conn.channel.id == target_vc.id)
+                                    (vc_conn and vc_conn.is_connected() and vc_conn.channel and vc_conn.channel.id == target_vc.id)
                                     or (bot_member and bot_member.voice and bot_member.voice.channel and bot_member.voice.channel.id == target_vc.id)
                                 )
                                 if not is_in_target:
@@ -753,9 +875,10 @@ class CompanyScheduler:
                             target_vc = guild.get_channel(room_id)
                             if client and client.is_ready() and target_vc:
                                 vc_conn = discord.utils.get(client.voice_clients, guild=guild)
-                                bot_member = guild.me or guild.get_member(client.user.id)
+                                bot_guild = client.get_guild(guild.id) or guild
+                                bot_member = bot_guild.get_member(client.user.id) if client.user else None
                                 is_in_target = (
-                                    (vc_conn and vc_conn.is_connected() and vc_conn.channel.id == target_vc.id)
+                                    (vc_conn and vc_conn.is_connected() and vc_conn.channel and vc_conn.channel.id == target_vc.id)
                                     or (bot_member and bot_member.voice and bot_member.voice.channel and bot_member.voice.channel.id == target_vc.id)
                                 )
                                 if not is_in_target:
@@ -773,25 +896,47 @@ class CompanyScheduler:
                                 client = self.orchestrator.clients.get(key)
                                 if client and client.is_ready():
                                     vc_conn = discord.utils.get(client.voice_clients, guild=guild)
-                                    bot_member = guild.me or guild.get_member(client.user.id)
+                                    bot_guild = client.get_guild(guild.id) or guild
+                                    bot_member = bot_guild.get_member(client.user.id) if client.user else None
                                     is_in_target = (
-                                        (vc_conn and vc_conn.is_connected() and vc_conn.channel.id == vasan_vc.id)
+                                        (vc_conn and vc_conn.is_connected() and vc_conn.channel and vc_conn.channel.id == vasan_vc.id)
                                         or (bot_member and bot_member.voice and bot_member.voice.channel and bot_member.voice.channel.id == vasan_vc.id)
                                     )
                                     if not is_in_target:
                                         asyncio.create_task(self.move_single_bot(client, vasan_vc, current_shift))
+                                    elif bot_member and bot_member.voice and (bot_member.voice.self_mute or bot_member.voice.self_deaf):
+                                        if hasattr(client, "ws") and client.ws:
+                                            asyncio.create_task(
+                                                client.ws.voice_state(
+                                                    guild.id,
+                                                    vasan_vc.id,
+                                                    self_mute=False,
+                                                    self_deaf=False,
+                                                )
+                                            )
                         if vijay_vc:
                             for key in self.team_vijay_keys:
                                 client = self.orchestrator.clients.get(key)
                                 if client and client.is_ready():
                                     vc_conn = discord.utils.get(client.voice_clients, guild=guild)
-                                    bot_member = guild.me or guild.get_member(client.user.id)
+                                    bot_guild = client.get_guild(guild.id) or guild
+                                    bot_member = bot_guild.get_member(client.user.id) if client.user else None
                                     is_in_target = (
-                                        (vc_conn and vc_conn.is_connected() and vc_conn.channel.id == vijay_vc.id)
+                                        (vc_conn and vc_conn.is_connected() and vc_conn.channel and vc_conn.channel.id == vijay_vc.id)
                                         or (bot_member and bot_member.voice and bot_member.voice.channel and bot_member.voice.channel.id == vijay_vc.id)
                                     )
                                     if not is_in_target:
                                         asyncio.create_task(self.move_single_bot(client, vijay_vc, current_shift))
+                                    elif bot_member and bot_member.voice and (bot_member.voice.self_mute or bot_member.voice.self_deaf):
+                                        if hasattr(client, "ws") and client.ws:
+                                            asyncio.create_task(
+                                                client.ws.voice_state(
+                                                    guild.id,
+                                                    vijay_vc.id,
+                                                    self_mute=False,
+                                                    self_deaf=False,
+                                                )
+                                            )
             except asyncio.CancelledError:
                 logger.info("Scheduler background loop cancelled.")
                 break
