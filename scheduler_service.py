@@ -10,7 +10,7 @@ import datetime
 import logging
 import random
 from dataclasses import dataclass
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 from zoneinfo import ZoneInfo
 import discord
 
@@ -199,6 +199,158 @@ def match_current_shift(now_ist: datetime.datetime) -> ShiftDefinition:
                 return shift
 
     return ROUTINE_SHIFTS[0]
+
+
+def get_bot_dynamic_presence(
+    bot_key: str,
+    shift: Optional[ShiftDefinition] = None,
+    current_vc: Optional[discord.VoiceChannel] = None,
+) -> Tuple[discord.BaseActivity, discord.Status]:
+    """
+    Computes dynamic Discord Rich Presence & detailed custom status for every bot
+    based on the current shift, active voice cabin, and character persona:
+    - Work hours: 'Playing: VS Code (optimizing React components)' or 'Watching: TTF Vasan debugging auth logic'.
+    - Tech Cafe / Break: 'Listening to: Anirudh BGM in The Hive ☕' or 'Chilling with Siva'.
+    - Night Spend: 'Sleeping: Do Not Disturb 🌙' (status set to idle/dnd).
+    """
+    vc_name = current_vc.name.lower() if current_vc else ""
+    cat_name = current_vc.category.name.lower() if current_vc and current_vc.category else ""
+
+    is_night_spend = (
+        (shift and shift.shift_id == "sleep")
+        or "night spend" in cat_name
+        or "sleep" in vc_name
+    )
+
+    if is_night_spend:
+        return (
+            discord.CustomActivity(name="Sleeping: Do Not Disturb 🌙"),
+            discord.Status.dnd,
+        )
+
+    is_break = (
+        (
+            shift
+            and (
+                shift.shift_id.startswith("break")
+                or shift.shift_id == "warmup"
+                or shift.category_name.strip().lower() == "tech cafe"
+            )
+        )
+        or "tech cafe" in cat_name
+        or any(w in vc_name for w in ("cafe", "hive", "hangout", "slide", "lounge"))
+    )
+
+    if is_break:
+        # Tech Cafe / Break Shift dynamic presence pool
+        break_options: Dict[str, List[discord.BaseActivity]] = {
+            "anirudh": [
+                discord.Activity(type=discord.ActivityType.listening, name="Anirudh BGM in The Hive ☕"),
+                discord.Activity(type=discord.ActivityType.listening, name="Bass Drop Beat in Tech Cafe 🎵"),
+            ],
+            "sivakarthikeyan": [
+                discord.Activity(type=discord.ActivityType.playing, name="Chilling with Siva"),
+                discord.Activity(type=discord.ActivityType.playing, name="Pantry Counter Punch ☕"),
+            ],
+            "ttf_vasan": [
+                discord.Activity(type=discord.ActivityType.listening, name="Anirudh BGM in The Hive ☕"),
+                discord.Activity(type=discord.ActivityType.playing, name="Chilling with Siva"),
+            ],
+            "pradeep": [
+                discord.Activity(type=discord.ActivityType.playing, name="Pantry Debate (Filter Coffee vs Tea) ☕"),
+                discord.Activity(type=discord.ActivityType.listening, name="Anirudh BGM in The Hive ☕"),
+            ],
+            "mamitha": [
+                discord.Activity(type=discord.ActivityType.playing, name="Chilling with Siva"),
+                discord.Activity(type=discord.ActivityType.listening, name="Anirudh BGM in The Hive ☕"),
+            ],
+            "kayadu": [
+                discord.Activity(type=discord.ActivityType.listening, name="Anirudh BGM in The Hive ☕"),
+                discord.Activity(type=discord.ActivityType.playing, name="Chilling with Siva"),
+            ],
+            "muthazhagi": [
+                discord.Activity(type=discord.ActivityType.playing, name="Tea Break (Security Patrol) ☕"),
+                discord.Activity(type=discord.ActivityType.playing, name="Chilling with Siva"),
+            ],
+            "vijay": [
+                discord.Activity(type=discord.ActivityType.playing, name="Chilling with Siva"),
+                discord.Activity(type=discord.ActivityType.listening, name="Anirudh BGM in The Hive ☕"),
+            ],
+            "trisha": [
+                discord.Activity(type=discord.ActivityType.listening, name="Anirudh BGM in The Hive ☕"),
+                discord.Activity(type=discord.ActivityType.playing, name="Aesthetic Coffee Chill 💅"),
+            ],
+            "lokesh": [
+                discord.Activity(type=discord.ActivityType.watching, name="Cinematic Teaser in The Hangout 🎬"),
+                discord.Activity(type=discord.ActivityType.playing, name="Chilling with Siva"),
+            ],
+        }
+        default_break = [
+            discord.Activity(type=discord.ActivityType.listening, name="Anirudh BGM in The Hive ☕"),
+            discord.Activity(type=discord.ActivityType.playing, name="Chilling with Siva"),
+        ]
+        pool = break_options.get(bot_key, default_break)
+        return random.choice(pool), discord.Status.online
+
+    # Work hours / Active Sprint dynamic presence pool
+    work_options: Dict[str, List[discord.BaseActivity]] = {
+        "ttf_vasan": [
+            discord.Activity(type=discord.ActivityType.playing, name="VS Code (optimizing React components)"),
+            discord.Activity(type=discord.ActivityType.watching, name="TTF Vasan debugging auth logic"),
+            discord.Activity(type=discord.ActivityType.playing, name="VS Code (299 km/h speed sprint)"),
+        ],
+        "pradeep": [
+            discord.Activity(type=discord.ActivityType.watching, name="TTF Vasan debugging auth logic"),
+            discord.Activity(type=discord.ActivityType.playing, name="VS Code (optimizing React components)"),
+        ],
+        "mamitha": [
+            discord.Activity(type=discord.ActivityType.playing, name="VS Code (optimizing React components)"),
+            discord.Activity(type=discord.ActivityType.playing, name="Figma (glassmorphism UI polish)"),
+        ],
+        "kayadu": [
+            discord.Activity(type=discord.ActivityType.playing, name="VS Code (optimizing React components)"),
+            discord.Activity(type=discord.ActivityType.watching, name="TTF Vasan debugging auth logic"),
+        ],
+        "muthazhagi": [
+            discord.Activity(type=discord.ActivityType.watching, name="TTF Vasan debugging auth logic"),
+            discord.Activity(type=discord.ActivityType.playing, name="VS Code (optimizing React components)"),
+        ],
+        "vijay": [
+            discord.Activity(type=discord.ActivityType.playing, name="VS Code (optimizing React components)"),
+            discord.Activity(type=discord.ActivityType.watching, name="TTF Vasan debugging auth logic"),
+        ],
+        "sivakarthikeyan": [
+            discord.Activity(type=discord.ActivityType.playing, name="VS Code (optimizing React components)"),
+            discord.Activity(type=discord.ActivityType.watching, name="TTF Vasan debugging auth logic"),
+        ],
+        "anirudh": [
+            discord.Activity(type=discord.ActivityType.playing, name="VS Code (optimizing React components)"),
+            discord.Activity(type=discord.ActivityType.listening, name="3am Sprint Soundscape 🎵"),
+        ],
+        "trisha": [
+            discord.Activity(type=discord.ActivityType.playing, name="VS Code (optimizing React components)"),
+            discord.Activity(type=discord.ActivityType.watching, name="TTF Vasan debugging auth logic"),
+        ],
+        "lokesh": [
+            discord.Activity(type=discord.ActivityType.watching, name="TTF Vasan debugging auth logic"),
+            discord.Activity(type=discord.ActivityType.playing, name="VS Code (optimizing React components)"),
+        ],
+        "sadie": [
+            discord.Activity(type=discord.ActivityType.watching, name="TTF Vasan debugging auth logic"),
+            discord.Activity(type=discord.ActivityType.watching, name="Executive Floor & Onboarding Desk"),
+        ],
+        "millie": [
+            discord.Activity(type=discord.ActivityType.watching, name="Audit trail in #full-logs"),
+            discord.Activity(type=discord.ActivityType.playing, name="VS Code (optimizing React components)"),
+        ],
+    }
+
+    default_work = [
+        discord.Activity(type=discord.ActivityType.playing, name="VS Code (optimizing React components)"),
+        discord.Activity(type=discord.ActivityType.watching, name="TTF Vasan debugging auth logic"),
+    ]
+    pool = work_options.get(bot_key, default_work)
+    return random.choice(pool), discord.Status.online
 
 
 class CompanyScheduler:
@@ -442,10 +594,16 @@ class CompanyScheduler:
             except Exception:
                 bot_member = None
 
-        # 1. Set custom status activity
+        # 1. Set dynamic rich presence & custom status activity
         try:
-            activity = discord.CustomActivity(name=shift.activity_name)
-            await client.change_presence(activity=activity)
+            bot_key = getattr(getattr(client, "agent_config", None), "key", "")
+            if not bot_key:
+                for k, c in self.orchestrator.clients.items():
+                    if c == client:
+                        bot_key = k
+                        break
+            activity, bot_status = get_bot_dynamic_presence(bot_key, shift, target_vc)
+            await client.change_presence(activity=activity, status=bot_status)
         except Exception as exc:
             logger.warning(f"Failed to update activity for {client.user.name if client.user else 'bot'}: {exc}")
 
@@ -644,6 +802,145 @@ class CompanyScheduler:
             await asyncio.gather(*move_tasks, return_exceptions=True)
 
         self.current_shift_id = shift.shift_id
+
+        # Organic Tech Cafe Movie Hangout trigger during Break shifts (40% organic chance)
+        if (
+            shift.category_name.strip().lower() == "tech cafe"
+            or shift.shift_id.startswith("break")
+            or shift.shift_id == "warmup"
+        ):
+            if random.random() < 0.40:
+                async def delayed_movie_hangout():
+                    await asyncio.sleep(random.uniform(10.0, 20.0))
+                    try:
+                        await self.trigger_movie_hangout(guild)
+                    except Exception as h_exc:
+                        logger.warning(f"Error in automatic movie hangout: {h_exc}")
+                asyncio.create_task(delayed_movie_hangout())
+
+    async def sync_all_bots_presence(self, guild: discord.Guild):
+        """
+        Dynamically updates every bot's Discord activity and online/dnd status
+        based on the active shift and their current voice cabin.
+        """
+        now_ist = get_current_ist_time()
+        shift = match_current_shift(now_ist) if self.is_active else None
+
+        tasks = []
+        for key, client in self.orchestrator.clients.items():
+            if not client or not client.is_ready():
+                continue
+            client_guild = client.get_guild(guild.id) or guild
+            bot_member = client_guild.get_member(client.user.id) if client.user else None
+            curr_vc = bot_member.voice.channel if (bot_member and bot_member.voice) else None
+            activity, status = get_bot_dynamic_presence(key, shift, curr_vc)
+            tasks.append(client.change_presence(activity=activity, status=status))
+
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+
+    async def trigger_movie_hangout(self, guild: discord.Guild) -> Tuple[bool, str]:
+        """
+        Tech Cafe Movie Hangout System:
+        Triggers an organic hangout event during break shifts:
+        1. A bot (e.g. Siva, TTF Vasan, Anirudh) drops a casual message like "dei movie paakalaama?".
+        2. Instead of routing everyone, randomly picks 2 to 3 idle developer bots to move
+           into 'The Hangout Zone' for a watch party, leaving the rest in other cafe VCs.
+        """
+        hangout_vc = await self.find_or_provision_voice_channel(guild, "Tech Cafe", "The Hangout Zone")
+        if not hangout_vc:
+            logger.warning("Could not find or provision 'The Hangout Zone' for movie hangout.")
+            return False, "⚠️ 'The Hangout Zone' voice channel could not be found."
+
+        from cafeteria_service import find_cafeteria_channel
+        chat_ch = find_cafeteria_channel(guild)
+        if not chat_ch:
+            chat_ch = discord.utils.find(
+                lambda c: any(w in c.name.lower() for w in ("cafeteria", "lounge", "hive", "hangout", "team-chat", "working-chat")),
+                guild.text_channels,
+            )
+
+        initiator_candidates = ["sivakarthikeyan", "ttf_vasan", "anirudh", "pradeep"]
+        active_candidates = [k for k in initiator_candidates if k in self.orchestrator.clients and self.orchestrator.clients[k].is_ready()]
+        initiator_key = random.choice(active_candidates) if active_candidates else "sivakarthikeyan"
+
+        invites = [
+            "dei movie paakalaama? Popcorn ready ah iruku 🍿🍿",
+            "macha break time la oru chinna movie / trailer watch party podlaama? 🎬",
+            "thalaiva coding break! The Hangout Zone-la movie stream start pannuvom 🍿🔥",
+            "dei Siva, Vasan... The Hangout Zone vanga da, trailer replay paakalaam 🎬🍿",
+        ]
+        invite_msg = random.choice(invites)
+
+        if chat_ch and hasattr(self.orchestrator, "casual_player_service"):
+            await self.orchestrator.casual_player_service.send_character_chat(
+                channel=chat_ch,
+                character_key=initiator_key,
+                text=invite_msg,
+            )
+
+        ready_dev_keys = [
+            k for k in self.all_dev_keys
+            if k in self.orchestrator.clients and self.orchestrator.clients[k].is_ready()
+        ]
+        if not ready_dev_keys:
+            return False, "⚠️ No active developer bots available for movie hangout."
+
+        count = min(len(ready_dev_keys), random.choice([2, 3]))
+        if initiator_key in ready_dev_keys:
+            remaining = [k for k in ready_dev_keys if k != initiator_key]
+            party_keys = [initiator_key] + random.sample(remaining, min(len(remaining), count - 1))
+        else:
+            party_keys = random.sample(ready_dev_keys, count)
+
+        movie_shift = ShiftDefinition(
+            shift_id="movie_hangout",
+            name="Tech Cafe Movie Hangout 🍿",
+            category_name="Tech Cafe",
+            vc_name="The Hangout Zone",
+            self_mute=False,
+            self_deaf=False,
+            activity_name="Watching: Movie Hangout Party 🍿🎬",
+            start_hour=0,
+            end_hour=24,
+        )
+
+        tasks = []
+        for key in party_keys:
+            client = self.orchestrator.clients.get(key)
+            if client:
+                tasks.append(self.move_single_bot(client, hangout_vc, movie_shift))
+
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+
+        second_keys = [k for k in party_keys if k != initiator_key]
+        if second_keys and chat_ch and hasattr(self.orchestrator, "casual_player_service"):
+            second_key = random.choice(second_keys)
+            agreements = [
+                "Vandhuten macha! Screen share podunga 🍿",
+                "Semma timing thalaiva, Hangout Zone-ku varen! 🎬",
+                "Popcorn eduthukitu varen bro, play pannu! 🍿🔥",
+            ]
+            async def send_followup():
+                await asyncio.sleep(random.uniform(2.0, 3.5))
+                try:
+                    await self.orchestrator.casual_player_service.send_character_chat(
+                        channel=chat_ch,
+                        character_key=second_key,
+                        text=random.choice(agreements),
+                    )
+                except Exception:
+                    pass
+            asyncio.create_task(send_followup())
+
+        names_moved = [
+            self.orchestrator.clients[k].user.name
+            for k in party_keys
+            if k in self.orchestrator.clients and self.orchestrator.clients[k].user
+        ]
+        logger.info(f"Movie Hangout triggered: moved {names_moved} to '{hangout_vc.name}'")
+        return True, f"🍿 Movie Hangout started in **{hangout_vc.name}** with: {', '.join(names_moved)}!"
 
     def get_ceo_channel(self, guild: discord.Guild) -> Optional[discord.TextChannel]:
         """

@@ -15,8 +15,10 @@ Features:
 """
 
 import asyncio
+import datetime
 import logging
 import random
+import re
 import sys
 from typing import Dict, List, Optional
 
@@ -25,7 +27,15 @@ from discord import app_commands
 
 from config import AgentConfig, SystemConfig, load_config
 from gemini_service import GeminiService
-from agents import AGENT_PROMPTS, build_agent_prompt, CASUAL_PLAYER_CHARACTERS
+from agents import (
+    AGENT_PROMPTS,
+    CASUAL_PLAYER_CHARACTERS,
+    build_agent_prompt,
+    build_autonomous_project_brainstorm_prompt,
+    build_autonomous_prototype_announcement_prompt,
+    build_delegation_prompt,
+    classify_task_domain,
+)
 from server_builder import (
     create_dynamic_team_category,
     ensure_enterprise_roles,
@@ -33,6 +43,7 @@ from server_builder import (
     format_blueprint_directory,
     is_admin_or_owner,
     reset_and_build_server,
+    spawn_new_squad,
     sync_server_category_layout,
 )
 from moderator_service import ModeratorService
@@ -458,6 +469,164 @@ class VaelkryBotClient(discord.Client):
                 )
             )
 
+        @self.tree.command(
+            name="delegate_task",
+            description="Smart Squad Delegation: Auto-routes tasks to Team Vaasan or Team Vijay by tech domain",
+        )
+        @app_commands.describe(
+            domain="Tech domain (e.g. Web dev, scraper, automation, backend, mobile app, Flutter, UI design)",
+            task_description="Detailed task description and requirements",
+        )
+        async def delegate_task_slash(
+            interaction: discord.Interaction,
+            domain: str,
+            task_description: str,
+        ):
+            if not interaction.guild:
+                await interaction.response.send_message("⚠️ Run within a corporate server!", ephemeral=True)
+                return
+
+            await interaction.response.defer()
+            target_team = classify_task_domain(domain, task_description)
+            team_display = "Team Vaasan" if target_team == "team_vasan" else "Team Vijay"
+            lead_key = "ttf_vasan" if target_team == "team_vasan" else "vijay"
+
+            team_cat = discord.utils.find(
+                lambda c: c.name.strip().lower() == team_display.lower(),
+                interaction.guild.categories,
+            )
+            target_channel = None
+            if team_cat:
+                target_channel = discord.utils.find(
+                    lambda c: c.name.lower() in ("team-chat", "working-chat"),
+                    team_cat.text_channels,
+                )
+
+            if not target_channel:
+                target_channel = interaction.channel
+
+            prompt = build_delegation_prompt(
+                team=target_team,
+                domain=domain,
+                task_description=task_description,
+                requester_name=interaction.user.display_name,
+            )
+            delegation_text = await self.orchestrator.gemini_service.generate_response(
+                prompt=prompt,
+                agent_name="SquadDelegation",
+            )
+
+            await self.orchestrator.casual_player_service.send_character_chat(
+                channel=target_channel,
+                character_key=lead_key,
+                text=delegation_text,
+            )
+
+            import datetime
+            confirm_embed = discord.Embed(
+                title="🎯 Smart Squad Task Delegated!",
+                description=(
+                    f"**Task successfully routed by Tech Domain:**\n"
+                    f"• **Domain:** `{domain}`\n"
+                    f"• **Assigned Squad:** **{team_display}**\n"
+                    f"• **Channel:** {target_channel.mention}\n\n"
+                    f"The team lead has received the assignment and delegated sub-tasks to the squad!"
+                ),
+                color=discord.Color.brand_green() if target_team == "team_vasan" else discord.Color.gold(),
+                timestamp=datetime.datetime.now(datetime.timezone.utc),
+            )
+            await interaction.followup.send(embed=confirm_embed)
+
+        @self.tree.command(
+            name="spawn_squad",
+            description="Dynamic Scaling Engine: Provisions a new engineering squad category, channels & role (Admin/CEO)",
+        )
+        @app_commands.describe(
+            team_name="Name of the new squad (e.g. Falcon, Nova, Cyber)",
+            lead_name="Lead of the squad (e.g. Vikram, Surya, Priya)",
+        )
+        async def spawn_squad_slash(
+            interaction: discord.Interaction,
+            team_name: str,
+            lead_name: str,
+        ):
+            if not interaction.guild:
+                await interaction.response.send_message("⚠️ Run within a corporate server!", ephemeral=True)
+                return
+
+            mem = interaction.guild.get_member(interaction.user.id) or interaction.user
+            if not is_admin_or_owner(mem, interaction.guild):
+                await interaction.response.send_message(
+                    "🛑 **Access Denied:** Administrator rights required to spawn new squads!",
+                    ephemeral=True,
+                )
+                return
+
+            await interaction.response.defer()
+            category, channels, role = await spawn_new_squad(interaction.guild, team_name, lead_name)
+            ch_list = "\n".join(f"• {c.mention} (`{c.name}`)" for c in channels)
+            import datetime
+            embed = discord.Embed(
+                title=f"⚡ New Squad Spawned: {category.name}!",
+                description=(
+                    f"**Engineering Squad dynamically provisioned!**\n"
+                    f"• **Lead:** `{lead_name}`\n"
+                    f"• **Role:** {role.mention}\n"
+                    f"• **Category:** `{category.name}` (pos `{category.position}`)\n"
+                    f"• **Hierarchy Rule:** Strictly positioned **ABOVE 'Night Spend'** in Tier 2.\n\n"
+                    f"**Provisioned Channels:**\n{ch_list}"
+                ),
+                color=role.color if role else discord.Color.brand_green(),
+                timestamp=datetime.datetime.now(datetime.timezone.utc),
+            )
+            await interaction.followup.send(embed=embed)
+
+        @self.tree.command(
+            name="executive_dashboard",
+            description="Generates and dispatches executive status dashboard to #managers-space and #yogesh-chat",
+        )
+        async def executive_dashboard_slash(interaction: discord.Interaction):
+            if not interaction.guild:
+                await interaction.response.send_message("⚠️ Run within a corporate server!", ephemeral=True)
+                return
+
+            await interaction.response.defer()
+            success, msg = await self.orchestrator.moderator_service.send_executive_dashboard(interaction.guild)
+            dashboard_embed = self.orchestrator.moderator_service.generate_executive_dashboard_embed(interaction.guild)
+            await interaction.followup.send(content=msg, embed=dashboard_embed)
+
+        @self.tree.command(
+            name="movie_hangout",
+            description="Tech Cafe Movie Hangout: Picks 2-3 dev bots into The Hangout Zone for a movie watch party",
+        )
+        async def movie_hangout_slash(interaction: discord.Interaction):
+            if not interaction.guild:
+                await interaction.response.send_message("⚠️ Run within a corporate server!", ephemeral=True)
+                return
+
+            await interaction.response.defer()
+            success, msg = await self.orchestrator.scheduler_service.trigger_movie_hangout(interaction.guild)
+            await interaction.followup.send(msg)
+
+        @self.tree.command(
+            name="autonomous_sprint",
+            description="AI-to-AI Autonomous Labs: Squads brainstorm and post open-source boilerplate to #the-launchpad",
+        )
+        async def autonomous_sprint_slash(interaction: discord.Interaction):
+            if not interaction.guild:
+                await interaction.response.send_message("⚠️ Run within a corporate server!", ephemeral=True)
+                return
+
+            await interaction.response.defer()
+            result = await self.orchestrator.run_autonomous_project_cycle(interaction.guild)
+            if result:
+                await interaction.followup.send(
+                    f"🚀 **Autonomous Project Sprint Completed!**\n"
+                    f"Prototype **{result['project']}** generated by **{result['team']}** and launched into #{result['channel']}!"
+                )
+            else:
+                await interaction.followup.send("⚠️ Autonomous sprint skipped (client project currently in progress).")
+
     async def on_ready(self):
         logger.info(
             f"Agent '{self.agent_config.name}' connected as {self.user} (ID: {self.user.id})"
@@ -610,6 +779,7 @@ class AgentOrchestrator:
                 # Automatically enforce strict category layout order and sync all enterprise roles on startup
                 asyncio.create_task(sync_server_category_layout(guild_obj))
                 asyncio.create_task(ensure_enterprise_roles(guild_obj, self.clients))
+                self.start_autonomous_labs_loop(guild_obj)
 
     # ==================== SERVER RESET & BLUEPRINT FLOW ====================
 
@@ -679,11 +849,134 @@ class AgentOrchestrator:
             logger.exception(f"Error provisioning team category: {exc}")
             await send_fn(f"⚠️ **Error provisioning team category:** `{exc}`")
 
+    # ==================== AI-TO-AI AUTONOMOUS PROJECTS ====================
+
+    async def run_autonomous_project_cycle(self, guild: discord.Guild) -> Optional[dict]:
+        """
+        AI-to-AI Autonomous Projects:
+        Triggers when no client tasks are active:
+        1. Squad members in their respective working chats brainstorm small open-source utilities or UI boilerplate ideas.
+        2. Generate modular boilerplate code drafts and post a prototype announcement into #the-launchpad.
+        """
+        if self.discussion_lock.locked():
+            logger.info("Client project sprint active. Skipping autonomous sprint cycle.")
+            return None
+
+        team = random.choice(["team_vasan", "team_vijay"])
+        team_cat_name = "Team Vaasan" if team == "team_vasan" else "Team Vijay"
+        team_cat = discord.utils.find(lambda c: c.name.strip().lower() == team_cat_name.lower(), guild.categories)
+        if not team_cat:
+            return None
+
+        working_ch = discord.utils.find(
+            lambda c: any(w in c.name.lower() for w in ("working-chat", "team-chat")),
+            team_cat.text_channels,
+        )
+        if not working_ch:
+            return None
+
+        # 1. Squad members in working chat brainstorm small open-source utilities
+        brainstorm_prompt = build_autonomous_project_brainstorm_prompt(team)
+        try:
+            brainstorm_raw = await self.gemini_service.generate_response(
+                prompt=brainstorm_prompt,
+                agent_name="AutonomousBrainstorm",
+            )
+            for line in brainstorm_raw.splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                match = re.match(r"^\[([a-zA-Z0-9_]+)\]:\s*(.+)$", line)
+                if match:
+                    char_k = match.group(1).lower().strip()
+                    char_msg = match.group(2).strip()
+                    await self.casual_player_service.send_character_chat(working_ch, char_k, char_msg)
+                    await asyncio.sleep(1.0)
+        except Exception as b_exc:
+            logger.warning(f"Error during autonomous brainstorm dialogue: {b_exc}")
+
+        # 2. Select open-source utility idea
+        project_concepts = [
+            ("Vaelkry Micro-Auth", "Next.js 15, FastAPI, Redis, JWT", "Zero-config stateless authentication with automated refresh-token rotation"),
+            ("Vaelkry GlassUI Kit", "Flutter 3.x, Dart, Glassmorphism", "High-performance modular glassmorphism widget library with fluid motion dynamics"),
+            ("Vaelkry ScraperEngine", "Python 3.12, Playwright, Redis, Docker", "Distributed async web crawler with anti-bot rate-limit evasion & proxy rotation"),
+            ("Vaelkry DynamicTheme", "React 19, Tailwind CSS v4, TypeScript", "Cyber-mint dark mode design system with accessible tokenized color variables"),
+        ]
+        p_name, p_stack, p_desc = random.choice(project_concepts)
+
+        # 3. Generate modular boilerplate code drafts and prototype announcement
+        announcement_prompt = build_autonomous_prototype_announcement_prompt(
+            project_name=p_name,
+            tech_stack=p_stack,
+            description=p_desc,
+            team=team,
+        )
+        try:
+            announcement_text = await self.gemini_service.generate_response(
+                prompt=announcement_prompt,
+                agent_name="AutonomousPrototype",
+            )
+        except Exception as g_exc:
+            logger.error(f"Failed to generate autonomous prototype: {g_exc}")
+            return None
+
+        # 4. Post into #the-launchpad
+        launchpad = discord.utils.find(
+            lambda c: "launchpad" in c.name.lower(),
+            guild.text_channels,
+        ) or working_ch
+
+        embed = discord.Embed(
+            title=f"🚀 VAELKRY AUTONOMOUS LABS — PROTOTYPE RELEASE: {p_name}",
+            description=announcement_text,
+            color=discord.Color.brand_green() if team == "team_vasan" else discord.Color.gold(),
+            timestamp=datetime.datetime.now(datetime.timezone.utc),
+        )
+        embed.add_field(name="Author Squad", value=f"**{team_cat_name}**", inline=True)
+        embed.add_field(name="Tech Stack", value=f"`{p_stack}`", inline=True)
+        embed.add_field(name="Repository Template", value=f"`github.com/vaelkry-labs/{p_name.lower().replace(' ', '-')}`", inline=False)
+        embed.set_footer(text="Autonomous Engineering Loop • Vaelkry Dev Labs HQ")
+        if guild.icon:
+            embed.set_thumbnail(url=guild.icon.url)
+
+        lead_client = self.clients.get("ttf_vasan" if team == "team_vasan" else "vijay") or next(iter(self.clients.values()), None)
+        target_send_ch = lead_client.get_channel(launchpad.id) if lead_client else launchpad
+        if target_send_ch:
+            await target_send_ch.send(embed=embed)
+
+        logger.info(f"Autonomous prototype '{p_name}' successfully launched into #{launchpad.name}!")
+        return {"project": p_name, "team": team_cat_name, "channel": launchpad.name}
+
+    def start_autonomous_labs_loop(self, guild: discord.Guild):
+        """Starts the autonomous idle project background routine."""
+        if hasattr(self, "_autonomous_task") and self._autonomous_task and not self._autonomous_task.done():
+            return
+
+        async def _autonomous_loop():
+            await asyncio.sleep(60.0)
+            while True:
+                try:
+                    await asyncio.sleep(random.uniform(2700.0, 4500.0))
+                    if self.scheduler_service.is_active and not self.discussion_lock.locked():
+                        logger.info("Autonomous Labs Loop: checking idle sprint opportunity...")
+                        await self.run_autonomous_project_cycle(guild)
+                except asyncio.CancelledError:
+                    break
+                except Exception as loop_exc:
+                    logger.warning(f"Error in autonomous labs loop: {loop_exc}")
+                    await asyncio.sleep(60.0)
+
+        self._autonomous_task = asyncio.create_task(_autonomous_loop())
+
     # ==================== INCOMING MESSAGE ROUTING ====================
 
     async def handle_incoming_message(self, listener_client: VaelkryBotClient, message: discord.Message):
         if message.author.bot or message.author.id in self.bot_user_ids:
             return
+
+        # 0. Selective contextual reaction emojis (20-30% organic chance)
+        if listener_client.agent_config.key == "ttf_vasan":
+            asyncio.create_task(self.casual_player_service.handle_contextual_reaction(message))
 
         # 1. Interactive Discord Player Mentions & Direct Replies
         # Allows all dev bots (TTF Vasan, Pradeep, Mamitha, Kayadu, Muthazhagi) to casually reply
@@ -991,6 +1284,130 @@ class AgentOrchestrator:
                 return
 
             asyncio.create_task(self.run_project_discussion_chain(message, idea))
+            return
+
+        # Prefix command: !delegate_task <domain> <task>, !delegate
+        if content.startswith(("!delegate_task", "!delegate")):
+            if not message.guild:
+                return
+            parts = content.split(maxsplit=2)
+            if len(parts) < 3:
+                await message.channel.send("⚠️ Usage: `!delegate_task <domain> <task description>` (e.g. `!delegate_task mobile Flutter glassmorphic drawer`)")
+                return
+            domain_arg = parts[1].strip()
+            task_arg = parts[2].strip()
+
+            target_team = classify_task_domain(domain_arg, task_arg)
+            team_display = "Team Vaasan" if target_team == "team_vasan" else "Team Vijay"
+            lead_key = "ttf_vasan" if target_team == "team_vasan" else "vijay"
+
+            team_cat = discord.utils.find(
+                lambda c: c.name.strip().lower() == team_display.lower(),
+                message.guild.categories,
+            )
+            target_channel = None
+            if team_cat:
+                target_channel = discord.utils.find(
+                    lambda c: c.name.lower() in ("team-chat", "working-chat"),
+                    team_cat.text_channels,
+                )
+            if not target_channel:
+                target_channel = message.channel
+
+            prompt = build_delegation_prompt(
+                team=target_team,
+                domain=domain_arg,
+                task_description=task_arg,
+                requester_name=message.author.display_name,
+            )
+            delegation_text = await self.gemini_service.generate_response(
+                prompt=prompt,
+                agent_name="SquadDelegation",
+            )
+            await self.casual_player_service.send_character_chat(
+                channel=target_channel,
+                character_key=lead_key,
+                text=delegation_text,
+            )
+
+            confirm_embed = discord.Embed(
+                title="🎯 Smart Squad Task Delegated!",
+                description=(
+                    f"**Task successfully routed by Tech Domain:**\n"
+                    f"• **Domain:** `{domain_arg}`\n"
+                    f"• **Assigned Squad:** **{team_display}**\n"
+                    f"• **Channel:** {target_channel.mention}\n\n"
+                    f"The team lead has received the assignment and delegated sub-tasks to the squad!"
+                ),
+                color=discord.Color.brand_green() if target_team == "team_vasan" else discord.Color.gold(),
+                timestamp=datetime.datetime.now(datetime.timezone.utc),
+            )
+            await message.channel.send(embed=confirm_embed)
+            return
+
+        # Prefix command: !spawn_squad <team_name> <lead_name>
+        if content.startswith("!spawn_squad"):
+            if not message.guild:
+                return
+            member = message.guild.get_member(message.author.id) or message.author
+            if not is_admin_or_owner(member, message.guild):
+                await message.channel.send("🛑 **Access Denied:** Administrator rights required!")
+                return
+            parts = content.split(maxsplit=2)
+            if len(parts) < 3:
+                await message.channel.send("⚠️ Usage: `!spawn_squad <team_name> <lead_name>` (e.g. `!spawn_squad Falcon Vikram`)")
+                return
+            team_arg = parts[1].strip()
+            lead_arg = parts[2].strip()
+
+            category, channels, role = await spawn_new_squad(message.guild, team_arg, lead_arg)
+            ch_list = "\n".join(f"• {c.mention} (`{c.name}`)" for c in channels)
+            embed = discord.Embed(
+                title=f"⚡ New Squad Spawned: {category.name}!",
+                description=(
+                    f"**Engineering Squad dynamically provisioned!**\n"
+                    f"• **Lead:** `{lead_arg}`\n"
+                    f"• **Role:** {role.mention}\n"
+                    f"• **Category:** `{category.name}` (pos `{category.position}`)\n"
+                    f"• **Hierarchy Rule:** Strictly positioned **ABOVE 'Night Spend'** in Tier 2.\n\n"
+                    f"**Provisioned Channels:**\n{ch_list}"
+                ),
+                color=role.color if role else discord.Color.brand_green(),
+                timestamp=datetime.datetime.now(datetime.timezone.utc),
+            )
+            await message.channel.send(embed=embed)
+            return
+
+        # Prefix command: !executive_dashboard, !dashboard
+        if content.startswith(("!executive_dashboard", "!dashboard")):
+            if not message.guild:
+                return
+            success, msg = await self.moderator_service.send_executive_dashboard(message.guild)
+            dashboard_embed = self.moderator_service.generate_executive_dashboard_embed(message.guild)
+            await message.channel.send(content=msg, embed=dashboard_embed)
+            return
+
+        # Prefix command: !movie_hangout, !hangout
+        if content.startswith(("!movie_hangout", "!hangout")):
+            if not message.guild:
+                return
+            success, msg = await self.scheduler_service.trigger_movie_hangout(message.guild)
+            await message.channel.send(msg)
+            return
+
+        # Prefix command: !autonomous_sprint, !autonomous
+        if content.startswith(("!autonomous_sprint", "!autonomous")):
+            if not message.guild:
+                return
+            result = await self.run_autonomous_project_cycle(message.guild)
+            if result:
+                await message.channel.send(
+                    f"🚀 **Autonomous Project Sprint Completed!**\n"
+                    f"Prototype **{result['project']}** generated by **{result['team']}** and launched into #{result['channel']}!"
+                )
+            else:
+                await message.channel.send("⚠️ Autonomous sprint skipped (client project currently in progress).")
+            return
 
     async def send_help_message(self, channel: discord.abc.Messageable):
         help_text = (
@@ -1001,6 +1418,11 @@ class AgentOrchestrator:
             "• `/status` (or `!status`): Generate live TTF Vasan status logs routed to #yogesh-chat.\n"
             "• `/reset_and_build_server` (or `!reset_and_build_server`): Build CEO Handwritten Blueprint.\n"
             "• `/sync_layout` (or `!sync_layout`): Enforce strict category hierarchy & clean duplicate voice channels.\n"
+            "• `/delegate_task <domain> <task>` (or `!delegate_task`): Smart task routing to Team Vaasan or Team Vijay.\n"
+            "• `/spawn_squad <team> <lead>` (or `!spawn_squad`): Dynamic squad scaling above Night Spend.\n"
+            "• `/executive_dashboard` (or `!dashboard`): Dispatch executive audit dashboard to #managers-space & #yogesh-chat.\n"
+            "• `/movie_hangout` (or `!movie_hangout`): Move 2-3 dev bots into The Hangout Zone for a movie party.\n"
+            "• `/autonomous_sprint` (or `!autonomous_sprint`): Trigger AI-to-AI prototype launch in #the-launchpad.\n"
             "• `/teamcategory <name>` (or `!teamcategory <name>`): Dynamically scale a new team category.\n"
             "• `/follow` (or `!follow`): SadieSink & MillieBobbyBrown escort CEO in voice.\n"
             "• `/unfollow` (or `!unfollow`): Disengage executive voice escort.\n"

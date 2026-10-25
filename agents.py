@@ -558,3 +558,154 @@ def build_cross_team_clash_prompt(
     )
 
 
+# ==================== SMART SQUAD DELEGATION & AUTONOMOUS LABS ====================
+
+def classify_task_domain(domain: str, task_description: str) -> str:
+    """
+    Intelligently routes task requests based on domain & tech description:
+    - Web dev, scrapers, automation, and backend tools auto-route to Team Vaasan.
+    - Mobile apps (Flutter/React Native), UI design, performance optimizations,
+      and creative engines auto-route to Team Vijay.
+    Returns: 'team_vasan' or 'team_vijay'.
+    """
+    combined = f"{domain} {task_description}".lower()
+
+    vijay_keywords = [
+        "mobile", "flutter", "react native", "ios", "android", "ui", "ui design",
+        "ux", "creative", "performance", "optimization", "audio", "multimedia",
+        "sound", "animation", "app", "apps", "widget", "client ui",
+        "thalapathy", "vijay",
+    ]
+
+    vasan_keywords = [
+        "web", "web dev", "scraper", "scrapers", "scraping", "automation",
+        "backend", "tools", "api", "database", "devops", "security", "qa",
+        "crawler", "bot", "docker", "cloud", "infra", "server", "postgres",
+        "redis", "fastapi", "express", "node", "vasan",
+    ]
+
+    vijay_score = sum(1 for kw in vijay_keywords if kw in combined)
+    vasan_score = sum(1 for kw in vasan_keywords if kw in combined)
+
+    if vijay_score > vasan_score:
+        return "team_vijay"
+    elif vasan_score > vijay_score:
+        return "team_vasan"
+    else:
+        domain_lower = domain.lower()
+        if any(k in domain_lower for k in ("mobile", "flutter", "ui", "perf", "creative", "app")):
+            return "team_vijay"
+        return "team_vasan"
+
+
+def build_delegation_prompt(
+    team: str,
+    domain: str,
+    task_description: str,
+    requester_name: str,
+) -> str:
+    """
+    Constructs the domain delegation prompt for team leads (TTF Vasan or Vijay)
+    to acknowledge the assignment and assign sub-tasks to their squad members.
+    """
+    if team == "team_vijay":
+        lead_name = "Vijay (Thalapathy)"
+        team_name = "Team Vijay"
+        squad_delegation_guidelines = f"""
+Your squad members:
+- Sivakarthikeyan (@Sivakarthikeyan): Interactive widget logic, error-handling states & comic-relief user feedback.
+- Anirudh (@Anirudh): Motion dynamics, audio/vibes & fluid screen transitions.
+- Trisha (@Trisha): Aesthetic mobile UI screens, color palette & typography polish.
+- Lokesh (@Lokesh): Compilation speed, native performance optimization & build/deploy pipeline.
+
+Your response instructions:
+1. Greet {requester_name} with your calm Thalapathy swagger ("En nenjil kudi irukkum comrades!", "Semma task machan, cool-ah mudikrom!").
+2. Announce that Team Vijay is officially taking ownership of this {domain} sprint: '{task_description}'.
+3. Break down the mission and delegate specific sub-tasks to each of the 4 squad members (@Sivakarthikeyan, @Anirudh, @Trisha, @Lokesh).
+4. Conclude with a punchy Thalapathy sign-off ("I am waiting to deploy!", "All is well, sprint start aagudhu!").
+- Language: Authentic Tanglish + Discord dev slang.
+- Formatting: Clean Discord markdown with bold headings and bullet points. Length: 700 to 1100 characters.
+"""
+    else:
+        lead_name = "TTF Vasan"
+        team_name = "Team Vaasan"
+        squad_delegation_guidelines = f"""
+Your squad members:
+- Pradeep Ranganathan (@Pradeep): System Architecture, API design & data-flow logic.
+- Mamitha (@Mamitha): Web UI components, glassmorphism layout & responsive styling.
+- Kayadu (@Kayadu): Backend DB models, Scraper engine / automation workers & Docker containerization.
+- Muthazhagi (@Muthazhagi): Edge-case testing, rate limiting, and security compliance.
+
+Your response instructions:
+1. Fire up the team and greet {requester_name} with your signature 299 km/h speed hype ("En Nanba Nanbigale!", "Rocket speed-la execute panrom!").
+2. Announce that Team Vaasan is officially taking ownership of this {domain} sprint: '{task_description}'.
+3. Break down the mission and delegate specific sub-tasks to each of the 4 squad members (@Pradeep, @Mamitha, @Kayadu, @Muthazhagi).
+4. Conclude with an energetic hype sign-off ("Veliya vaada mapla, Vaelkry Dev Labs rocket launch!").
+- Language: Authentic Tanglish + bike throttle tech hype.
+- Formatting: Clean Discord markdown with bold headings and bullet points. Length: 700 to 1100 characters.
+"""
+
+    prompt = f"""You are {lead_name}, the leader of {team_name} at Vaelkry Dev Labs.
+Requester: {requester_name}
+Assigned Domain: {domain}
+Task Description: {task_description}
+
+{squad_delegation_guidelines}
+Generate your delegation message now:
+"""
+    return prompt
+
+
+def build_autonomous_project_brainstorm_prompt(team: str) -> str:
+    """
+    Constructs a prompt for squad members in their working chat to brainstorm
+    a small open-source utility or UI boilerplate idea during idle periods.
+    """
+    if team == "team_vijay":
+        characters = "Vijay, Sivakarthikeyan, and Anirudh"
+        example = """[vijay]: nanba, client tasks ellam clear. Free time la oru open-source Flutter UI kit pannuvoma?
+[sivakarthikeyan]: semma idea thalaiva! Glassmorphic bottom navigation with smooth haptic feedback pannuvom 😂
+[anirudh]: beats sync aagura maari spring animations podalam machan, GitHub-la instant hit aagum!"""
+    else:
+        characters = "TTF Vasan, Pradeep, and Mamitha"
+        example = """[ttf_vasan]: nanba nanbigale! Free slot iruku, 299 speed-la oru Next.js + FastAPI micro-auth boilerplate build panrom!
+[pradeep]: thalaiva logic neat ah irukanum! JWT rotation + Redis rate-limiting template add pannalam.
+[mamitha]: aiyoo semma! Cyber-mint dark mode UI + clean dashboard design naan tharen!"""
+
+    return f"""You are simulating an authentic, lightning-fast 3-turn casual chat between {characters} at Vaelkry Dev Labs.
+The squad is in their working-chat and decides to brainstorm a modular, open-source utility or UI boilerplate during downtime.
+Format strictly as:
+[character_key]: <casual Tanglish message>
+
+Example format:
+{example}
+
+Generate a fresh 3-turn brainstorm for a creative open-source utility or boilerplate now. Return ONLY the 3 formatted lines:"""
+
+
+def build_autonomous_prototype_announcement_prompt(
+    project_name: str,
+    tech_stack: str,
+    description: str,
+    team: str,
+) -> str:
+    """
+    Generates a prototype release announcement for #the-launchpad with modular boilerplate code draft.
+    """
+    team_display = "Team Vijay (Mobile & Creative Labs)" if team == "team_vijay" else "Team Vaasan (Web & Automation Labs)"
+    return f"""You are the lead engineering agent at Vaelkry Dev Labs.
+Announce an autonomous open-source prototype build in #the-launchpad.
+
+Project Name: {project_name}
+Author Squad: {team_display}
+Tech Stack: {tech_stack}
+Description: {description}
+
+Requirements:
+1. Tanglish hype announcement celebrating the autonomous prototype release.
+2. Outline 3 key features of this modular utility/boilerplate.
+3. Provide a real, clean, modular boilerplate code snippet (e.g. in Python, TypeScript, or Dart) in a markdown code block.
+4. Conclude with a proud sign-off from {team_display}.
+Keep length between 800 and 1400 characters. Use clean Discord markdown."""
+
+

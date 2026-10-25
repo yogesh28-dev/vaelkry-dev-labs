@@ -93,6 +93,20 @@ class CasualPlayerService:
         char_key = character_key.lower().strip()
         char_info = CASUAL_PLAYER_CHARACTERS.get(char_key, CASUAL_PLAYER_CHARACTERS["vijay"])
 
+        # Human-like typing delay proportional to message length (1.5 to 3.5 seconds)
+        char_count = len(text)
+        calc_delay = 1.5 + min(2.0, (char_count / 120.0) * 1.5)
+        realistic_delay = min(3.5, max(1.5, calc_delay + random.uniform(-0.25, 0.25)))
+
+        if hasattr(channel, "typing"):
+            try:
+                async with channel.typing():
+                    await asyncio.sleep(realistic_delay)
+            except Exception:
+                await asyncio.sleep(realistic_delay)
+        else:
+            await asyncio.sleep(realistic_delay)
+
         # Check if character has an active discord.Client session
         if char_key in self.orchestrator.clients:
             client = self.orchestrator.clients[char_key]
@@ -403,3 +417,77 @@ class CasualPlayerService:
                 )
         except Exception as exc:
             logger.debug(f"Error handling mention reply for {bot_key}: {exc}")
+
+    async def handle_contextual_reaction(self, message: discord.Message):
+        """
+        Contextual, non-spam reaction emojis:
+        Bots selectively react (with 20-30% organic chance) using relatable emojis
+        (😂, 🔥, 💀, ☕, 🏍️, 😎) based on chat keywords.
+        """
+        # Exclude self-reactions to bot messages from our orchestrator
+        if message.author.bot and message.author.id in self.orchestrator.bot_user_ids:
+            return
+
+        # Selective organic chance (20% - 30%)
+        if random.random() > 0.28:
+            return
+
+        text = message.content.lower().strip()
+        if not text:
+            return
+
+        # Keyword mapping to contextual emojis
+        keyword_emoji_map = [
+            (
+                ["haha", "lol", "lmao", "roast", "comedy", "joke", "kannu verkum", "scene", "mudila", "fun", "siripu", "vadivelu"],
+                "😂",
+            ),
+            (
+                ["fire", "mass", "deploy", "sprint", "rocket", "speed", "thookuvom", "vera level", "release", "ship", "launch", "fast"],
+                "🔥",
+            ),
+            (
+                ["bug", "crash", "error", "exception", "fail", "lag", "dead", "broken", "rip", "issue", "panic"],
+                "💀",
+            ),
+            (
+                ["coffee", "chai", "tea", "break", "pantry", "snack", "cafeteria", "biscuit", "samosa", "eat", "drink"],
+                "☕",
+            ),
+            (
+                ["vasan", "bike", "299", "throttle", "ride", "vroom", "ktm", "ninja"],
+                "🏍️",
+            ),
+            (
+                ["vijay", "thalapathy", "cool", "swag", "thalaiva", "style", "mass", "leo", "goat", "master"],
+                "😎",
+            ),
+        ]
+
+        matched_emojis = []
+        for keywords, emoji in keyword_emoji_map:
+            if any(k in text for k in keywords):
+                matched_emojis.append(emoji)
+
+        if not matched_emojis:
+            # Fallback for general developer banter
+            if len(text) > 15 and any(w in text for w in ("bro", "macha", "nanba", "thalaiva", "code", "dev")):
+                matched_emojis = ["🔥", "😎", "😂", "☕"]
+            else:
+                return
+
+        chosen_emoji = random.choice(matched_emojis)
+
+        # Pick one active bot client to add the reaction
+        active_clients = [c for c in self.orchestrator.clients.values() if c.is_ready()]
+        if not active_clients:
+            return
+
+        reacting_client = random.choice(active_clients)
+        try:
+            target_ch = reacting_client.get_channel(message.channel.id) or message.channel
+            msg_to_react = await target_ch.fetch_message(message.id) if hasattr(target_ch, "fetch_message") else message
+            await msg_to_react.add_reaction(chosen_emoji)
+            logger.debug(f"{reacting_client.user.name if reacting_client.user else 'Bot'} reacted {chosen_emoji} to message {message.id}")
+        except Exception as exc:
+            logger.debug(f"Failed to add contextual reaction {chosen_emoji}: {exc}")

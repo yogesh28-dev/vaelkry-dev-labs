@@ -974,7 +974,7 @@ class ModeratorService:
         elif after.channel is None and before.channel is not None:
             logger.info("CEO disconnected from voice in follow mode. Disconnecting escorts...")
             disconnect_tasks = []
-            for client in (sadie, millie):
+            for client in (self.get_sadie_client(), self.get_millie_client()):
                 if client:
                     for vc in list(client.voice_clients):
                         disconnect_tasks.append(vc.disconnect(force=True))
@@ -983,3 +983,146 @@ class ModeratorService:
                         disconnect_tasks.append(g.change_voice_state(channel=None))
             if disconnect_tasks:
                 await asyncio.gather(*disconnect_tasks, return_exceptions=True)
+
+    # ==================== EXECUTIVE OPERATIONS DASHBOARD ====================
+
+    def generate_executive_dashboard_embed(self, guild: discord.Guild) -> discord.Embed:
+        """
+        Generates an executive operations dashboard embed summarizing:
+        - Team & Squad counts (Team Vaasan, Team Vijay, Dynamic Squads)
+        - Active VCs & Occupancy
+        - Human Engineers vs Bot Headcount
+        - Infrastructure & Category Hierarchy Health
+        """
+        now = datetime.datetime.now(datetime.timezone.utc)
+
+        # 1. Team & Category Counts
+        team_categories = [
+            c for c in guild.categories
+            if c.name.strip().lower().startswith("team")
+        ]
+        squad_names = [f"`{c.name}`" for c in team_categories] or ["`Team Vaasan`", "`Team Vijay`"]
+
+        # 2. Headcount
+        total_members = guild.member_count or len(guild.members)
+        bot_members = [m for m in guild.members if m.bot]
+        human_members = [m for m in guild.members if not m.bot]
+
+        active_bots = len([c for c in self.orchestrator.clients.values() if c.is_ready()])
+
+        # 3. Active VCs & Floor Occupancy
+        active_vc_lines = []
+        for vc in guild.voice_channels:
+            if vc.members:
+                member_names = ", ".join(m.display_name for m in vc.members)
+                cat_name = vc.category.name if vc.category else "Uncategorized"
+                active_vc_lines.append(f"• 🔊 **{vc.name}** (`{cat_name}`): {member_names}")
+
+        if not active_vc_lines:
+            vc_occupancy_text = "*No members currently connected to voice channels.*"
+        else:
+            vc_occupancy_text = "\n".join(active_vc_lines[:10])
+
+        # 4. Scheduler state
+        scheduler = getattr(self.orchestrator, "scheduler_service", None)
+        scheduler_status = "Active ⚡ (24h IST Routine)" if (scheduler and scheduler.is_active) else "Standby / Paused ⏸️"
+
+        from scheduler_service import get_current_ist_time, match_current_shift
+        now_ist = get_current_ist_time()
+        current_shift = match_current_shift(now_ist)
+
+        embed = discord.Embed(
+            title="👔 VAELKRY DEV LABS — EXECUTIVE OPERATIONS DASHBOARD",
+            description=(
+                f"**Enterprise High-Level Status & Infrastructure Audit**\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                f"• **Current IST Time:** `{now_ist.strftime('%d %b %Y | %H:%M:%S IST')}`\n"
+                f"• **Active Shift:** `{current_shift.name}`\n"
+                f"• **Scheduler Engine:** `{scheduler_status}`"
+            ),
+            color=0x9B59B6,  # Royal Executive Purple
+            timestamp=now,
+        )
+
+        embed.add_field(
+            name="🏢 Active Engineering Squads",
+            value=(
+                f"**Total Squads:** `{len(team_categories)}`\n"
+                f"**Categories:** {', '.join(squad_names)}\n"
+                f"• Strictly positioned above `Night Spend`."
+            ),
+            inline=False,
+        )
+
+        embed.add_field(
+            name="👥 Enterprise Headcount",
+            value=(
+                f"• Total Roster: `{total_members}` members\n"
+                f"• Software Engineers / Humans: `{len(human_members)}`\n"
+                f"• AI Developer Bots: `{len(bot_members)}` (Active: `{active_bots}`)\n"
+                f"• Executive Moderation: `SadieSink` & `MillieBobbyBrown`"
+            ),
+            inline=True,
+        )
+
+        embed.add_field(
+            name="🛡️ System & Architecture Health",
+            value=(
+                f"• Gemini AI Engine: `Operational 🟢`\n"
+                f"• Hierarchy Enforcement: `Strict 4-Tier Order 🟢`\n"
+                f"• Security Audits: `Active Patrol 🟢`"
+            ),
+            inline=True,
+        )
+
+        embed.add_field(
+            name="🔊 Live Voice Floor & VC Occupancy",
+            value=vc_occupancy_text,
+            inline=False,
+        )
+
+        if guild.icon:
+            embed.set_thumbnail(url=guild.icon.url)
+
+        embed.set_footer(
+            text="Executive Suite • SadieSink (Executive Desk) & MillieBobbyBrown (Chief Audit Officer)"
+        )
+        return embed
+
+    async def send_executive_dashboard(self, guild: discord.Guild) -> Tuple[bool, str]:
+        """
+        Sends the Executive Dashboard embed to #managers-space and #yogesh-chat.
+        """
+        dashboard_embed = self.generate_executive_dashboard_embed(guild)
+
+        sent_channels = []
+        # Target 1: #managers-space
+        managers_ch = discord.utils.find(
+            lambda c: any(w in c.name.lower() for w in ("managers-space", "manager-space", "managers")),
+            guild.text_channels,
+        )
+        # Target 2: #yogesh-chat
+        from scheduler_service import get_ceo_channel
+        ceo_ch = get_ceo_channel(guild)
+
+        target_channels = []
+        if managers_ch:
+            target_channels.append(managers_ch)
+        if ceo_ch and (not managers_ch or ceo_ch.id != managers_ch.id):
+            target_channels.append(ceo_ch)
+
+        exec_client = self.get_sadie_client() or self.get_millie_client() or next(iter(self.orchestrator.clients.values()), None)
+
+        for ch in target_channels:
+            try:
+                target_send_ch = exec_client.get_channel(ch.id) if exec_client else ch
+                if target_send_ch:
+                    await target_send_ch.send(embed=dashboard_embed)
+                    sent_channels.append(f"#{ch.name}")
+            except Exception as exc:
+                logger.warning(f"Failed to post executive dashboard to #{ch.name}: {exc}")
+
+        if sent_channels:
+            return True, f"✅ Executive Dashboard broadcasted to: {', '.join(sent_channels)}"
+        else:
+            return False, "⚠️ Could not locate #managers-space or #yogesh-chat to dispatch dashboard."

@@ -7,6 +7,7 @@ as well as dynamic team category scaling and position management.
 import asyncio
 import logging
 import os
+import random
 import sys
 from typing import Any, Dict, List, Optional, Tuple
 import discord
@@ -678,6 +679,81 @@ async def create_dynamic_team_category(
         logger.warning(f"Failed to auto-sync category layout after creating team {team_name}: {sync_exc}")
 
     return category, created_channels
+
+
+async def spawn_new_squad(
+    guild: discord.Guild,
+    team_name: str,
+    lead_name: str,
+) -> Tuple[discord.CategoryChannel, List[discord.abc.GuildChannel], discord.Role]:
+    """
+    Dynamically scales and provisions a new engineering squad:
+    1. Provisions a dedicated category (e.g. 'Team Falcon').
+    2. Provisions text channels: 'working-chat', 'team-chat'.
+    3. Provisions voice channels: 'Working Vc 1', 'Working Vc 2'.
+    4. Provisions a distinctive team role: '⚡ Team <Name>' with color.
+    5. Strictly synchronizes category layout so the new team is placed
+       in Tier 2 directly ABOVE 'Night Spend'.
+    """
+    clean_name = team_name.strip()
+    category_title = clean_name if clean_name.lower().startswith("team") else f"Team {clean_name.title()}"
+    role_title = f"⚡ {category_title}"
+
+    # 1. Provision Role
+    existing_role = discord.utils.find(lambda r: r.name.lower() == role_title.lower(), guild.roles)
+    if not existing_role:
+        vibrant_colors = [
+            discord.Color.from_rgb(0, 210, 255),
+            discord.Color.from_rgb(255, 0, 128),
+            discord.Color.from_rgb(0, 255, 128),
+            discord.Color.from_rgb(255, 170, 0),
+            discord.Color.from_rgb(170, 0, 255),
+        ]
+        team_role = await guild.create_role(
+            name=role_title,
+            color=random.choice(vibrant_colors),
+            mentionable=True,
+            reason=f"Spawn Squad: {category_title} led by {lead_name}",
+        )
+    else:
+        team_role = existing_role
+
+    # 2. Provision Category
+    existing_cat = discord.utils.find(lambda c: c.name.strip().lower() == category_title.lower(), guild.categories)
+    if not existing_cat:
+        category = await guild.create_category(name=category_title)
+    else:
+        category = existing_cat
+
+    created_channels: List[discord.abc.GuildChannel] = []
+
+    # 3. Channels: text: working-chat, team-chat; voice: Working Vc 1, Working Vc 2
+    for tc_name in ["working-chat", "team-chat"]:
+        existing_tc = discord.utils.find(
+            lambda c: c.name.lower() == tc_name and c.category_id == category.id,
+            guild.text_channels,
+        )
+        if not existing_tc:
+            new_tc = await category.create_text_channel(name=tc_name)
+            created_channels.append(new_tc)
+        else:
+            created_channels.append(existing_tc)
+
+    for vc_name in ["Working Vc 1", "Working Vc 2"]:
+        existing_vc = discord.utils.find(
+            lambda c: c.name.lower() == vc_name.lower() and c.category_id == category.id,
+            guild.voice_channels,
+        )
+        if not existing_vc:
+            new_vc = await category.create_voice_channel(name=vc_name)
+            created_channels.append(new_vc)
+        else:
+            created_channels.append(existing_vc)
+
+    # 4. Strictly synchronize category layout so the new team is placed in Tier 2 above 'Night Spend'
+    await sync_server_category_layout(guild)
+
+    return category, created_channels, team_role
 
 
 def format_blueprint_directory(
