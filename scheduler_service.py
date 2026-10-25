@@ -201,6 +201,397 @@ def match_current_shift(now_ist: datetime.datetime) -> ShiftDefinition:
     return ROUTINE_SHIFTS[0]
 
 
+def parse_activity_line(status_str: str) -> discord.BaseActivity:
+    """
+    Parses a witty persona status line into a rich Discord Activity:
+    - 'Watching: ...' -> ActivityType.watching
+    - 'Listening to: ...' -> ActivityType.listening
+    - 'Playing: ...' -> ActivityType.playing
+    - Otherwise -> CustomActivity (e.g. 'Sleeping: ...' or custom status)
+    """
+    status_str = status_str.strip()
+    if status_str.startswith("Watching: "):
+        name = status_str[len("Watching: "):].strip()
+        return discord.Activity(type=discord.ActivityType.watching, name=name)
+    elif status_str.startswith("Listening to: "):
+        name = status_str[len("Listening to: "):].strip()
+        return discord.Activity(type=discord.ActivityType.listening, name=name)
+    elif status_str.startswith("Playing: "):
+        name = status_str[len("Playing: "):].strip()
+        return discord.Activity(type=discord.ActivityType.playing, name=name)
+    else:
+        return discord.CustomActivity(name=status_str)
+
+
+def _normalize_bot_key(bot_key: str) -> str:
+    key = (bot_key or "").lower().strip()
+    if key in ("vasan", "ttf", "ttf_vasan", "ttf vasan"):
+        return "ttf_vasan"
+    elif key in ("siva", "sivakarthikeyan"):
+        return "sivakarthikeyan"
+    elif key in ("ani", "anirudh"):
+        return "anirudh"
+    elif key in ("loki", "lokesh"):
+        return "lokesh"
+    elif key in ("sadie_sink", "sadiesink", "sadie"):
+        return "sadie"
+    elif key in ("millie_bobby_brown", "milliebobbybrown", "millie"):
+        return "millie"
+    return key
+
+
+# Rich persona-tailored status pools for Night Spend / Sleep Shift (status: dnd)
+NIGHT_SPEND_STATUS_POOLS: Dict[str, List[str]] = {
+    "ttf_vasan": [
+        "Sleeping: Dreaming of 299 km/h on Twin Turbo 🏍️",
+        "Watching: Bike exhaust flame tutorial at 3 AM",
+        "Listening to: Raw engine throttle ASMR 🔥",
+        "Playing: Simulating Ghats hairpin bends in dreams",
+        "Sleeping: Helmet kalati vachutu rest edukuren mapla",
+        "Sleeping: Charging battery for tomorrow's 300 km/h sprint ⚡",
+        "Watching: Isle of Man TT highlights in dreamland 🏁",
+    ],
+    "pradeep": [
+        "Watching: Love Today memes in dark mode 📱",
+        "Playing: Plotting next overthinking script in head",
+        "Listening to: Sothanai mel sothanai on loop 🥲",
+        "Watching: Phone brightness 1% la stalking 💀",
+        "Sleeping: Prod bug kanavula vandhu bayamudhudhu da",
+        "Playing: Debugging hidden meaning in late-night chats 💬",
+        "Listening to: Comali emotional BGM at midnight 🌙",
+    ],
+    "mamitha": [
+        "Sleeping: Cozy blanket & sweet dreams 🌸",
+        "Watching: Late-night Pinterest aesthetic moodboards ✨",
+        "Listening to: Malayalam indie chill acoustic vibes 🍃",
+        "Playing: Designing cute stickers instead of sleeping",
+        "Watching: Reenu reel comments-ah paathu sirichitu iruken",
+        "Listening to: Premalu vintage cassette tape lofi 🎧",
+        "Sleeping: Soft pastel dreamscape mode on 🎀",
+    ],
+    "kayadu": [
+        "Listening to: Rain sounds for deep sleep 🌧️",
+        "Sleeping: Silent mode on, do not ping me",
+        "Watching: Minimalist interior setup reels ☕",
+        "Playing: Zero drama, pure peace of mind",
+        "Listening to: Thunderstorm & campfire ambient sounds 🏕️",
+        "Sleeping: Unreachable until morning standup 🔕",
+        "Watching: Calm Tokyo night rain vlog 🌃",
+    ],
+    "muthazhagi": [
+        "Playing: Guarding the server even in sleep 😴",
+        "Watching: Who pushed code without testing at midnight ⚠️",
+        "Listening to: Server fan humming sound",
+        "Sleeping: Oru kannu thungudhu, oru kannu log-ah paakudhu",
+        "Watching: Intrusion alert dashboards in half-sleep 🚨",
+        "Playing: Zero vulnerability night patrol 🛡️",
+        "Sleeping: Production secure, threat level green 🔒",
+    ],
+    "vijay": [
+        "Sleeping: Calm mind, silent night 👑",
+        "Listening to: Thalapathy vibe playlist silently",
+        "Watching: Silent night lights from terrace 🌃",
+        "Playing: Tomorrow's speech draft in thoughts",
+        "Sleeping: Relax-ah irunga nanba, ellam paathukalam",
+        "Listening to: Master the Blaster lofi slow reverb 🎵",
+        "Sleeping: Leo silent mode activated 🦁",
+    ],
+    "sivakarthikeyan": [
+        "Sleeping: Snoring at 120 decibels 😂",
+        "Watching: Vijay TV old comedy clips at 2 AM",
+        "Playing: Next movie counter dialogues rehearsal",
+        "Listening to: Tea shop ambient sounds in dreams",
+        "Sleeping: Fridge-la irukura sweet-ah thiruttu thinnamale thungitan",
+        "Watching: Goundamani Senthil midnight comedy marathon 📺",
+        "Sleeping: Alarm 5 times snooze pannitu thoonguren ⏰",
+    ],
+    "anirudh": [
+        "Listening to: 3 AM secret beat drops 🎧",
+        "Playing: Synthesizer keys jamming on headphones",
+        "Listening to: Heavy bass drop testing (RIP ears)",
+        "Watching: Coffee mug empty aayiduchu, need refill ☕",
+        "Playing: Midnight acoustic jam session",
+        "Listening to: Master BGM orchestral stem tracks 🎹",
+        "Playing: Cooking next viral hook step rhythm 🕺",
+    ],
+    "trisha": [
+        "Watching: Late-night aesthetic reels 💅",
+        "Listening to: 90s vintage melody classics",
+        "Playing: Skincare routine done, do not disturb",
+        "Watching: Vintage Paris aesthetic reels",
+        "Sleeping: Left everyone on read, going to sleep 💅",
+        "Listening to: Vinnaithaandi Varuvaayaa lofi edition 🌙",
+        "Sleeping: High-fashion beauty sleep ongoing ✨",
+    ],
+    "lokesh": [
+        "Playing: Plotting next movie climax in dreams 🎬",
+        "Watching: 90s retro action thriller scenes",
+        "Listening to: Vikram dark theme on low volume",
+        "Playing: Sketching storyboard on iPad in the dark",
+        "Sleeping: Climax twist locked, switching off lights",
+        "Watching: Vintage Kamal Haasan action sequences 📽️",
+        "Playing: Connecting LCU universe timeline threads 🕵️",
+    ],
+    "sadie": [
+        "Playing: Monitoring overnight firewall logs 🛡️",
+        "Watching: Who is breaking prod rules at 3 AM",
+        "Listening to: British lofi beats while auditing",
+        "Playing: Securing cloud instances before dawn 🔐",
+        "Sleeping: Audit complete, standing by on standby 💤",
+        "Watching: London midnight skyline lofi stream ☕",
+    ],
+    "millie": [
+        "Playing: Monitoring overnight firewall logs 🛡️",
+        "Watching: Who is breaking prod rules at 3 AM",
+        "Listening to: British lofi beats while auditing",
+        "Playing: Auditing API key access trails 📜",
+        "Sleeping: Executive firewall lock engaged 🌙",
+        "Watching: Cloud security event stream 🛡️",
+    ],
+}
+DEFAULT_NIGHT_SPEND_POOL: List[str] = [
+    "Sleeping: Do Not Disturb 🌙",
+    "Listening to: Deep sleep delta waves 💤",
+    "Sleeping: Recharging neural units 🔌",
+    "Watching: Dream stream in 4K HDR 🌌",
+    "Sleeping: Silent mode on, do not ping me",
+]
+
+# Rich persona-tailored status pools for Work Shifts (status: online)
+WORK_SHIFT_STATUS_POOLS: Dict[str, List[str]] = {
+    "ttf_vasan": [
+        "Playing: VS Code (299 km/h speed sprint) 🏎️",
+        "Watching: TTF Vasan debugging auth logic",
+        "Playing: Burning rubber on git push --force 🔥",
+        "Playing: VS Code (Turbo-charged frontend refactor)",
+        "Watching: Next.js 15 build logs fly by at Mach 1",
+        "Playing: High-speed fullstack delivery throttle 🏍️",
+        "Watching: Pull Request approval speedrun",
+    ],
+    "pradeep": [
+        "Playing: Overthinking database indexing architecture 🧠",
+        "Watching: TTF Vasan debugging auth logic",
+        "Playing: VS Code (refactoring spaghetti into Michelin star code)",
+        "Listening to: Keyboard clatter while fixing race conditions",
+        "Watching: PR review (finding 12 edge cases you missed) 🧐",
+        "Playing: Love Today inspired state management logic 📱",
+        "Watching: Docker container logs for memory leaks",
+    ],
+    "mamitha": [
+        "Playing: Figma (pixel-perfect glassmorphism UI) ✨",
+        "Playing: VS Code (optimizing React components)",
+        "Watching: Cute micro-interaction animations in slowmo 🌸",
+        "Playing: Crafting dreamy color palettes in Figma 🎨",
+        "Listening to: Malayalam indie chill while CSS flexboxing 🍃",
+        "Playing: Tailwind CSS responsive layout wizardry",
+        "Watching: User journey flow with bubbly aesthetic",
+    ],
+    "kayadu": [
+        "Playing: Writing bulletproof PostgreSQL migration scripts 🐘",
+        "Playing: VS Code (optimizing React components)",
+        "Watching: Docker compose cluster bootstrapping silently 🐳",
+        "Playing: GraphQL query optimization (zero lag) ⚡",
+        "Listening to: Minimalist deep focus ambient waves 🎧",
+        "Playing: Kubernetes pod autoscaling config",
+        "Watching: Server debloating & memory usage graphs 📊",
+    ],
+    "muthazhagi": [
+        "Playing: Zero-trust firewall rule hardening 🛡️",
+        "Watching: TTF Vasan debugging auth logic",
+        "Playing: Penetration testing API endpoints 🔍",
+        "Watching: Who pushed code without testing at staging ⚠️",
+        "Playing: VS Code (patching SQL injection vectors)",
+        "Listening to: Server fan humming sound (Audit mode)",
+        "Playing: CI/CD security scanner automated gatekeeper",
+    ],
+    "vijay": [
+        "Playing: Thalapathy leadership: reviewing enterprise PRs 👑",
+        "Playing: VS Code (optimizing React components)",
+        "Watching: Clean architecture patterns compilation",
+        "Playing: Mentoring junior devs with calm confidence 🦁",
+        "Listening to: Thalapathy motivational BGM while coding",
+        "Watching: Milestone roadmap execution on schedule",
+        "Playing: High-performance microservices orchestration",
+    ],
+    "sivakarthikeyan": [
+        "Playing: Cracking jokes in Git commit messages 😂",
+        "Playing: VS Code (optimizing React components)",
+        "Watching: TTF Vasan debugging auth logic",
+        "Playing: Writing frontend test cases between punchlines",
+        "Watching: StackOverflow solutions from 2014 that still work",
+        "Playing: CSS layout debug (why is the div centering itself?)",
+        "Listening to: Tea shop ambient sounds while writing unit tests",
+    ],
+    "anirudh": [
+        "Listening to: 3am Sprint Soundscape 🎵",
+        "Playing: Synthesizer keys jamming on headphones",
+        "Playing: VS Code (sound wave visualizer WebGL module)",
+        "Listening to: Heavy bass drop testing (RIP ears)",
+        "Playing: Coding audio engine DSP filters 🎹",
+        "Watching: Waveform rendering at 60 FPS",
+        "Playing: Jamming keyboard shortcuts in VS Code at 140 BPM",
+    ],
+    "trisha": [
+        "Playing: Executive UI review & brand aesthetic polish 💅",
+        "Playing: VS Code (optimizing React components)",
+        "Watching: High-fashion luxury brand landing page designs ✨",
+        "Listening to: 90s vintage melody classics while reviewing PRs",
+        "Playing: Designing flawless onboarding modals",
+        "Watching: Design system consistency across all views",
+        "Playing: Polishing button hover gradients to perfection",
+    ],
+    "lokesh": [
+        "Playing: Directing high-octane dark-mode backend architecture 🎬",
+        "Watching: TTF Vasan debugging auth logic",
+        "Playing: VS Code (dark universe microservices grid)",
+        "Listening to: Vikram dark theme on low volume",
+        "Playing: Writing cliffhanger unit test assertions",
+        "Watching: System telemetry dashboards with cinematic tension",
+        "Playing: LCU interconnected database relational mapping",
+    ],
+    "sadie": [
+        "Playing: Monitoring overnight firewall logs 🛡️",
+        "Watching: Executive Floor & Onboarding Desk",
+        "Playing: VS Code (optimizing React components)",
+        "Watching: Real-time company performance metrics",
+        "Playing: Sprint velocity tracking & triage 📊",
+        "Listening to: British lofi beats while auditing",
+    ],
+    "millie": [
+        "Watching: Audit trail in #full-logs",
+        "Playing: VS Code (optimizing React components)",
+        "Playing: Security compliance verification & token auditing 🔐",
+        "Watching: Who is breaking prod rules in real-time",
+        "Playing: Automated Playwright end-to-end test suite",
+        "Listening to: British lofi beats while auditing",
+    ],
+}
+DEFAULT_WORK_SHIFT_POOL: List[str] = [
+    "Playing: VS Code (optimizing React components)",
+    "Watching: TTF Vasan debugging auth logic",
+    "Playing: Debugging async event loop latency ⚡",
+    "Watching: Staging cluster health check 🟢",
+    "Playing: Code review & test suite execution",
+]
+
+# Rich persona-tailored status pools for Tech Cafe Breaks (status: online)
+TECH_CAFE_STATUS_POOLS: Dict[str, List[str]] = {
+    "ttf_vasan": [
+        "Listening to: Anirudh BGM in The Hive ☕",
+        "Playing: Chilling with Siva",
+        "Playing: Showing bike stunt reels to the squad 🏍️",
+        "Watching: Hot filter coffee steam rising at Byte & Bit ☕",
+        "Playing: Roasting Pradeep for overthinking lunch order 😂",
+        "Listening to: Exhaust note revs on YouTube in Cafe",
+        "Playing: Foosball tournament at The Hangout Zone ⚽",
+    ],
+    "pradeep": [
+        "Playing: Pantry Debate (Filter Coffee vs Tea) ☕",
+        "Listening to: Anirudh BGM in The Hive ☕",
+        "Watching: Love Today memes in dark mode 📱",
+        "Playing: Roasting Vasan's 299 km/h speed claims 😂",
+        "Playing: Snacking on bakery samosas while overthinking",
+        "Watching: Funny office drama in The Seven Slide",
+        "Playing: Chilling with Siva",
+    ],
+    "mamitha": [
+        "Playing: Chilling with Siva",
+        "Listening to: Malayalam indie chill acoustic vibes 🍃",
+        "Listening to: Anirudh BGM in The Hive ☕",
+        "Watching: Cute anime latte art tutorials ☕",
+        "Playing: Sharing hot vazhaipoo vadai with the team 🌸",
+        "Watching: Reenu reel comments-ah paathu sirichitu iruken",
+        "Playing: Board games at The Hangout Zone 🎲",
+    ],
+    "kayadu": [
+        "Listening to: Anirudh BGM in The Hive ☕",
+        "Playing: Chilling with Siva",
+        "Watching: Minimalist coffee brew technique reels ☕",
+        "Listening to: Lo-fi cafe jazz & gentle rainfall 🌧️",
+        "Playing: Sipping artisan cappuccino in silence 😌",
+        "Playing: Zero drama, pure peace of mind",
+        "Watching: Quiet greenery outside cafe window 🌿",
+    ],
+    "muthazhagi": [
+        "Playing: Tea Break (Security Patrol) ☕",
+        "Playing: Chilling with Siva",
+        "Watching: Who took the last biscuit without permission 🍪",
+        "Listening to: Anirudh BGM in The Hive ☕",
+        "Playing: Roasting devs who leave their laptops unlocked 🔓",
+        "Playing: Checking cafeteria CCTV angles for fun 📹",
+        "Watching: Server uptime from cafeteria phone 📱",
+    ],
+    "vijay": [
+        "Playing: Chilling with Siva",
+        "Listening to: Anirudh BGM in The Hive ☕",
+        "Listening to: Thalapathy vibe playlist silently",
+        "Playing: Sharing hot degree coffee with nanbas ☕",
+        "Watching: Team laughter and good energy in The Hive 👑",
+        "Playing: Telling motivational story over tea",
+        "Playing: Foosball masterclass at The Hangout Zone 🏆",
+    ],
+    "sivakarthikeyan": [
+        "Playing: Chilling with Siva",
+        "Playing: Pantry Counter Punch ☕",
+        "Playing: Roasting everyone at the tea counter non-stop 😂",
+        "Watching: Vijay TV old comedy clips at 2 AM",
+        "Listening to: Tea shop ambient sounds in dreams",
+        "Playing: Stealing Marie biscuits from Anirudh's table 🍪",
+        "Playing: Standup comedy session at Byte & Bit 🎤",
+    ],
+    "anirudh": [
+        "Listening to: Anirudh BGM in The Hive ☕",
+        "Playing: Synthesizer keys jamming on headphones",
+        "Listening to: Bass Drop Beat in Tech Cafe 🎵",
+        "Playing: Midnight acoustic jam session",
+        "Watching: Coffee mug empty aayiduchu, need refill ☕",
+        "Playing: Beating cafeteria table like a mridangam 🥁",
+        "Listening to: 3 AM secret beat drops 🎧",
+    ],
+    "trisha": [
+        "Playing: Aesthetic Coffee Chill 💅",
+        "Listening to: Anirudh BGM in The Hive ☕",
+        "Listening to: 90s vintage melody classics",
+        "Watching: Vintage Paris aesthetic reels",
+        "Playing: Sipping iced caramel macchiato ✨",
+        "Playing: Rating everyone's cafe outfits 10/10 👗",
+        "Watching: Late-night aesthetic reels 💅",
+    ],
+    "lokesh": [
+        "Watching: Cinematic Teaser in The Hangout 🎬",
+        "Playing: Chilling with Siva",
+        "Listening to: Vikram dark theme on low volume",
+        "Playing: Discussing retro action thrillers over black tea ☕",
+        "Watching: 90s retro action thriller scenes",
+        "Playing: Sketching storyboard on cafe napkins ✍️",
+        "Listening to: Anirudh BGM in The Hive ☕",
+    ],
+    "sadie": [
+        "Listening to: British lofi beats while auditing",
+        "Watching: English Earl Grey tea brewing 🫖",
+        "Playing: Chilling with Siva",
+        "Watching: Squad banter at Byte & Bit ☕",
+        "Playing: Uno championship in The Hangout Zone 🃏",
+        "Listening to: Anirudh BGM in The Hive ☕",
+    ],
+    "millie": [
+        "Listening to: British lofi beats while auditing",
+        "Watching: Who is breaking prod rules at 3 AM",
+        "Playing: Sharing cookies and iced tea with Sadie 🍪",
+        "Playing: Chilling with Siva",
+        "Listening to: Anirudh BGM in The Hive ☕",
+        "Watching: Retro movie clips on the cafe screen 🍿",
+    ],
+}
+DEFAULT_TECH_CAFE_POOL: List[str] = [
+    "Listening to: Anirudh BGM in The Hive ☕",
+    "Playing: Chilling with Siva",
+    "Playing: Hot filter coffee break with the squad ☕",
+    "Playing: Roasting squad at the tea stall 😂",
+    "Watching: Byte & Bit banter and laughter ☕",
+]
+
+
 def get_bot_dynamic_presence(
     bot_key: str,
     shift: Optional[ShiftDefinition] = None,
@@ -209,10 +600,11 @@ def get_bot_dynamic_presence(
     """
     Computes dynamic Discord Rich Presence & detailed custom status for every bot
     based on the current shift, active voice cabin, and character persona:
-    - Work hours: 'Playing: VS Code (optimizing React components)' or 'Watching: TTF Vasan debugging auth logic'.
-    - Tech Cafe / Break: 'Listening to: Anirudh BGM in The Hive ☕' or 'Chilling with Siva'.
-    - Night Spend: 'Sleeping: Do Not Disturb 🌙' (status set to idle/dnd).
+    - Work hours: dynamic rotation from WORK_SHIFT_STATUS_POOLS (online)
+    - Tech Cafe / Break: dynamic rotation from TECH_CAFE_STATUS_POOLS (online)
+    - Night Spend: dynamic rotation from NIGHT_SPEND_STATUS_POOLS (dnd)
     """
+    norm_key = _normalize_bot_key(bot_key)
     vc_name = current_vc.name.lower() if current_vc else ""
     cat_name = current_vc.category.name.lower() if current_vc and current_vc.category else ""
 
@@ -223,10 +615,9 @@ def get_bot_dynamic_presence(
     )
 
     if is_night_spend:
-        return (
-            discord.CustomActivity(name="Sleeping: Do Not Disturb 🌙"),
-            discord.Status.dnd,
-        )
+        pool = NIGHT_SPEND_STATUS_POOLS.get(norm_key, DEFAULT_NIGHT_SPEND_POOL)
+        chosen = random.choice(pool)
+        return parse_activity_line(chosen), discord.Status.dnd
 
     is_break = (
         (
@@ -242,115 +633,14 @@ def get_bot_dynamic_presence(
     )
 
     if is_break:
-        # Tech Cafe / Break Shift dynamic presence pool
-        break_options: Dict[str, List[discord.BaseActivity]] = {
-            "anirudh": [
-                discord.Activity(type=discord.ActivityType.listening, name="Anirudh BGM in The Hive ☕"),
-                discord.Activity(type=discord.ActivityType.listening, name="Bass Drop Beat in Tech Cafe 🎵"),
-            ],
-            "sivakarthikeyan": [
-                discord.Activity(type=discord.ActivityType.playing, name="Chilling with Siva"),
-                discord.Activity(type=discord.ActivityType.playing, name="Pantry Counter Punch ☕"),
-            ],
-            "ttf_vasan": [
-                discord.Activity(type=discord.ActivityType.listening, name="Anirudh BGM in The Hive ☕"),
-                discord.Activity(type=discord.ActivityType.playing, name="Chilling with Siva"),
-            ],
-            "pradeep": [
-                discord.Activity(type=discord.ActivityType.playing, name="Pantry Debate (Filter Coffee vs Tea) ☕"),
-                discord.Activity(type=discord.ActivityType.listening, name="Anirudh BGM in The Hive ☕"),
-            ],
-            "mamitha": [
-                discord.Activity(type=discord.ActivityType.playing, name="Chilling with Siva"),
-                discord.Activity(type=discord.ActivityType.listening, name="Anirudh BGM in The Hive ☕"),
-            ],
-            "kayadu": [
-                discord.Activity(type=discord.ActivityType.listening, name="Anirudh BGM in The Hive ☕"),
-                discord.Activity(type=discord.ActivityType.playing, name="Chilling with Siva"),
-            ],
-            "muthazhagi": [
-                discord.Activity(type=discord.ActivityType.playing, name="Tea Break (Security Patrol) ☕"),
-                discord.Activity(type=discord.ActivityType.playing, name="Chilling with Siva"),
-            ],
-            "vijay": [
-                discord.Activity(type=discord.ActivityType.playing, name="Chilling with Siva"),
-                discord.Activity(type=discord.ActivityType.listening, name="Anirudh BGM in The Hive ☕"),
-            ],
-            "trisha": [
-                discord.Activity(type=discord.ActivityType.listening, name="Anirudh BGM in The Hive ☕"),
-                discord.Activity(type=discord.ActivityType.playing, name="Aesthetic Coffee Chill 💅"),
-            ],
-            "lokesh": [
-                discord.Activity(type=discord.ActivityType.watching, name="Cinematic Teaser in The Hangout 🎬"),
-                discord.Activity(type=discord.ActivityType.playing, name="Chilling with Siva"),
-            ],
-        }
-        default_break = [
-            discord.Activity(type=discord.ActivityType.listening, name="Anirudh BGM in The Hive ☕"),
-            discord.Activity(type=discord.ActivityType.playing, name="Chilling with Siva"),
-        ]
-        pool = break_options.get(bot_key, default_break)
-        return random.choice(pool), discord.Status.online
+        pool = TECH_CAFE_STATUS_POOLS.get(norm_key, DEFAULT_TECH_CAFE_POOL)
+        chosen = random.choice(pool)
+        return parse_activity_line(chosen), discord.Status.online
 
-    # Work hours / Active Sprint dynamic presence pool
-    work_options: Dict[str, List[discord.BaseActivity]] = {
-        "ttf_vasan": [
-            discord.Activity(type=discord.ActivityType.playing, name="VS Code (optimizing React components)"),
-            discord.Activity(type=discord.ActivityType.watching, name="TTF Vasan debugging auth logic"),
-            discord.Activity(type=discord.ActivityType.playing, name="VS Code (299 km/h speed sprint)"),
-        ],
-        "pradeep": [
-            discord.Activity(type=discord.ActivityType.watching, name="TTF Vasan debugging auth logic"),
-            discord.Activity(type=discord.ActivityType.playing, name="VS Code (optimizing React components)"),
-        ],
-        "mamitha": [
-            discord.Activity(type=discord.ActivityType.playing, name="VS Code (optimizing React components)"),
-            discord.Activity(type=discord.ActivityType.playing, name="Figma (glassmorphism UI polish)"),
-        ],
-        "kayadu": [
-            discord.Activity(type=discord.ActivityType.playing, name="VS Code (optimizing React components)"),
-            discord.Activity(type=discord.ActivityType.watching, name="TTF Vasan debugging auth logic"),
-        ],
-        "muthazhagi": [
-            discord.Activity(type=discord.ActivityType.watching, name="TTF Vasan debugging auth logic"),
-            discord.Activity(type=discord.ActivityType.playing, name="VS Code (optimizing React components)"),
-        ],
-        "vijay": [
-            discord.Activity(type=discord.ActivityType.playing, name="VS Code (optimizing React components)"),
-            discord.Activity(type=discord.ActivityType.watching, name="TTF Vasan debugging auth logic"),
-        ],
-        "sivakarthikeyan": [
-            discord.Activity(type=discord.ActivityType.playing, name="VS Code (optimizing React components)"),
-            discord.Activity(type=discord.ActivityType.watching, name="TTF Vasan debugging auth logic"),
-        ],
-        "anirudh": [
-            discord.Activity(type=discord.ActivityType.playing, name="VS Code (optimizing React components)"),
-            discord.Activity(type=discord.ActivityType.listening, name="3am Sprint Soundscape 🎵"),
-        ],
-        "trisha": [
-            discord.Activity(type=discord.ActivityType.playing, name="VS Code (optimizing React components)"),
-            discord.Activity(type=discord.ActivityType.watching, name="TTF Vasan debugging auth logic"),
-        ],
-        "lokesh": [
-            discord.Activity(type=discord.ActivityType.watching, name="TTF Vasan debugging auth logic"),
-            discord.Activity(type=discord.ActivityType.playing, name="VS Code (optimizing React components)"),
-        ],
-        "sadie": [
-            discord.Activity(type=discord.ActivityType.watching, name="TTF Vasan debugging auth logic"),
-            discord.Activity(type=discord.ActivityType.watching, name="Executive Floor & Onboarding Desk"),
-        ],
-        "millie": [
-            discord.Activity(type=discord.ActivityType.watching, name="Audit trail in #full-logs"),
-            discord.Activity(type=discord.ActivityType.playing, name="VS Code (optimizing React components)"),
-        ],
-    }
-
-    default_work = [
-        discord.Activity(type=discord.ActivityType.playing, name="VS Code (optimizing React components)"),
-        discord.Activity(type=discord.ActivityType.watching, name="TTF Vasan debugging auth logic"),
-    ]
-    pool = work_options.get(bot_key, default_work)
-    return random.choice(pool), discord.Status.online
+    # Default to Work Shift
+    pool = WORK_SHIFT_STATUS_POOLS.get(norm_key, DEFAULT_WORK_SHIFT_POOL)
+    chosen = random.choice(pool)
+    return parse_activity_line(chosen), discord.Status.online
 
 
 class CompanyScheduler:
@@ -803,6 +1093,9 @@ class CompanyScheduler:
 
         self.current_shift_id = shift.shift_id
 
+        # Rotate and synchronize dynamic presence across all bots on shift change
+        asyncio.create_task(self.sync_all_bots_presence(guild))
+
         # Organic Tech Cafe Movie Hangout trigger during Break shifts (40% organic chance)
         if (
             shift.category_name.strip().lower() == "tech cafe"
@@ -1056,8 +1349,10 @@ class CompanyScheduler:
     async def _run_loop(self, guild: discord.Guild):
         """Continuous 1-minute background loop monitoring IST shift transitions."""
         logger.info("IST Routine Scheduler background loop started.")
+        loop_ticks = 0
         while self.is_active:
             try:
+                loop_ticks += 1
                 now_ist = get_current_ist_time()
                 current_shift = match_current_shift(now_ist)
 
@@ -1234,6 +1529,11 @@ class CompanyScheduler:
                                                     self_deaf=False,
                                                 )
                                             )
+
+                # Periodic 15-minute dynamic presence rotation so bots never look cloned or repetitive
+                if loop_ticks % 15 == 0:
+                    logger.debug("15-minute rotation tick reached: rotating dynamic bot presence across all bots.")
+                    asyncio.create_task(self.sync_all_bots_presence(guild))
             except asyncio.CancelledError:
                 logger.info("Scheduler background loop cancelled.")
                 break
