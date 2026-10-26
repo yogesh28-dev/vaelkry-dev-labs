@@ -30,6 +30,8 @@ from gemini_service import GeminiService
 from agents import (
     AGENT_PROMPTS,
     CASUAL_PLAYER_CHARACTERS,
+    CHARACTER_VOICES,
+    get_voice_for_character,
     build_agent_prompt,
     build_autonomous_project_brainstorm_prompt,
     build_autonomous_prototype_announcement_prompt,
@@ -55,6 +57,8 @@ from scheduler_service import (
     CompanyScheduler,
     get_ceo_channel,
 )
+from voice_service import VoiceService
+
 
 # Configure logging
 logging.basicConfig(
@@ -649,6 +653,235 @@ class VaelkryBotClient(discord.Client):
                 self.orchestrator.casual_player_service.run_autonomous_night_chatter(interaction.guild)
             )
 
+        # ==================== BIDIRECTIONAL REAL-TIME AI VOICE ENGINE COMMANDS ====================
+
+        @self.tree.command(
+            name="voice_speak",
+            description="Has an authentic character speak your text aloud in your voice channel via Edge-TTS",
+        )
+        @app_commands.describe(
+            character="Choose the character bot to speak",
+            text="The message you want them to speak aloud",
+        )
+        @app_commands.choices(
+            character=[
+                app_commands.Choice(name="🌟 Sadie Sink (Clear US Executive)", value="sadie"),
+                app_commands.Choice(name="📋 Millie Bobby Brown (Crisp British)", value="millie"),
+                app_commands.Choice(name="🎨 Mamitha (Sweet Tanglish +3Hz)", value="mamitha"),
+                app_commands.Choice(name="⚙️ Kayadu (Calm Confident Tone)", value="kayadu"),
+                app_commands.Choice(name="🛡️ Muthazhagi (Strict Authoritative Tamil)", value="muthazhagi"),
+                app_commands.Choice(name="💅 Trisha (Elegant Tone -2Hz)", value="trisha"),
+                app_commands.Choice(name="🏍️ TTF Vasan (299 km/h Speed +18%)", value="ttf_vasan"),
+                app_commands.Choice(name="🧠 Pradeep (Witty Youth Vibe +4Hz)", value="pradeep"),
+                app_commands.Choice(name="👑 Vijay (Deep Bass Composed -8Hz)", value="vijay"),
+                app_commands.Choice(name="🎤 Sivakarthikeyan (Jolly Dynamic Inflection)", value="sivakarthikeyan"),
+                app_commands.Choice(name="🎵 Anirudh (Energetic Casual +2Hz)", value="anirudh"),
+                app_commands.Choice(name="🎬 Lokesh (Cinematic Grounded -6Hz)", value="lokesh"),
+                app_commands.Choice(name="⚽ Messi (Calm Focused Tone)", value="messi"),
+                app_commands.Choice(name="⚡ Ronaldo (Confident Alpha Loud)", value="ronaldo"),
+                app_commands.Choice(name="🚁 Dhoni (Calm Captain Depth -8%)", value="dhoni"),
+                app_commands.Choice(name="🔥 Virat (Sharp Punchy +8%)", value="virat"),
+                app_commands.Choice(name="🤖 Haaland (Brute Force Data -4Hz)", value="haaland"),
+                app_commands.Choice(name="🏎️ Mbappe (Ultra-Fast Edge +12%)", value="mbappe"),
+                app_commands.Choice(name="🍔 Rohit (Vadapav Chill -2Hz)", value="rohit"),
+                app_commands.Choice(name="⚔️ Jadeja (Sharp Fielding Hunter +2Hz)", value="jadeja"),
+                app_commands.Choice(name="🕶️ Hardik (High Swagger All-Rounder +4Hz)", value="hardik"),
+                app_commands.Choice(name="🕺 Neymar (Flashy Samba Motion +3Hz)", value="neymar"),
+            ]
+        )
+        async def voice_speak_slash(interaction: discord.Interaction, character: str, text: str):
+            if not interaction.guild:
+                await interaction.response.send_message("⚠️ Run within a corporate server!", ephemeral=True)
+                return
+
+            mem = interaction.guild.get_member(interaction.user.id) or interaction.user
+            voice_state = getattr(mem, "voice", None)
+            if not voice_state or not voice_state.channel:
+                await interaction.response.send_message(
+                    "⚠️ **Please join a Voice Channel first** to hear the bot speak!",
+                    ephemeral=True,
+                )
+                return
+
+            vc = voice_state.channel
+            profile = get_voice_for_character(character)
+            await interaction.response.defer()
+
+            asyncio.create_task(
+                self.orchestrator.voice_service.speak_text(
+                    voice_channel=vc,
+                    character_key=character,
+                    text=text,
+                )
+            )
+
+            embed = discord.Embed(
+                title=f"🔊 {profile['name']} Speaking in `{vc.name}`",
+                description=f"💬 *\"{text}\"*\n\n"
+                            f"**Voice Profile:** `{profile['voice']}`\n"
+                            f"**Pitch:** `{profile['pitch']}` | **Rate:** `{profile['rate']}`\n"
+                            f"**Tone:** *{profile['tone']}*",
+                color=0x2ECC71,
+            )
+            embed.set_footer(text="Vaelkry Dev Labs Real-Time Voice Engine • Edge-TTS Neural")
+            await interaction.followup.send(embed=embed)
+
+        @self.tree.command(
+            name="voice_banter",
+            description="Sparks spontaneous spoken cross-bot banter in your voice channel with 1.5-3.0s turn-taking",
+        )
+        @app_commands.describe(
+            bot_a="First speaker (or leave blank for random)",
+            bot_b="Second speaker (or leave blank for random)",
+            topic="Optional debate or banter topic",
+        )
+        async def voice_banter_slash(
+            interaction: discord.Interaction,
+            bot_a: Optional[str] = None,
+            bot_b: Optional[str] = None,
+            topic: Optional[str] = None,
+        ):
+            if not interaction.guild:
+                await interaction.response.send_message("⚠️ Run within a corporate server!", ephemeral=True)
+                return
+
+            mem = interaction.guild.get_member(interaction.user.id) or interaction.user
+            voice_state = getattr(mem, "voice", None)
+            if not voice_state or not voice_state.channel:
+                await interaction.response.send_message(
+                    "⚠️ **Please join a Voice Channel first** to trigger cross-bot banter!",
+                    ephemeral=True,
+                )
+                return
+
+            vc = voice_state.channel
+            first_bot = bot_a or random.choice(["ttf_vasan", "vijay", "messi", "dhoni"])
+            second_bot = bot_b or random.choice(["pradeep", "sivakarthikeyan", "ronaldo", "virat"])
+            if first_bot == second_bot:
+                second_bot = "sivakarthikeyan" if first_bot != "sivakarthikeyan" else "ttf_vasan"
+
+            prof_a = get_voice_for_character(first_bot)
+            prof_b = get_voice_for_character(second_bot)
+
+            await interaction.response.defer()
+
+            asyncio.create_task(
+                self.orchestrator.voice_service.trigger_cross_bot_banter(
+                    voice_channel=vc,
+                    bot_a_key=first_bot,
+                    bot_b_key=second_bot,
+                    topic=topic or "coding speed, design logic and deploy war",
+                )
+            )
+
+            embed = discord.Embed(
+                title=f"⚔️ Voice Banter: {prof_a['name']} vs {prof_b['name']}",
+                description=f"📍 **Channel:** `{vc.name}`\n"
+                            f"🎙️ **Turn 1:** `{prof_a['name']}` ({prof_a['tone']})\n"
+                            f"⏸️ **Turn-taking pause:** `1.5 - 3.0s` (Audio Lock active)\n"
+                            f"🎙️ **Turn 2:** `{prof_b['name']}` ({prof_b['tone']})\n"
+                            f"🎯 **Topic:** *{topic or 'deploy logic & speed clash'}*",
+                color=0xE67E22,
+            )
+            embed.set_footer(text="Vaelkry VC Dialogue Engine • Bidirectional Turn-Taking")
+            await interaction.followup.send(embed=embed)
+
+        @self.tree.command(
+            name="voice_listen",
+            description="Enables bidirectional real-time speech recognition & sub-2s contextual voice AI replies",
+        )
+        async def voice_listen_slash(interaction: discord.Interaction):
+            if not interaction.guild:
+                await interaction.response.send_message("⚠️ Run within a corporate server!", ephemeral=True)
+                return
+
+            mem = interaction.guild.get_member(interaction.user.id) or interaction.user
+            voice_state = getattr(mem, "voice", None)
+            if not voice_state or not voice_state.channel:
+                await interaction.response.send_message(
+                    "⚠️ **Please join a Voice Channel first** to start real-time voice listening!",
+                    ephemeral=True,
+                )
+                return
+
+            vc = voice_state.channel
+            await interaction.response.defer()
+
+            success = self.orchestrator.voice_service.start_listening_in_channel(vc)
+            if success:
+                embed = discord.Embed(
+                    title="🎙️ Bidirectional AI Voice Engine Active",
+                    description=f"✅ Listening to human speech in `{vc.name}`!\n\n"
+                                f"• Speak naturally in English, Tanglish, or Tamil.\n"
+                                f"• Say a bot's name (e.g. *\"Hey Vasan\"*, *\"Vijay bro\"*, *\"Pradeep review this\"*) to address them specifically.\n"
+                                f"• Context is forwarded to Gemini AI, and the bot will reply aloud in **under 2 seconds**!\n"
+                                f"• Run `/voice_stop` or `!vcstop` at any time to disconnect listening.",
+                    color=0x9B59B6,
+                )
+                embed.set_footer(text="discord-ext-voice-recv + Google STT + Gemini AI + Edge-TTS")
+                await interaction.followup.send(embed=embed)
+            else:
+                await interaction.followup.send("⚠️ Could not activate voice listening in this channel.")
+
+        @self.tree.command(
+            name="voice_stop",
+            description="Stops active voice speech and listening in your voice channel",
+        )
+        async def voice_stop_slash(interaction: discord.Interaction):
+            if not interaction.guild:
+                await interaction.response.send_message("⚠️ Run within a corporate server!", ephemeral=True)
+                return
+
+            mem = interaction.guild.get_member(interaction.user.id) or interaction.user
+            voice_state = getattr(mem, "voice", None)
+            target_vc = voice_state.channel if (voice_state and voice_state.channel) else None
+
+            if target_vc:
+                self.orchestrator.voice_service.stop_listening_in_channel(target_vc)
+                await interaction.response.send_message(
+                    f"🛑 **Voice engine stopped in `{target_vc.name}`.**",
+                )
+            else:
+                await interaction.response.send_message("⚠️ You are not in a voice channel.")
+
+        @self.tree.command(
+            name="voice_profiles",
+            description="Displays all 22 authentic female and male neural voice presets (pitch, speed, tone)",
+        )
+        async def voice_profiles_slash(interaction: discord.Interaction):
+            embed = discord.Embed(
+                title="🎙️ Vaelkry Dev Labs - Neural Voice Catalog",
+                description="All 22 bot personas configured with authentic Microsoft Edge-TTS / Azure neural voices, custom pitch offsets, and dynamic speed rates:",
+                color=0x3498DB,
+            )
+
+            female_lines = []
+            for k, prof in CHARACTER_VOICES.items():
+                if prof.get("gender") == "female":
+                    female_lines.append(
+                        f"• **{prof['name']}**: `{prof['voice']}` (Pitch: `{prof['pitch']}`, Rate: `{prof['rate']}`) — *{prof['tone']}*"
+                    )
+            embed.add_field(
+                name="👩 Authentic Female Bot Voices",
+                value="\n".join(female_lines),
+                inline=False,
+            )
+
+            male_lines = []
+            for k, prof in CHARACTER_VOICES.items():
+                if prof.get("gender") == "male":
+                    male_lines.append(
+                        f"• **{prof['name']}**: `{prof['voice']}` (Pitch: `{prof['pitch']}`, Rate: `{prof['rate']}`) — *{prof['tone']}*"
+                    )
+            embed.add_field(
+                name="👨 Authentic Male Bot Voices",
+                value="\n".join(male_lines),
+                inline=False,
+            )
+
+            embed.set_footer(text="Zero-bloat streaming • Sub-2s latency • Dynamic pitch/rate modulation")
+            await interaction.response.send_message(embed=embed)
+
     async def on_ready(self):
         logger.info(
             f"Agent '{self.agent_config.name}' connected as {self.user} (ID: {self.user.id})"
@@ -763,6 +996,7 @@ class AgentOrchestrator:
         self.cafeteria_service = CafeteriaService(self)
         self.scheduler_service = CompanyScheduler(self)
         self.casual_player_service = CasualPlayerService(self)
+        self.voice_service = VoiceService(self)
         self.clients: Dict[str, VaelkryBotClient] = {}
         self.bot_user_ids: Dict[int, str] = {}
         self.bot_mentions: Dict[str, str] = {}
@@ -1333,6 +1567,122 @@ class AgentOrchestrator:
             )
             return
 
+        # ==================== VOICE ENGINE TEXT COMMANDS ====================
+
+        # Voice Speech: !speak <bot> <text> or !say <bot> <text>
+        if content.startswith(("!speak", "!say")):
+            parts = content.split(maxsplit=2)
+            if len(parts) < 3:
+                await message.channel.send("⚠️ Usage: `!speak <bot_name> <message>` (e.g. `!speak vijay all is well nanba`)")
+                return
+
+            mem = message.guild.get_member(message.author.id) if message.guild else message.author
+            voice_state = getattr(mem, "voice", None)
+            if not voice_state or not voice_state.channel:
+                await message.channel.send("⚠️ **Please join a Voice Channel first** to hear the bot speak!")
+                return
+
+            bot_arg = parts[1].lower().strip()
+            text_arg = parts[2].strip()
+            prof = get_voice_for_character(bot_arg)
+
+            asyncio.create_task(
+                self.voice_service.speak_text(
+                    voice_channel=voice_state.channel,
+                    character_key=bot_arg,
+                    text=text_arg,
+                )
+            )
+            await message.channel.send(f"🔊 **{prof['name']}** speaking in `{voice_state.channel.name}`: *\"{text_arg}\"*")
+            return
+
+        # Voice Banter: !vcbanter [bot_a] [bot_b] [topic]
+        if content.startswith(("!vcbanter", "!voicebanter")):
+            mem = message.guild.get_member(message.author.id) if message.guild else message.author
+            voice_state = getattr(mem, "voice", None)
+            if not voice_state or not voice_state.channel:
+                await message.channel.send("⚠️ **Please join a Voice Channel first** to start VC banter!")
+                return
+
+            subparts = content.split(maxsplit=3)
+            bot_a = subparts[1].lower() if len(subparts) > 1 and not subparts[1].startswith("-") else "ttf_vasan"
+            bot_b = subparts[2].lower() if len(subparts) > 2 else "pradeep"
+            topic_str = subparts[3] if len(subparts) > 3 else "299 speed vs clean logic and deploy war"
+
+            prof_a = get_voice_for_character(bot_a)
+            prof_b = get_voice_for_character(bot_b)
+
+            asyncio.create_task(
+                self.voice_service.trigger_cross_bot_banter(
+                    voice_channel=voice_state.channel,
+                    bot_a_key=bot_a,
+                    bot_b_key=bot_b,
+                    topic=topic_str,
+                )
+            )
+            await message.channel.send(
+                f"⚔️ **Voice Banter Triggered in `{voice_state.channel.name}`:**\n"
+                f"• `{prof_a['name']}` vs `{prof_b['name']}` (1.5-3.0s turn-taking audio lock active)\n"
+                f"• Topic: *{topic_str}*"
+            )
+            return
+
+        # Voice Listen: !vclisten (Start Real-Time Human Speech Recognition & Sub-2s AI Reply)
+        if content.startswith(("!vclisten", "!voicerecv")):
+            mem = message.guild.get_member(message.author.id) if message.guild else message.author
+            voice_state = getattr(mem, "voice", None)
+            if not voice_state or not voice_state.channel:
+                await message.channel.send("⚠️ **Please join a Voice Channel first** to start real-time listening!")
+                return
+
+            vc = voice_state.channel
+            success = self.voice_service.start_listening_in_channel(vc)
+            if success:
+                await message.channel.send(
+                    f"🎙️ **Bidirectional AI Voice Engine Active in `{vc.name}`!**\n"
+                    f"• Listening to human speech in real-time.\n"
+                    f"• Address any bot by name (*\"Hey Vasan\"*, *\"Vijay bro\"*, *\"Pradeep review this\"*) or speak naturally.\n"
+                    f"• Continuous voice responses delivered in **under 2 seconds**!\n"
+                    f"• Type `!vcstop` to stop listening."
+                )
+            else:
+                await message.channel.send("⚠️ Could not activate voice listening in this channel.")
+            return
+
+        # Voice Stop: !vcstop
+        if content.startswith(("!vcstop", "!vcdisconnect")):
+            mem = message.guild.get_member(message.author.id) if message.guild else message.author
+            voice_state = getattr(mem, "voice", None)
+            target_vc = voice_state.channel if (voice_state and voice_state.channel) else None
+            if target_vc:
+                self.voice_service.stop_listening_in_channel(target_vc)
+                await message.channel.send(f"🛑 **Voice engine stopped in `{target_vc.name}`.**")
+            else:
+                await message.channel.send("⚠️ You are not in a voice channel.")
+            return
+
+        # Voice Profiles Catalog: !voices
+        if content.startswith("!voices"):
+            embed = discord.Embed(
+                title="🎙️ Vaelkry Dev Labs - Neural Voice Catalog",
+                description="All 22 bot personas configured with authentic Microsoft Edge-TTS / Azure neural voices, custom pitch offsets, and dynamic speed rates:",
+                color=0x3498DB,
+            )
+            females = [
+                f"• **{p['name']}**: `{p['voice']}` (Pitch: `{p['pitch']}`, Rate: `{p['rate']}`) — *{p['tone']}*"
+                for p in CHARACTER_VOICES.values() if p.get("gender") == "female"
+            ]
+            males = [
+                f"• **{p['name']}**: `{p['voice']}` (Pitch: `{p['pitch']}`, Rate: `{p['rate']}`) — *{p['tone']}*"
+                for p in CHARACTER_VOICES.values() if p.get("gender") == "male"
+            ]
+            embed.add_field(name="👩 Female Bot Voices", value="\n".join(females), inline=False)
+            embed.add_field(name="👨 Male Bot Voices", value="\n".join(males), inline=False)
+            embed.set_footer(text="Zero-bloat streaming • Sub-2s latency • Dynamic pitch/rate modulation")
+            await message.channel.send(embed=embed)
+            return
+
+
         # AI Sprint Command: !project <idea>
         if content.startswith("!project"):
             ch_name = getattr(message.channel, "name", "").lower()
@@ -1645,6 +1995,9 @@ async def main():
         logger.info("Closing all Discord bot clients...")
         # Stop moderator floor-patrol loop
         orchestrator.moderator_service.stop_patrol_loop()
+
+        # Stop and cleanup voice engine
+        orchestrator.voice_service.cleanup_all()
 
         # Stop scheduler if running
         if orchestrator.scheduler_service.is_active:

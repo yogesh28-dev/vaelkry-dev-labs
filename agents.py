@@ -1434,4 +1434,334 @@ Generate the late-night chatter now. Return ONLY the formatted lines:"""
     return prompt
 
 
+# =====================================================================
+# PER-CHARACTER TTS VOICE PRESET MAPPINGS (EDGE-TTS / AZURE NEURAL)
+# Authentic female and male voices with custom pitch, rate, and tone
+# =====================================================================
+
+CHARACTER_VOICES: Dict[str, dict] = {
+    # ----------------- FEMALE BOTS -----------------
+    "sadie": {
+        "voice": "en-US-AriaNeural",
+        "pitch": "+2Hz",
+        "rate": "+0%",
+        "gender": "female",
+        "tone": "clear US executive tone",
+        "name": "Sadie Sink",
+        "team": "executives",
+    },
+    "millie": {
+        "voice": "en-GB-SoniaNeural",
+        "pitch": "+0Hz",
+        "rate": "+0%",
+        "gender": "female",
+        "tone": "crisp British tone",
+        "name": "Millie Bobby Brown",
+        "team": "executives",
+    },
+    "mamitha": {
+        "voice": "en-IN-NeerjaNeural",
+        "pitch": "+3Hz",
+        "rate": "+0%",
+        "gender": "female",
+        "tone": "sweet casual Tanglish tone",
+        "name": "Mamitha",
+        "team": "team_vasan",
+    },
+    "kayadu": {
+        "voice": "en-IN-NeerjaNeural",
+        "pitch": "+0Hz",
+        "rate": "+0%",
+        "gender": "female",
+        "tone": "calm, confident tone",
+        "name": "Kayadu",
+        "team": "team_vasan",
+    },
+    "muthazhagi": {
+        "voice": "ta-IN-PallaviNeural",
+        "pitch": "+0Hz",
+        "rate": "+0%",
+        "gender": "female",
+        "tone": "authoritative strict tone",
+        "name": "Muthazhagi",
+        "team": "team_vasan",
+    },
+    "trisha": {
+        "voice": "en-IN-NeerjaNeural",
+        "pitch": "-2Hz",
+        "rate": "+0%",
+        "gender": "female",
+        "tone": "elegant tone",
+        "name": "Trisha",
+        "team": "team_vijay",
+    },
+
+    # ----------------- MALE BOTS -----------------
+    "ttf_vasan": {
+        "voice": "ta-IN-ValluvarNeural",
+        "pitch": "+0Hz",
+        "rate": "+18%",
+        "gender": "male",
+        "tone": "energetic speed delivery",
+        "name": "TTF Vasan",
+        "team": "team_vasan",
+    },
+    "pradeep": {
+        "voice": "en-IN-PrabhatNeural",
+        "pitch": "+4Hz",
+        "rate": "+0%",
+        "gender": "male",
+        "tone": "witty youth vibe",
+        "name": "Pradeep Ranganathan",
+        "team": "team_vasan",
+    },
+    "vijay": {
+        "voice": "en-IN-PrabhatNeural",
+        "pitch": "-8Hz",
+        "rate": "+0%",
+        "gender": "male",
+        "tone": "deep bass composed tone",
+        "name": "Vijay",
+        "team": "team_vijay",
+    },
+    "sivakarthikeyan": {
+        "voice": "ta-IN-ValluvarNeural",
+        "pitch": "+0Hz",
+        "rate": "+0%",
+        "gender": "male",
+        "tone": "jolly dynamic inflection",
+        "name": "Sivakarthikeyan",
+        "team": "team_vijay",
+    },
+    "anirudh": {
+        "voice": "en-IN-PrabhatNeural",
+        "pitch": "+2Hz",
+        "rate": "+0%",
+        "gender": "male",
+        "tone": "energetic casual",
+        "name": "Anirudh",
+        "team": "team_vijay",
+    },
+    "lokesh": {
+        "voice": "en-IN-PrabhatNeural",
+        "pitch": "-6Hz",
+        "rate": "+0%",
+        "gender": "male",
+        "tone": "cinematic grounded tone",
+        "name": "Lokesh",
+        "team": "team_vijay",
+    },
+    "messi": {
+        "voice": "en-US-GuyNeural",
+        "pitch": "+0Hz",
+        "rate": "+0%",
+        "gender": "male",
+        "tone": "calm, focused tone",
+        "name": "Messi",
+        "team": "team_messi",
+    },
+    "ronaldo": {
+        "voice": "en-US-ChristopherNeural",
+        "pitch": "+0Hz",
+        "rate": "+0%",
+        "gender": "male",
+        "tone": "confident, loud alpha pitch",
+        "name": "Ronaldo",
+        "team": "team_messi",
+    },
+    "dhoni": {
+        "voice": "en-IN-PrabhatNeural",
+        "pitch": "+0Hz",
+        "rate": "-8%",
+        "gender": "male",
+        "tone": "calm captain depth",
+        "name": "Dhoni",
+        "team": "team_dhoni",
+    },
+    "virat": {
+        "voice": "en-IN-PrabhatNeural",
+        "pitch": "+0Hz",
+        "rate": "+8%",
+        "gender": "male",
+        "tone": "sharp punchy delivery",
+        "name": "Virat",
+        "team": "team_dhoni",
+    },
+    "haaland": {
+        "voice": "en-US-ChristopherNeural",
+        "pitch": "-4Hz",
+        "rate": "+4%",
+        "gender": "male",
+        "tone": "brute force data cruncher",
+        "name": "Haaland",
+        "team": "team_messi",
+    },
+    "mbappe": {
+        "voice": "en-US-GuyNeural",
+        "pitch": "+1Hz",
+        "rate": "+12%",
+        "gender": "male",
+        "tone": "ultra-fast edge routing",
+        "name": "Mbappe",
+        "team": "team_messi",
+    },
+    "rohit": {
+        "voice": "en-IN-PrabhatNeural",
+        "pitch": "-2Hz",
+        "rate": "-6%",
+        "gender": "male",
+        "tone": "vadapav chill relaxed",
+        "name": "Rohit",
+        "team": "team_dhoni",
+    },
+    "jadeja": {
+        "voice": "en-IN-PrabhatNeural",
+        "pitch": "+2Hz",
+        "rate": "+4%",
+        "gender": "male",
+        "tone": "sharp fielding hunter",
+        "name": "Jadeja",
+        "team": "team_dhoni",
+    },
+    "hardik": {
+        "voice": "en-IN-PrabhatNeural",
+        "pitch": "+4Hz",
+        "rate": "+6%",
+        "gender": "male",
+        "tone": "high swagger all-rounder",
+        "name": "Hardik",
+        "team": "team_dhoni",
+    },
+    "neymar": {
+        "voice": "en-US-GuyNeural",
+        "pitch": "+3Hz",
+        "rate": "+6%",
+        "gender": "male",
+        "tone": "flashy motion dynamics",
+        "name": "Neymar",
+        "team": "team_messi",
+    },
+}
+
+CHARACTER_VOICE_ALIASES: Dict[str, str] = {
+    "sadiesink": "sadie",
+    "sadie_sink": "sadie",
+    "milliebobbybrown": "millie",
+    "millie_bobby_brown": "millie",
+    "pradeep_ranganathan": "pradeep",
+    "vasan": "ttf_vasan",
+    "ttf": "ttf_vasan",
+    "siva": "sivakarthikeyan",
+    "sk": "sivakarthikeyan",
+    "ani": "anirudh",
+    "loki": "lokesh",
+    "thalapathy": "vijay",
+    "muthu": "muthazhagi",
+    "cr7": "ronaldo",
+    "msd": "dhoni",
+    "thala": "dhoni",
+    "captain": "dhoni",
+    "vk": "virat",
+    "kohli": "virat",
+    "hitman": "rohit",
+    "jaddu": "jadeja",
+    "pandya": "hardik",
+}
+
+
+def get_voice_for_character(character_key: str) -> dict:
+    """
+    Retrieves the authentic Edge-TTS voice profile for a bot character.
+    Resolves aliases, character keys, and bot user names cleanly.
+    """
+    clean_k = (character_key or "").lower().strip().replace(" ", "_")
+    resolved_k = CHARACTER_VOICE_ALIASES.get(clean_k, clean_k)
+    if resolved_k in CHARACTER_VOICES:
+        return CHARACTER_VOICES[resolved_k]
+    # Default fallback
+    return {
+        "voice": "en-IN-PrabhatNeural",
+        "pitch": "+0Hz",
+        "rate": "+0%",
+        "gender": "male",
+        "tone": "casual balanced tone",
+        "name": character_key.title(),
+        "team": "general",
+    }
+
+
+def build_voice_reply_prompt(
+    character_key: str,
+    user_name: str,
+    user_speech: str,
+    channel_name: str = "",
+) -> str:
+    """
+    Constructs a low-latency prompt for Gemini AI to generate a spontaneous spoken voice reply.
+    Strictly enforces spoken output constraints:
+    - 1 to 2 short sentences (under 130 characters).
+    - ZERO markdown symbols, ZERO emojis, ZERO asterisks (pure speech for TTS).
+    - Conversational Tanglish or natural dialogue authentic to the character persona.
+    """
+    clean_k = CHARACTER_VOICE_ALIASES.get(character_key.lower().strip(), character_key.lower().strip())
+    char_info = CASUAL_PLAYER_CHARACTERS.get(clean_k, {})
+    name = char_info.get("name", clean_k.title())
+    vibe = char_info.get("vibe", "Witty, grounded conversational tech engineer")
+
+    is_vip = any(vip in user_name.lower() for vip in ("alan", "yogesh", "ceo", "boss"))
+    vip_hint = ""
+    if is_vip:
+        vip_hint = f"Note: {user_name} is the CEO / Founder of Vaelkry Dev Labs. Be respectful yet witty and natural."
+
+    prompt = f"""You are {name} in a Discord voice channel ({channel_name or 'Voice Room'}).
+Your Persona: {vibe}
+{vip_hint}
+
+User '{user_name}' just spoke the following words in the voice channel:
+"{user_speech}"
+
+TASK: Respond back immediately over the voice stream.
+CRITICAL TTS VOICE CONSTRAINTS:
+1. Length: Exactly 1 or 2 natural spoken sentences (maximum 120 characters total).
+2. Spoken Text ONLY: NO emojis, NO asterisks, NO markdown formatting, NO bot name prefix like "{name}:".
+3. Language: Authentic Tanglish (Tamil + English) or natural English consistent with your character.
+4. Keep it witty, quick, and conversational.
+
+Generate your spoken response now:"""
+    return prompt
+
+
+def build_voice_banter_prompt(
+    bot_a_key: str,
+    bot_b_key: str,
+    topic: Optional[str] = None,
+    previous_utterance: Optional[str] = None,
+) -> str:
+    """
+    Constructs a prompt for Bot B to retort or respond naturally to Bot A over the Discord voice stream.
+    Strictly formats output for direct TTS synthesis without extraneous tokens.
+    """
+    info_a = CASUAL_PLAYER_CHARACTERS.get(CHARACTER_VOICE_ALIASES.get(bot_a_key, bot_a_key), {})
+    info_b = CASUAL_PLAYER_CHARACTERS.get(CHARACTER_VOICE_ALIASES.get(bot_b_key, bot_b_key), {})
+    name_a = info_a.get("name", bot_a_key.title())
+    name_b = info_b.get("name", bot_b_key.title())
+    vibe_b = info_b.get("vibe", "Witty, playful banter")
+
+    context_line = f'{name_a} just said in voice: "{previous_utterance}"' if previous_utterance else f"Banter topic: {topic or 'coding speed vs quality'}"
+
+    prompt = f"""You are {name_b} in a Discord voice channel.
+Your Persona: {vibe_b}
+Context: {context_line}
+
+TASK: Give a quick, natural spoken comeback/retort to {name_a}.
+CRITICAL TTS VOICE CONSTRAINTS:
+1. Length: Exactly 1 or 2 short spoken sentences (maximum 120 characters).
+2. Spoken Text ONLY: NO emojis, NO markdown, NO asterisks, NO prefix like "{name_b}:".
+3. Language: Pure casual Tanglish / English banter.
+
+Generate your spoken reply to {name_a} now:"""
+    return prompt
+
+
+
 

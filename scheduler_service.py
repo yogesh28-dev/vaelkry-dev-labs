@@ -1956,6 +1956,14 @@ class CompanyScheduler:
                             asyncio.create_task(
                                 self.orchestrator.casual_player_service.run_autonomous_night_chatter(guild)
                             )
+                        # Spontaneous cross-bot speech in populated Tech Cafe or Sleep Room voice channels
+                        if hasattr(self.orchestrator, "voice_service") and self.orchestrator.voice_service:
+                            for vc in guild.voice_channels:
+                                cat_name = vc.category.name.lower() if vc.category else ""
+                                if "tech cafe" in cat_name or "sleep" in vc.name.lower() or "night spend" in cat_name:
+                                    asyncio.create_task(
+                                        self.orchestrator.voice_service.run_autonomous_vc_banter_if_populated(vc)
+                                    )
                 else:
                     self._night_chatter_timer = 0
 
