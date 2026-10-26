@@ -430,6 +430,9 @@ class ModeratorService:
         activity_name: Optional[str] = None,
         self_mute: Optional[bool] = None,
         self_deaf: Optional[bool] = None,
+        stagger: bool = False,
+        min_delay: float = 1.0,
+        max_delay: float = 10.0,
     ):
         """
         Smoothly moves SadieSink or MillieBobbyBrown to target_vc.
@@ -501,6 +504,17 @@ class ModeratorService:
         is_in_voice = bool(bot_member and bot_member.voice and bot_member.voice.channel)
         voice_client = discord.utils.get(client.voice_clients, guild=guild)
         connect_cls = voice_recv.VoiceRecvClient if (HAVE_VOICE_RECV and voice_recv) else discord.VoiceClient
+
+        # Inject realistic human jitter delay for VC Join or VC Switch when staggered
+        if stagger and not already_in_target:
+            jitter = random.uniform(min_delay, max_delay)
+            trans_type = "VC Switch" if is_in_voice else "VC Join"
+            from_desc = f"from '{bot_member.voice.channel.name}' " if (is_in_voice and bot_member and bot_member.voice and bot_member.voice.channel) else ""
+            logger.info(
+                f"⏳ [MODERATOR {trans_type} JITTER] {client.user.name if client.user else 'Bot'} "
+                f"waiting {jitter:.2f}s before moving {from_desc}to '{client_target_vc.name}'..."
+            )
+            await asyncio.sleep(jitter)
 
         # If already connected as standard VoiceClient, safely disconnect to recreate with VoiceRecvClient
         if voice_client and HAVE_VOICE_RECV and voice_recv and not isinstance(voice_client, voice_recv.VoiceRecvClient):
@@ -779,8 +793,8 @@ class ModeratorService:
                     target_vc_sadie = ceo_vc
                     target_vc_millie = ceo_vc
                     await asyncio.gather(
-                        self.move_bot_to_vc(sadie_client, target_vc_sadie, "Executive Escort 👑"),
-                        self.move_bot_to_vc(millie_client, target_vc_millie, "Executive Security 🛡️"),
+                        self.move_bot_to_vc(sadie_client, target_vc_sadie, "Executive Escort 👑", stagger=True),
+                        self.move_bot_to_vc(millie_client, target_vc_millie, "Executive Security 🛡️", stagger=True),
                         return_exceptions=True,
                     )
                 else:
@@ -792,8 +806,8 @@ class ModeratorService:
                         f"Sadie roaming to '{sadie_target.name}', Millie roaming to '{millie_target.name}'."
                     )
                     await asyncio.gather(
-                        self.move_bot_to_vc(sadie_client, sadie_target, "Executive Escort 👑"),
-                        self.move_bot_to_vc(millie_client, millie_target, "Executive Security 🛡️"),
+                        self.move_bot_to_vc(sadie_client, sadie_target, "Executive Escort 👑", stagger=True),
+                        self.move_bot_to_vc(millie_client, millie_target, "Executive Security 🛡️", stagger=True),
                         return_exceptions=True,
                     )
 
@@ -808,8 +822,8 @@ class ModeratorService:
                     target_vc_sadie = ceo_vc
                     target_vc_millie = ceo_vc
                     await asyncio.gather(
-                        self.move_bot_to_vc(sadie_client, target_vc_sadie, "Executive Escort 👑"),
-                        self.move_bot_to_vc(millie_client, target_vc_millie, "Executive Security 🛡️"),
+                        self.move_bot_to_vc(sadie_client, target_vc_sadie, "Executive Escort 👑", stagger=True),
+                        self.move_bot_to_vc(millie_client, target_vc_millie, "Executive Security 🛡️", stagger=True),
                         return_exceptions=True,
                     )
                 else:
@@ -821,8 +835,8 @@ class ModeratorService:
                         f"Sadie roaming to '{sadie_target.name}', Millie roaming to '{millie_target.name}' (Populated rooms only)."
                     )
                     await asyncio.gather(
-                        self.move_bot_to_vc(sadie_client, sadie_target, "Executive Escort 👑"),
-                        self.move_bot_to_vc(millie_client, millie_target, "Executive Security 🛡️"),
+                        self.move_bot_to_vc(sadie_client, sadie_target, "Executive Escort 👑", stagger=True),
+                        self.move_bot_to_vc(millie_client, millie_target, "Executive Security 🛡️", stagger=True),
                         return_exceptions=True,
                     )
 

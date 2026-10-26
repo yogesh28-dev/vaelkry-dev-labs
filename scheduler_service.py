@@ -1033,8 +1033,10 @@ class CompanyScheduler:
         - Team Vaasan -> Assigned cabin in ShiftDefinition (e.g. 'Team Vaasan' -> 'Working Vc 1')
         """
         try:
-            # Settle briefly to ensure Discord gateway cache is populated
-            await asyncio.sleep(0.5)
+            # Settle with realistic human jitter delay (1s to 10s) so bots enter one by one upon login
+            login_jitter = random.uniform(1.0, 10.0)
+            logger.info(f"⏳ [LOGIN VC JOIN JITTER] Bot '{agent_key}' waiting {login_jitter:.2f}s before initial voice join...")
+            await asyncio.sleep(login_jitter)
 
             # Ensure guild has channels and categories loaded
             bot_guild = client.get_guild(guild.id) or guild
@@ -1445,7 +1447,7 @@ class CompanyScheduler:
 
                 if safe_vc and not is_ceo_vc(safe_vc):
                     try:
-                        await self.move_single_bot(client, safe_vc, current_shift)
+                        await self.move_single_bot(client, safe_vc, current_shift, stagger=False)
                     except Exception as evict_err:
                         logger.error(f"Failed to move unauthorized bot '{norm_key}' to safe VC '{safe_vc.name}': {evict_err}")
 
@@ -1454,6 +1456,9 @@ class CompanyScheduler:
         client: discord.Client,
         target_vc: discord.VoiceChannel,
         shift: ShiftDefinition,
+        stagger: bool = False,
+        min_delay: float = 1.0,
+        max_delay: float = 10.0,
     ):
         """Moves a single bot to target_vc, updates mute/deaf, and sets custom activity."""
         bot_key = getattr(getattr(client, "agent_config", None), "key", "")
@@ -1494,6 +1499,31 @@ class CompanyScheduler:
                 bot_member = await target_vc.guild.fetch_member(client.user.id)
             except Exception:
                 bot_member = None
+
+        voice_client = discord.utils.get(client.voice_clients, guild=guild)
+
+        # Detect current voice channel for transition jitter calculation
+        curr_vc = None
+        if voice_client and getattr(voice_client, "channel", None):
+            curr_vc = voice_client.channel
+        elif bot_member and getattr(bot_member, "voice", None) and getattr(bot_member.voice, "channel", None):
+            curr_vc = bot_member.voice.channel
+
+        is_connected = bool(curr_vc)
+        is_in_target = bool(curr_vc and curr_vc.id == target_vc.id)
+        is_join = not is_connected
+        is_switch = is_connected and not is_in_target
+
+        # Inject realistic human jitter delay for VC Join or VC Switch when staggered
+        if stagger and (is_join or is_switch):
+            jitter = random.uniform(min_delay, max_delay)
+            trans_name = "VC Switch" if is_switch else "VC Join"
+            from_desc = f"from '{curr_vc.name}' " if (is_switch and curr_vc) else ""
+            logger.info(
+                f"⏳ [{trans_name} JITTER] Bot '{norm_key}' waiting {jitter:.2f}s "
+                f"before moving {from_desc}to '{target_vc.name}'..."
+            )
+            await asyncio.sleep(jitter)
 
         # 1. Set dynamic rich presence & custom status activity
         try:
@@ -1666,6 +1696,29 @@ class CompanyScheduler:
             voice_client = discord.utils.get(client.voice_clients, guild=bot_guild)
             connect_cls = voice_recv.VoiceRecvClient if (HAVE_VOICE_RECV and voice_recv) else discord.VoiceClient
 
+            # Detect current voice status for transition jitter calculation
+            curr_vc = None
+            if voice_client and getattr(voice_client, "channel", None):
+                curr_vc = voice_client.channel
+            elif bot_member and getattr(bot_member, "voice", None) and getattr(bot_member.voice, "channel", None):
+                curr_vc = bot_member.voice.channel
+
+            is_connected = bool(curr_vc)
+            is_in_target = bool(curr_vc and curr_vc.id == actual_target_vc.id)
+            is_join = not is_connected
+            is_switch = is_connected and not is_in_target
+
+            # Apply realistic human staggered jitter (1s to 10s) so bots filter in one by one
+            if is_join or is_switch:
+                jitter = random.uniform(1.0, 10.0)
+                trans_type = "VC Switch" if is_switch else "VC Join"
+                from_desc = f"from '{curr_vc.name}' " if (is_switch and curr_vc) else ""
+                logger.info(
+                    f"⏳ [{trans_type} JITTER] Bot '{bot_key_norm}' waiting {jitter:.2f}s "
+                    f"before entering {from_desc}'{actual_target_vc.name}'..."
+                )
+                await asyncio.sleep(jitter)
+
             # If a voice_client is already connected as standard VoiceClient, safely disconnect to recreate with VoiceRecvClient
             if voice_client and HAVE_VOICE_RECV and voice_recv and not isinstance(voice_client, voice_recv.VoiceRecvClient):
                 try:
@@ -1805,7 +1858,7 @@ class CompanyScheduler:
                     assigned_vc = shuffled_rooms[idx % len(shuffled_rooms)]
                 self.assigned_sleep_rooms[key] = assigned_vc.id
                 logger.info(f"Sleep assignment: {client.user.name} -> {assigned_vc.name} (Night Spend)")
-                move_tasks.append(self.move_single_bot(client, assigned_vc, shift))
+                move_tasks.append(self.move_single_bot(client, assigned_vc, shift, stagger=True))
 
         elif (
             shift.category_name.strip().lower() == "tech cafe"
@@ -1837,7 +1890,7 @@ class CompanyScheduler:
                 assigned_vc = shuffled_cafe[idx % len(shuffled_cafe)]
                 self.assigned_cafe_rooms[key] = assigned_vc.id
                 logger.info(f"Tech Cafe assignment: {client.user.name} -> {assigned_vc.name} (Tech Cafe)")
-                move_tasks.append(self.move_single_bot(client, assigned_vc, shift))
+                move_tasks.append(self.move_single_bot(client, assigned_vc, shift, stagger=True))
 
         else:
             # ==================== ACTIVE SPRINT / WORKING SHIFTS ====================
@@ -1855,7 +1908,7 @@ class CompanyScheduler:
                 for key in self.team_vasan_keys:
                     client = self.orchestrator.clients.get(key)
                     if client and client.is_ready():
-                        move_tasks.append(self.move_single_bot(client, vasan_vc, shift))
+                        move_tasks.append(self.move_single_bot(client, vasan_vc, shift, stagger=True))
 
             # 2. Team Vijay Cabin ('Team Vijay' -> 'Working Vc 1')
             vijay_vc = await self.find_or_provision_voice_channel(
@@ -1868,7 +1921,7 @@ class CompanyScheduler:
                 for key in self.team_vijay_keys:
                     client = self.orchestrator.clients.get(key)
                     if client and client.is_ready():
-                        move_tasks.append(self.move_single_bot(client, vijay_vc, shift))
+                        move_tasks.append(self.move_single_bot(client, vijay_vc, shift, stagger=True))
 
             # 3. Team Messi Cabin ('Team Messi' -> 'Working Vc 1')
             messi_vc = await self.find_or_provision_voice_channel(
@@ -1881,7 +1934,7 @@ class CompanyScheduler:
                 for key in self.team_messi_keys:
                     client = self.orchestrator.clients.get(key)
                     if client and client.is_ready():
-                        move_tasks.append(self.move_single_bot(client, messi_vc, shift))
+                        move_tasks.append(self.move_single_bot(client, messi_vc, shift, stagger=True))
 
             # 4. Team Dhoni Cabin ('Team Dhoni' -> 'Working Vc 1')
             dhoni_vc = await self.find_or_provision_voice_channel(
@@ -1894,7 +1947,7 @@ class CompanyScheduler:
                 for key in self.team_dhoni_keys:
                     client = self.orchestrator.clients.get(key)
                     if client and client.is_ready():
-                        move_tasks.append(self.move_single_bot(client, dhoni_vc, shift))
+                        move_tasks.append(self.move_single_bot(client, dhoni_vc, shift, stagger=True))
 
         if move_tasks:
             await asyncio.gather(*move_tasks, return_exceptions=True)
@@ -2010,7 +2063,7 @@ class CompanyScheduler:
         for key in party_keys:
             client = self.orchestrator.clients.get(key)
             if client:
-                tasks.append(self.move_single_bot(client, hangout_vc, movie_shift))
+                tasks.append(self.move_single_bot(client, hangout_vc, movie_shift, stagger=True))
 
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
@@ -2328,7 +2381,7 @@ class CompanyScheduler:
                                 )
                                 safe_vc = await self.get_safe_non_ceo_vc(key, guild, current_shift)
                                 if safe_vc and not is_ceo_vc(safe_vc):
-                                    asyncio.create_task(self.move_single_bot(dev_cl, safe_vc, current_shift))
+                                    asyncio.create_task(self.move_single_bot(dev_cl, safe_vc, current_shift, stagger=False))
 
                     # Periodic alignment check
                     if current_shift.shift_id == "sleep" and self.assigned_sleep_rooms:
@@ -2345,7 +2398,7 @@ class CompanyScheduler:
                                     or (bot_member and bot_member.voice and bot_member.voice.channel and bot_member.voice.channel.id == target_vc.id)
                                 )
                                 if not is_in_target:
-                                    asyncio.create_task(self.move_single_bot(client, target_vc, current_shift))
+                                    asyncio.create_task(self.move_single_bot(client, target_vc, current_shift, stagger=True))
                     elif (
                         current_shift.category_name.strip().lower() == "tech cafe"
                         or current_shift.shift_id.startswith("break")
@@ -2364,7 +2417,7 @@ class CompanyScheduler:
                                     or (bot_member and bot_member.voice and bot_member.voice.channel and bot_member.voice.channel.id == target_vc.id)
                                 )
                                 if not is_in_target:
-                                    asyncio.create_task(self.move_single_bot(client, target_vc, current_shift))
+                                    asyncio.create_task(self.move_single_bot(client, target_vc, current_shift, stagger=True))
                     else:
                         # Active work shift alignment across all 4 squads
                         vasan_vc = await self.find_or_provision_voice_channel(
@@ -2401,7 +2454,7 @@ class CompanyScheduler:
                                         or (bot_member and bot_member.voice and bot_member.voice.channel and bot_member.voice.channel.id == target_vc.id)
                                     )
                                     if not is_in_target:
-                                        asyncio.create_task(self.move_single_bot(client, target_vc, current_shift))
+                                        asyncio.create_task(self.move_single_bot(client, target_vc, current_shift, stagger=True))
                                     elif bot_member and bot_member.voice and (bot_member.voice.self_mute or bot_member.voice.self_deaf):
                                         if hasattr(client, "ws") and client.ws:
                                             asyncio.create_task(
@@ -2599,21 +2652,42 @@ class CompanyScheduler:
         self.assigned_sleep_rooms.clear()
         self.assigned_cafe_rooms.clear()
 
-        # Cleanly disconnect all developer bots and set standby presence
+        # Cleanly disconnect all bots with human staggered delay (VC Leave jitter: 1s to 10s)
         disconnect_tasks = []
-        for key in self.all_dev_keys:
+
+        async def _disconnect_bot_with_jitter(key: str, client: discord.Client):
+            if not client:
+                return
+            bot_guild = client.get_guild(guild.id) or guild
+            bot_mem = bot_guild.get_member(client.user.id) if (bot_guild and client.user) else None
+            in_vc = bool(client.voice_clients or (bot_mem and bot_mem.voice and bot_mem.voice.channel))
+
+            if in_vc:
+                jitter = random.uniform(1.0, 10.0)
+                logger.info(f"⏳ [VC LEAVE JITTER] Bot '{key}' waiting {jitter:.2f}s before leaving voice channel...")
+                await asyncio.sleep(jitter)
+
+            for vc in list(client.voice_clients):
+                try:
+                    await vc.disconnect(force=True)
+                except Exception:
+                    pass
+
+            if bot_mem and bot_mem.voice:
+                try:
+                    await bot_guild.change_voice_state(channel=None)
+                except Exception:
+                    pass
+
+            try:
+                await client.change_presence(activity=discord.CustomActivity(name="Operations Paused ⏸️"))
+            except Exception:
+                pass
+
+        for key in self.all_bot_keys:
             client = self.orchestrator.clients.get(key)
             if client:
-                for vc in list(client.voice_clients):
-                    disconnect_tasks.append(vc.disconnect(force=True))
-
-                bot_guild = client.get_guild(guild.id) or guild
-                if bot_guild and bot_guild.me and bot_guild.me.voice:
-                    disconnect_tasks.append(bot_guild.change_voice_state(channel=None))
-
-                disconnect_tasks.append(
-                    client.change_presence(activity=discord.CustomActivity(name="Operations Paused ⏸️"))
-                )
+                disconnect_tasks.append(_disconnect_bot_with_jitter(key, client))
 
         if disconnect_tasks:
             await asyncio.gather(*disconnect_tasks, return_exceptions=True)

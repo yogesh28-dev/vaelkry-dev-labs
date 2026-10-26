@@ -959,7 +959,8 @@ class VaelkryBotClient(discord.Client):
             embed = discord.Embed(
                 title="⚡ Master VC Wakeup & Override Activated",
                 description=(
-                    f"**Successfully gathered {count}/22 bots into `{resolved_vc.name}`!**\n\n"
+                    f"**Successfully initiated staggered gathering of {count}/22 bots into `{resolved_vc.name}`!**\n\n"
+                    f"• **Human Jitter:** Bots filtering into voice with realistic **1s to 10s staggered delays**.\n"
                     f"• **Voice State:** Strictly set to `mute=False, deafen=False` (undeafened & unmuted).\n"
                     f"• **TTF Vasan & Squad:** Actively present in voice channel, listening and ready for tasks.\n"
                     f"• **Sleep Override:** `ACTIVE` (scheduler will preserve bots awake and active in this VC).\n"
@@ -1867,7 +1868,8 @@ class AgentOrchestrator:
             embed = discord.Embed(
                 title="⚡ Master VC Wakeup & Override Activated",
                 description=(
-                    f"**Successfully gathered {count}/22 bots into `{resolved_vc.name}`!**\n\n"
+                    f"**Successfully initiated staggered gathering of {count}/22 bots into `{resolved_vc.name}`!**\n\n"
+                    f"• **Human Jitter:** Bots filtering into voice with realistic **1s to 10s staggered delays**.\n"
                     f"• **Voice State:** All bots explicitly **unmuted & undeafened** (`mute=False, deafen=False`).\n"
                     f"• **Sleep Override:** `ACTIVE` (scheduler will preserve bots awake and active in this VC).\n"
                     f"• **Next Steps:** Say `!speak vijay all is well` or `!vclisten` to talk directly!"
