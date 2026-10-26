@@ -14,7 +14,15 @@ from typing import Any, Dict, List, Optional, Tuple
 from zoneinfo import ZoneInfo
 import discord
 
+try:
+    import discord.ext.voice_recv as voice_recv
+    HAVE_VOICE_RECV = True
+except ImportError:
+    voice_recv = None
+    HAVE_VOICE_RECV = False
+
 logger = logging.getLogger("VaelkryDevLabs.Scheduler")
+
 
 # Dedicated CEO Notification Channel definitions
 CEO_NOTIFICATION_CHANNEL_ID: int = 1563622902744481812
@@ -944,6 +952,8 @@ class CompanyScheduler:
         self._loop_task: Optional[asyncio.Task] = None
         self.assigned_sleep_rooms: Dict[str, int] = {}  # agent_key -> voice_channel_id
         self.assigned_cafe_rooms: Dict[str, int] = {}   # agent_key -> voice_channel_id
+        self.voice_override_active: bool = False
+        self.voice_override_vc: Optional[discord.VoiceChannel] = None
         self._night_chatter_timer: int = 0
         self._next_night_chatter_interval: int = random.randint(12, 25)
 
@@ -1246,10 +1256,14 @@ class CompanyScheduler:
             logger.warning(f"Failed to update activity for {client.user.name if client.user else 'bot'}: {exc}")
 
         # 2. Strict mute/deaf determination:
-        # Enforce False for all non-sleep shifts or when inside Tech Cafe / Working VCs
-        is_sleep = (shift.shift_id == "sleep")
+        # Enforce False for all non-sleep shifts, when voice override is active, or inside Tech Cafe / Working VCs
+        is_sleep = (shift.shift_id == "sleep") and not self.voice_override_active
         target_mute = True if is_sleep else False
         target_deaf = True if is_sleep else False
+
+        if self.voice_override_active:
+            target_mute = False
+            target_deaf = False
 
         vc_name_lower = target_vc.name.lower()
         cat_name_lower = target_vc.category.name.lower() if target_vc.category else ""
@@ -1340,10 +1354,129 @@ class CompanyScheduler:
         except Exception as ws_err:
             logger.debug(f"Direct ws.voice_state update for {client.user.name if client.user else 'bot'}: {ws_err}")
 
+    async def wake_all_bots_to_vc(
+        self,
+        guild: discord.Guild,
+        target_vc: Optional[discord.VoiceChannel] = None,
+    ) -> Tuple[int, discord.VoiceChannel]:
+        """
+        Master VC Wakeup & Override Routine:
+        1. Resolves target VC (defaults to 'Tech Cafe' or first room under Tech Cafe).
+        2. Sets self.voice_override_active = True and self.voice_override_vc = target_vc,
+           which overrides the sleep shift routine so bots stay awake, unmuted, and undeafened.
+        3. Moves all 22 bots into target_vc immediately.
+        4. Explicitly updates member voice state to: self_mute=False, self_deaf=False.
+        5. Updates activity presence to an energetic awake status.
+        Returns (count_of_bots_moved, target_vc).
+        """
+        # 1. Resolve Target VC
+        if not target_vc:
+            cafe_channels = await self.get_tech_cafe_voice_channels(guild)
+            if cafe_channels:
+                target_vc = cafe_channels[0]
+            else:
+                target_vc = discord.utils.find(
+                    lambda c: "tech cafe" in c.name.lower(),
+                    guild.voice_channels,
+                )
+            if not target_vc:
+                target_vc = await self.find_or_provision_voice_channel(guild, "Tech Cafe", "Tech Cafe")
+
+        # 2. Set Voice Override Flag (overrides sleep shift routine)
+        self.voice_override_active = True
+        self.voice_override_vc = target_vc
+        self.assigned_sleep_rooms.clear()
+
+        # 3. Move and wake all 22 bots
+        moved_count = 0
+        tasks = []
+
+        async def _wake_single_bot(key: str, client: discord.Client):
+            nonlocal moved_count
+            if not client or not client.is_ready():
+                return
+
+            bot_guild = client.get_guild(guild.id) or guild
+            bot_member = bot_guild.get_member(client.user.id) if client.user else None
+            voice_client = discord.utils.get(client.voice_clients, guild=guild)
+
+            try:
+                if voice_client and voice_client.is_connected():
+                    if voice_client.channel.id != target_vc.id:
+                        await voice_client.move_to(target_vc)
+                elif bot_member and bot_member.voice and bot_member.voice.channel:
+                    if bot_member.voice.channel.id != target_vc.id:
+                        await guild.change_voice_state(
+                            channel=target_vc,
+                            self_mute=False,
+                            self_deaf=False,
+                        )
+                else:
+                    # Connect directly to target VC
+                    connect_cls = voice_recv.VoiceRecvClient if (HAVE_VOICE_RECV and voice_recv) else discord.VoiceClient
+                    try:
+                        await target_vc.connect(
+                            cls=connect_cls,
+                            self_mute=False,
+                            self_deaf=False,
+                            reconnect=True,
+                            timeout=10.0,
+                        )
+                    except Exception:
+                        await guild.change_voice_state(
+                            channel=target_vc,
+                            self_mute=False,
+                            self_deaf=False,
+                        )
+
+                # Strictly enforce unmuted & undeafened at Gateway level:
+                if hasattr(client, "ws") and client.ws:
+                    await client.ws.voice_state(
+                        guild.id,
+                        target_vc.id,
+                        self_mute=False,
+                        self_deaf=False,
+                    )
+
+                # Update presence to active jam
+                activity = discord.Activity(
+                    type=discord.ActivityType.listening,
+                    name=f"Vaelkry Voice Jam in {target_vc.name} 🔊⚡",
+                )
+                await client.change_presence(activity=activity, status=discord.Status.online)
+                moved_count += 1
+            except Exception as exc:
+                logger.warning(f"Error waking bot {key} to {target_vc.name}: {exc}")
+
+        for k in self.all_bot_keys:
+            c = self.orchestrator.clients.get(k)
+            if c:
+                tasks.append(_wake_single_bot(k, c))
+
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+
+        logger.info(
+            f"Master VC Wakeup: Successfully woke & moved {moved_count}/{len(self.all_bot_keys)} bots "
+            f"to '{target_vc.name}' with mute=False, deafen=False (Sleep override active)."
+        )
+        return moved_count, target_vc
+
+    def reset_voice_override(self):
+        """Clears voice override, returning bots to normal automated IST scheduler routine."""
+        self.voice_override_active = False
+        self.voice_override_vc = None
+        logger.info("Voice override flag reset. Normal shift routine resumed.")
+
     async def apply_shift(self, guild: discord.Guild, shift: ShiftDefinition):
         """Applies the specified shift to all 4 squads (Vaasan, Vijay, Messi, Dhoni) and executive bots concurrently."""
         now_ist = get_current_ist_time()
         logger.info(f"Applying Shift: [{shift.name}] at {now_ist.strftime('%H:%M:%S IST')}")
+
+        # Check sleep shift voice override
+        if self.voice_override_active and self.voice_override_vc and shift.shift_id == "sleep":
+            logger.info("Voice override active during sleep shift; preserving bots awake in override VC.")
+            return
 
         move_tasks = []
 
@@ -1851,6 +1984,24 @@ class CompanyScheduler:
                                 )
                             )
 
+                elif self.voice_override_active and self.voice_override_vc:
+                    # Master Voice Override active: preserve all 22 bots unmuted & undeafened in the override VC
+                    target_vc = self.voice_override_vc
+                    for key in self.all_bot_keys:
+                        client = self.orchestrator.clients.get(key)
+                        if client and client.is_ready():
+                            bot_guild = client.get_guild(guild.id) or guild
+                            bot_member = bot_guild.get_member(client.user.id) if client.user else None
+                            if bot_member and bot_member.voice and (bot_member.voice.self_mute or bot_member.voice.self_deaf):
+                                if hasattr(client, "ws") and client.ws:
+                                    asyncio.create_task(
+                                        client.ws.voice_state(
+                                            guild.id,
+                                            target_vc.id,
+                                            self_mute=False,
+                                            self_deaf=False,
+                                        )
+                                    )
                 else:
                     # Periodic alignment check
                     if current_shift.shift_id == "sleep" and self.assigned_sleep_rooms:
@@ -1990,6 +2141,8 @@ class CompanyScheduler:
             return "⚠️ **Company is already in active operation!** The IST scheduler is running."
 
         self.is_active = True
+        self.voice_override_active = False
+        self.voice_override_vc = None
         now_ist = get_current_ist_time()
         initial_shift = match_current_shift(now_ist)
 
@@ -2087,6 +2240,8 @@ class CompanyScheduler:
             self._loop_task = None
 
         self.current_shift_id = None
+        self.voice_override_active = False
+        self.voice_override_vc = None
         self.assigned_sleep_rooms.clear()
         self.assigned_cafe_rooms.clear()
 

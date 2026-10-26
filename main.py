@@ -882,6 +882,56 @@ class VaelkryBotClient(discord.Client):
             embed.set_footer(text="Zero-bloat streaming • Sub-2s latency • Dynamic pitch/rate modulation")
             await interaction.response.send_message(embed=embed)
 
+        @self.tree.command(
+            name="wake_all_vc",
+            description="Wakes all 22 bots, moves them to target VC (or Tech Cafe), undeafens/unmutes them & overrides sleep",
+        )
+        @app_commands.describe(
+            target_channel="Voice channel to gather all bots in (defaults to your current VC or Tech Cafe)",
+        )
+        async def wake_all_vc_slash(
+            interaction: discord.Interaction,
+            target_channel: Optional[discord.VoiceChannel] = None,
+        ):
+            if not interaction.guild:
+                await interaction.response.send_message("⚠️ Run within a corporate server!", ephemeral=True)
+                return
+
+            mem = interaction.guild.get_member(interaction.user.id) or interaction.user
+            if not is_admin_or_owner(mem, interaction.guild):
+                await interaction.response.send_message(
+                    "🛑 **Access Denied:** Only the CEO or Admin can trigger Master VC Wakeup!",
+                    ephemeral=True,
+                )
+                return
+
+            await interaction.response.defer()
+
+            # If user did not provide target_channel, check if user is currently in a VC
+            dest_vc = target_channel
+            if not dest_vc:
+                vstate = getattr(mem, "voice", None)
+                if vstate and vstate.channel and isinstance(vstate.channel, discord.VoiceChannel):
+                    dest_vc = vstate.channel
+
+            count, resolved_vc = await self.orchestrator.scheduler_service.wake_all_bots_to_vc(
+                guild=interaction.guild,
+                target_vc=dest_vc,
+            )
+
+            embed = discord.Embed(
+                title="⚡ Master VC Wakeup & Override Activated",
+                description=(
+                    f"**Successfully gathered {count}/22 bots into `{resolved_vc.name}`!**\n\n"
+                    f"• **Voice State:** Strictly set to `mute=False, deafen=False` (undeafened & unmuted).\n"
+                    f"• **Sleep Override:** `ACTIVE` (scheduler will preserve bots awake and active in this VC).\n"
+                    f"• **Ready for Voice:** Speak to any bot using `/voice_speak` or chat via `/voice_listen`!"
+                ),
+                color=0xF1C40F,
+            )
+            embed.set_footer(text="Vaelkry Dev Labs Master Voice Override • All 22 Bots Online")
+            await interaction.followup.send(embed=embed)
+
     async def on_ready(self):
         logger.info(
             f"Agent '{self.agent_config.name}' connected as {self.user} (ID: {self.user.id})"
@@ -1679,6 +1729,49 @@ class AgentOrchestrator:
             embed.add_field(name="👩 Female Bot Voices", value="\n".join(females), inline=False)
             embed.add_field(name="👨 Male Bot Voices", value="\n".join(males), inline=False)
             embed.set_footer(text="Zero-bloat streaming • Sub-2s latency • Dynamic pitch/rate modulation")
+            await message.channel.send(embed=embed)
+            return
+
+        # Master VC Wakeup & Override Command: !wakevc [optional_channel_name] or !unmuteall
+        if content.startswith(("!wakevc", "!unmuteall", "!wake_all_vc", "!wakeall")):
+            if not message.guild:
+                return
+
+            mem = message.guild.get_member(message.author.id) if message.guild else message.author
+            if not is_admin_or_owner(mem, message.guild):
+                await message.channel.send("🛑 **Access Denied:** Only the CEO or Admin can execute `!wakevc`!")
+                return
+
+            parts = content.split(maxsplit=1)
+            target_vc = None
+            if len(parts) > 1:
+                query = parts[1].strip().lower()
+                target_vc = discord.utils.find(
+                    lambda c: query in c.name.lower() and isinstance(c, discord.VoiceChannel),
+                    message.guild.voice_channels,
+                )
+
+            if not target_vc:
+                vstate = getattr(mem, "voice", None)
+                if vstate and vstate.channel and isinstance(vstate.channel, discord.VoiceChannel):
+                    target_vc = vstate.channel
+
+            count, resolved_vc = await self.scheduler_service.wake_all_bots_to_vc(
+                guild=message.guild,
+                target_vc=target_vc,
+            )
+
+            embed = discord.Embed(
+                title="⚡ Master VC Wakeup & Override Activated",
+                description=(
+                    f"**Successfully gathered {count}/22 bots into `{resolved_vc.name}`!**\n\n"
+                    f"• **Voice State:** All bots explicitly **unmuted & undeafened** (`mute=False, deafen=False`).\n"
+                    f"• **Sleep Override:** `ACTIVE` (scheduler will preserve bots awake and active in this VC).\n"
+                    f"• **Next Steps:** Say `!speak vijay all is well` or `!vclisten` to talk directly!"
+                ),
+                color=0xF1C40F,
+            )
+            embed.set_footer(text="Vaelkry Dev Labs Master Voice Override • All 22 Bots Online")
             await message.channel.send(embed=embed)
             return
 
