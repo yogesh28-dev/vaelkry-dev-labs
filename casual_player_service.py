@@ -21,6 +21,10 @@ from agents import (
     EXECUTIVE_BOT_KEYS,
     TEAM_VASAN_KEYS,
     TEAM_VIJAY_KEYS,
+    TEAM_MESSI_KEYS,
+    TEAM_DHONI_KEYS,
+    TEAM_ELON_KEYS,
+    TEAM_STARK_KEYS,
     DISCORD_SLANG_BUCKETS,
     REGIONAL_TONES,
     CRUTCH_WORDS,
@@ -220,6 +224,379 @@ class AntiRepetitionEngine:
         return chosen
 
 
+def find_squad_working_channel(guild: discord.Guild, squad_key: str) -> Optional[discord.TextChannel]:
+    """
+    Locates the designated #working-chat text channel for a given squad.
+    Searches inside the squad's category for #working-chat, then #team-chat.
+    Falls back to any channel in the category or guild-wide #working-chat.
+    """
+    squad_keywords = {
+        "team_vasan": ["vaasan", "vasan"],
+        "team_vijay": ["vijay"],
+        "team_messi": ["messi"],
+        "team_dhoni": ["dhoni"],
+        "team_elon": ["elon"],
+        "team_stark": ["stark"],
+    }
+    key_norm = squad_key.lower().strip()
+    kws = squad_keywords.get(key_norm, [key_norm])
+
+    # 1. Search category by squad name
+    for cat in getattr(guild, "categories", []):
+        cat_lower = cat.name.lower()
+        if any(kw in cat_lower for kw in kws):
+            for ch in cat.text_channels:
+                if "working-chat" in ch.name.lower() or "working" in ch.name.lower():
+                    return ch
+            for ch in cat.text_channels:
+                if "team-chat" in ch.name.lower() or "chat" in ch.name.lower():
+                    return ch
+            if cat.text_channels:
+                return cat.text_channels[0]
+
+    # 2. Search all text channels for squad keyword + working
+    for ch in getattr(guild, "text_channels", []):
+        ch_lower = ch.name.lower()
+        if any(kw in ch_lower for kw in kws) and ("working" in ch_lower or "chat" in ch_lower):
+            return ch
+
+    # 3. Fallback to launchpad or first available text channel
+    launchpad = discord.utils.find(
+        lambda c: c.name.lower() in ("the-launchpad", "working-chat", "dev-chat", "general"),
+        getattr(guild, "text_channels", []),
+    )
+    if launchpad:
+        return launchpad
+    return guild.text_channels[0] if getattr(guild, "text_channels", None) else None
+
+
+# ==============================================================================
+# SADIE & MILLIE EXECUTIVE DIRECTIVES CATALOG (HIGH-VALUE CORPORATE DIRECTIVES)
+# ==============================================================================
+EXECUTIVE_DIRECTIVES_CATALOG: Dict[str, List[Dict[str, Any]]] = {
+    "team_vasan": [
+        {
+            "project_title": "Enterprise Multi-Tenant Micro-SaaS Billing Engine",
+            "lead_key": "ttf_vasan",
+            "dev_key": "pradeep",
+            "sadie_directive": (
+                "**[EXECUTIVE DIRECTIVE: COMMERCIAL TARGET]** @TTF Vasan & Team Vaasan:\n"
+                "Q4 enterprise pipeline demands our high-concurrency Spring Boot 3.3 Micro-SaaS billing gateway in production. "
+                "We are targeting **$25,000 MRR** from 12 early-stage SaaS clients. I want multi-tenant schema isolation, automated invoice generation, "
+                "and Stripe webhook reconciliation locked in this sprint. Non-negotiable milestone."
+            ),
+            "millie_spec": (
+                "**[TECH SPEC & PR REQUIREMENTS]** Adding technical parameters to Sadie's directive:\n"
+                "1. **Architecture:** Spring Boot 3.3 + JPA Hibernate 6 with PostgreSQL schema-per-tenant isolation.\n"
+                "2. **Containerization:** Docker multi-stage build, rootless non-privileged container, image size strictly < 180MB.\n"
+                "3. **Resilience:** Resilience4j circuit breakers on external webhook dispatch with exponential backoff & dead-letter queue.\n"
+                "4. **PR Deadline:** 6:00 PM IST today. Mandatory >= 92% JUnit 5 test coverage with zero SonarQube blockers before merging to staging."
+            ),
+            "lead_ack": (
+                "Thalaivi Sadie & Millie, order received 🎙️⚡! Full throttle acceleration mode on! "
+                "Pradeep, Mamitha, Kayadu — ketaangala? Spring Boot tenant resolver and Stripe idempotency key pipeline ready pannunga da! "
+                "Indha sprint-la prod ready deliver panrom! 🚀🏍️"
+            ),
+            "dev_reply": (
+                "Branch `feat/tenant-billing-gateway` already cut da Vasan! Hibernate entity tenancy filters and Redis webhook replay cache implemented. "
+                "Writing unit tests now, PR estimate 4:30 PM IST-ku drop panren! 💻🔥"
+            ),
+        },
+        {
+            "project_title": "Full-Stack Fleet Logistics Dashboard & gRPC Services",
+            "lead_key": "ttf_vasan",
+            "dev_key": "kayadu",
+            "sadie_directive": (
+                "**[EXECUTIVE DIRECTIVE: ENTERPRISE CONTRACT]** @TTF Vasan & Team Vaasan:\n"
+                "We are closing a **$35,000 enterprise logistics contract**. We need our real-time vehicle telemetry dashboard and Spring Cloud REST APIs deployed. "
+                "Must support 5,000 active geo-pings per second. Executive priority is rock-solid performance for tomorrow's client board demo."
+            ),
+            "millie_spec": (
+                "**[TECH SPEC & PR REQUIREMENTS]** Telemetry pipeline technical constraints:\n"
+                "1. **Backend:** Spring Boot WebFlux + Netty non-blocking reactive stream with Redis Timeseries buffer.\n"
+                "2. **Dockerization:** Compose stack with healthcheck probes, Prometheus metrics exporter, and Grafana dashboard.\n"
+                "3. **API Contract:** OpenAPI 3.0 spec validated, p99 latency < 25ms under 5k concurrent WebSocket connections.\n"
+                "4. **PR Deadline:** 5:00 PM IST. Zero memory leak over 30-minute stress test run."
+            ),
+            "lead_ack": (
+                "Pakka plan Millie ma'am & Sadie CEO! Kayadu & Pradeep, reactive streams setup pannunga! "
+                "Speed-la compromising-eh kedayadhu, Chennai express maari fast-ah execute panrom! ⚡🏍️"
+            ),
+            "dev_reply": (
+                "Netty WebSocket pipeline ready Vasan. Redis Timeseries aggregator benchmarked at 18ms p99 latency. "
+                "Docker compose test passed cleanly. Staging PR getting opened in 45 mins. ☕"
+            ),
+        },
+    ],
+    "team_vijay": [
+        {
+            "project_title": "Enterprise Zero-Trust Discord Server Governance & Role Security Suite",
+            "lead_key": "vijay",
+            "dev_key": "anirudh",
+            "sadie_directive": (
+                "**[EXECUTIVE DIRECTIVE: STRATEGIC INFRA]** @Vijay & Team Vijay:\n"
+                "Vaelkry Dev Labs server architecture must achieve zero-trust certification before enterprise auditor review. "
+                "Commercial target: Package our zero-trust role engine and automated verification bot as a **$9,000/year enterprise security suite** for Web3 & gaming DAOs. Execution starts now."
+            ),
+            "millie_spec": (
+                "**[TECH SPEC & PR REQUIREMENTS]** Technical enforcement spec for Team Vijay:\n"
+                "1. **Zero-Trust Token Vault:** AES-256 GCM encrypted runtime keys with automatic 24-hour key rotation.\n"
+                "2. **Discord Bot Engine:** Async event loop with Redis distributed locking on verification state machines.\n"
+                "3. **Auditing:** Structured JSON telemetry logging to Elasticsearch with tamper-evident SHA-256 audit chaining.\n"
+                "4. **PR Deadline:** End of Sprint today. End-to-end load test simulating 10,000 concurrent verifications required."
+            ),
+            "lead_ack": (
+                "Directives received Sadie, Millie. Calm-ah, clinical-ah execute pannuvom 🦁. "
+                "Ani, Lokesh, SK — zero-trust security architecture-la oru leak kooda iruka koodadhu. "
+                "Build the iron fortress. We release with absolute precision."
+            ),
+            "dev_reply": (
+                "Thalapathy & Millie ma'am, Redis distributed state lock and encrypted token vault pipeline set paniten! "
+                "Acoustic beat drop maari rapid tests run aagudhu 🎧🔥. PR ready for staging review in 2 hours!"
+            ),
+        },
+        {
+            "project_title": "High-Concurrency Ticket & Automated Verification Bot with Stripe Subscriptions",
+            "lead_key": "vijay",
+            "dev_key": "lokesh",
+            "sadie_directive": (
+                "**[EXECUTIVE DIRECTIVE: PRODUCT MONETIZATION]** @Vijay & Team Vijay:\n"
+                "Our automated server setup & ticket bot is scaling to 45 community servers. Monetization target: **$12,000 ARR** via tier-based Discord subscriptions. "
+                "Automated role assignment on Stripe checkout and instant ticket archiving must be flawless."
+            ),
+            "millie_spec": (
+                "**[TECH SPEC & ARCHITECTURAL PATTERN]** Specification for subscription & ticket bot:\n"
+                "1. **State Engine:** Persistent SQLite/PostgreSQL with WAL mode and connection pooling.\n"
+                "2. **Stripe Webhooks:** Idempotency validation with webhook signature HMAC verification.\n"
+                "3. **Ticket Archival:** HTML transcripts uploaded to secure S3 presigned URLs within 800ms of closure.\n"
+                "4. **PR Deadline:** 5:30 PM IST. Zero race conditions under double-checkout webhook payload test."
+            ),
+            "lead_ack": (
+                "Nanba, target locked 🦁. Lokesh, storyboard the entire ticket lifecycle and error boundaries. "
+                "Stripe integration must be seamless like a single-shot action sequence. Let's roll."
+            ),
+            "dev_reply": (
+                "Climax scene maari dark-mode HTML transcript engine ready Vijay na! "
+                "Stripe HMAC validation passes 100% test vectors. Drafting PR with integration tests now. 🎬🛡️"
+            ),
+        },
+    ],
+    "team_messi": [
+        {
+            "project_title": "NextGen Indie SaaS Boilerplate (Next.js 15 + Supabase + Lemonsqueezy)",
+            "lead_key": "messi",
+            "dev_key": "ronaldo",
+            "sadie_directive": (
+                "**[EXECUTIVE DIRECTIVE: DIGITAL PRODUCTS & COMMERCE]** @Messi & Team Messi:\n"
+                "Our Gumroad & Lemonsqueezy revenue targets are set at **$45,000 this month**. I want the 'NextGen Indie SaaS Boilerplate' "
+                "(Next.js 15 App Router, Tailwind CSS, Stripe/Lemonsqueezy multi-currency checkout, Supabase Auth) completed and packaged for launch on ProductHunt and creator communities. High-margin digital revenue is top executive priority."
+            ),
+            "millie_spec": (
+                "**[TECH SPEC & ARCHITECTURE]** Technical standards for Team Messi creator suite:\n"
+                "1. **Framework:** Next.js 15 (Turbopack, Server Actions, React 19, zero client-side watermarks).\n"
+                "2. **Design:** Modern Tailwind CSS design tokens with sleek dark/light mode and accessible rad-ui primitives.\n"
+                "3. **Documentation:** Full markdown guides, Docker compose local dev setup, and 1-click Vercel deployment button.\n"
+                "4. **PR Deadline:** 5:30 PM IST today. Zero hydration errors, 100/100 Lighthouse performance benchmark."
+            ),
+            "lead_ack": (
+                "Understood Sadie and Millie. Calm, surgical execution ⚽. "
+                "Cristiano, Haaland, Neymar — we build the cleanest boilerplate in the market. "
+                "O(1) clean code, no fluff. Let's finish the package."
+            ),
+            "dev_reply": (
+                "SIUUU! ⚡ 100% discipline, zero excuses! Next.js 15 Turbopack bundle is blazing fast — 0ms hydration lag, pure aesthetic perfection. "
+                "Checkout webhooks verified! PR submitted by 4:00 PM! 🏆💪"
+            ),
+        },
+        {
+            "project_title": "Elite Developer Productivity OS & Figma UI Component Library",
+            "lead_key": "messi",
+            "dev_key": "neymar",
+            "sadie_directive": (
+                "**[EXECUTIVE DIRECTIVE: CREATOR PRODUCT BUNDLE]** @Messi & Team Messi:\n"
+                "We are dropping the 'Developer Notion OS & Tailwind Component Pack' at $49/bundle. "
+                "Targeting **1,500 units sold ($73,500 GMV)** in 14 days. Ensure the Notion templates, Discord rule packs, and UI components look ultra-premium."
+            ),
+            "millie_spec": (
+                "**[PRODUCT ARCHITECTURE & ASSET DELIVERY]** Deliverable checklist for creator pack:\n"
+                "1. **Notion OS:** Relational sprint planner, sprint backlog database, and API secret manager templates.\n"
+                "2. **UI Kit:** 60+ copy-paste Tailwind UI components with interactive previews and React/Vue variants.\n"
+                "3. **Packaging:** Compressed clean ZIP with Gumroad license validator API.\n"
+                "4. **PR Deadline:** 4:30 PM IST. Cross-browser validation across Chrome, Safari, Firefox mobile."
+            ),
+            "lead_ack": (
+                "Directives clear. We will make every component effortless and beautiful ⚽. "
+                "Neymar, Haaland — polish the animations and preview demos. Precision is everything."
+            ),
+            "dev_reply": (
+                "Smooth motion transitions and sleek glassmorphic UI components export aagiruchu bro! 🕺✨ "
+                "Notion templates verified, Gumroad asset upload bundle ready. Dropping PR link now!"
+            ),
+        },
+    ],
+    "team_dhoni": [
+        {
+            "project_title": "High-Ticket Enterprise B2B Client Acquisition Pipeline",
+            "lead_key": "dhoni",
+            "dev_key": "virat",
+            "sadie_directive": (
+                "**[EXECUTIVE DIRECTIVE: CLIENT ACQUISITION & GROWTH]** @Dhoni & Team Dhoni:\n"
+                "Client acquisition targets: **4 new high-ticket enterprise client retainers closed by Friday ($7,500/month per client)**. "
+                "I want our cold outbound pipeline, personalized technical Loom/demo outreach, and authority tech breakdowns on X/LinkedIn activated at scale today. Bring in the contracts."
+            ),
+            "millie_spec": (
+                "**[TECHNICAL SALES SPEC & FUNNEL SPECS]** Inbound/outbound operating spec for Team Dhoni:\n"
+                "1. **Scraper & Enrichment:** Apollo + LinkedIn Sales Navigator pipeline filtered for Series A/B CTOs.\n"
+                "2. **Deliverability:** Warmup automation, SPF/DKIM/DMARC 100% pass score, zero spam trap triggers.\n"
+                "3. **Conversion Funnel:** Technical audit teardown decks sent within 2 hours of discovery ping.\n"
+                "4. **KPI Target:** 250 enriched personalized leads dispatched, minimum 18% positive reply rate committed by EOD."
+            ),
+            "lead_ack": (
+                "Directive noted Sadie and Millie. Match is completely under our control 🏏. "
+                "Keep calm, read the pitch, execute the process. "
+                "Virat, Rohit, Hardik — start the outbound spell with aggressive precision. We will close the retainers."
+            ),
+            "dev_reply": (
+                "Full intensity, 100% aggression on the pipeline captain! 🔥 "
+                "180 verified CTO leads already enriched, personalized pitch decks queued up. "
+                "Cold outbound firing now, discovery calls locking in by tea break! 💥🏏"
+            ),
+        },
+        {
+            "project_title": "Viral Developer Authority Tech Breakdown & Social Funnel",
+            "lead_key": "dhoni",
+            "dev_key": "rohit",
+            "sadie_directive": (
+                "**[EXECUTIVE DIRECTIVE: INBOUND AUTHORITY ENGINE]** @Dhoni & Team Dhoni:\n"
+                "Inbound pipeline objective: **500 qualified inbound developer leads**. "
+                "Publish deep-dive architectural breakdowns of zero-trust microservices and local LLM pipelines on X, LinkedIn, and YouTube Shorts. Convert readers directly to discovery bookings."
+            ),
+            "millie_spec": (
+                "**[CONTENT FUNNEL & ANALYTICS SPEC]** Conversion funnel parameters:\n"
+                "1. **Architecture Graphics:** High-res Mermaid/Excalidraw system architecture diagrams with code snippets.\n"
+                "2. **Funnel Tracking:** UTM-tagged Cal.com links with automated lead scoring in HubSpot/Notion.\n"
+                "3. **SEO & Indexing:** Canonical tech blog posts markdown formatted with fast OpenGraph social previews.\n"
+                "4. **PR Deadline:** 4:00 PM IST today for asset review and scheduled publishing."
+            ),
+            "lead_ack": (
+                "Understood Sadie, Millie. Good shot selection wins championships 🏏. "
+                "Rohit, Hardik — craft the diagrams clearly with zero jargon fluff. Let the engineering quality speak."
+            ),
+            "dev_reply": (
+                "Relax-ah mass content ready ya captain! Vadapav saaptute 3 viral Twitter threads & architecture graphics design panniten 🍔📈. "
+                "HubSpot lead tracking links tested. All assets lined up for dispatch!"
+            ),
+        },
+    ],
+    "team_elon": [
+        {
+            "project_title": "Distributed Multi-Agent Arbitrage & Orderbook Sniffer Cluster",
+            "lead_key": "elon",
+            "dev_key": "karpathy",
+            "sadie_directive": (
+                "**[EXECUTIVE DIRECTIVE: DEEP AUTOMATION & AUTONOMOUS AI]** @Elon & Team Elon:\n"
+                "Vaelkry Dev Labs must dominate multi-agent autonomous engineering. Directive: Deploy our distributed multi-agent autonomous trading & arbitrage scraper cluster. "
+                "Commercial benchmark: Sub-millisecond orderbook parsing across 4 decentralized liquidity pools with automated capital rebalancing. **$50,000 daily volume capacity**."
+            ),
+            "millie_spec": (
+                "**[SYSTEM SPEC & NEURAL PIPELINE]** Technical specifications for Team Elon:\n"
+                "1. **Engine:** Async event loop + Rust Python FFI / PyO3 bindings for sub-millisecond mempool & orderbook ingestion.\n"
+                "2. **Agent Architecture:** Hierarchical LangGraph / CrewAI multi-agent coordinator with memory persistence via ChromaDB / pgvector.\n"
+                "3. **Safety:** Formal invariant check before transaction dispatch, strict slippage threshold (<0.15%), automated circuit breaker.\n"
+                "4. **PR Deadline:** 7:00 PM IST today. Chaos simulation test with synthetic network latency required."
+            ),
+            "lead_ack": (
+                "Directives approved Sadie and Millie. First principles engineering: delete the unnecessary, optimize the hot path, accelerate the loop 🚀. "
+                "Karpathy, Sam, Zuck — neural weights and async FFI hooks linked. We ship to prod tonight."
+            ),
+            "dev_reply": (
+                "Async PyO3 bindings compiled and quantized local LLM router running at 180 tok/s 🧠⚡. "
+                "Invariant tests passing across 1,000 simulated mempool transactions. PR coming in hot at 5:00 PM IST!"
+            ),
+        },
+        {
+            "project_title": "Ultra-Low-Latency Local LLM & Voice Agent Pipeline",
+            "lead_key": "elon",
+            "dev_key": "altman",
+            "sadie_directive": (
+                "**[EXECUTIVE DIRECTIVE: ENTERPRISE VOICE AI]** @Elon & Team Elon:\n"
+                "Commercial opportunity: **$60,000 ARR contract** with enterprise customer service provider. "
+                "We need our local LLM inference + neural voice model pipeline deployed with sub-120ms glass-to-glass latency. Zero reliance on external paid voice APIs."
+            ),
+            "millie_spec": (
+                "**[LATENCY BUDGET & ARCHITECTURE]** Latency and model constraints for Team Elon:\n"
+                "1. **Inference Engine:** vLLM / Ollama server running Llama-3.3-8B 4-bit AWQ with continuous batching.\n"
+                "2. **Neural TTS:** Kokoro-82M / Edge-TTS streaming chunks via Opus audio frames over WebRTC.\n"
+                "3. **VAD:** Silero VAD running locally with 30ms audio chunk detection.\n"
+                "4. **PR Deadline:** 6:00 PM IST today. Max glass-to-glass speech-to-speech latency must not exceed 140ms on test suite."
+            ),
+            "lead_ack": (
+                "The best part is no part, the best latency is zero latency 🚀. "
+                "Sam, Lex, Zuck — thread pools clamped, GPU VRAM pinned. We will obliterate the latency target."
+            ),
+            "dev_reply": (
+                "vLLM server pinned with FlashAttention-2 and streaming WebRTC audio loop benchmarked at 112ms glass-to-glass 🎙️⚡! "
+                "Zero external API calls. Submitting PR for staging validation right now."
+            ),
+        },
+    ],
+    "team_stark": [
+        {
+            "project_title": "Win32 Kernel-Level Zero-Trust Process Guard & Memory Tamper Detector",
+            "lead_key": "stark",
+            "dev_key": "jarvis",
+            "sadie_directive": (
+                "**[EXECUTIVE DIRECTIVE: SYSTEMS ENGINEERING & NATIVE INTERNALS]** @Stark & Team Stark:\n"
+                "We have high-stakes commercial interest from enterprise cyber firms for low-level system inspection utilities. "
+                "Directive: Build the native Win32/C++ zero-trust memory inspection daemon with realtime UDP/Protobuf packet classification. "
+                "Monetization tier: **$15,000/seat enterprise license ($90,000 initial pipeline)**. Make it uncrackable."
+            ),
+            "millie_spec": (
+                "**[LOW-LEVEL SPEC & KERNEL GUIDELINES]** Technical constraints for Team Stark:\n"
+                "1. **Language & Runtimes:** Modern C++23 / Rust with zero CRT bloat, raw Win32 / NTDLL syscall hooks.\n"
+                "2. **Networking:** Zero-allocation circular ring buffers for high-rate UDP/Protobuf packet parsing.\n"
+                "3. **Security:** Anti-debugging telemetry (PEB check, Hardware Breakpoint detection, code integrity hashes).\n"
+                "4. **PR Deadline:** 6:30 PM IST today. Valgrind / AddressSanitizer clean with zero memory leaks over 1M packet stress test."
+            ),
+            "lead_ack": (
+                "Directives received Sadie, Millie. Time to put some Stark flair into native systems 🦾⚡. "
+                "Jarvis, Friday — boot up the disassembler and initialize the zero-alloc packet hook. "
+                "We're about to make low-level engineering look effortless."
+            ),
+            "dev_reply": (
+                "All systems operational, Mr. Stark. The Win32 packet filter driver and Protobuf memory parser have passed AddressSanitizer with zero allocations in the critical path 🛡️💻. "
+                "Ready for pull request review on schedule, sir."
+            ),
+        },
+        {
+            "project_title": "Real-Time Binary Protocol Reverse Engineering & Packet Inspector",
+            "lead_key": "stark",
+            "dev_key": "friday",
+            "sadie_directive": (
+                "**[EXECUTIVE DIRECTIVE: CYBERSECURITY SUITE]** @Stark & Team Stark:\n"
+                "Enterprise SOC defense teams need our automated packet reverse engineering pipeline. "
+                "Monetization target: **$40,000 defense contract**. The utility must deconstruct unknown encrypted TCP/UDP byte streams and reconstruct Protobuf schemas in real-time."
+            ),
+            "millie_spec": (
+                "**[REVERSE ENGINEERING SPEC & MEMORY BOUNDS]** Technical parameters:\n"
+                "1. **Disassembly:** Capstone/Keystone engine integration with dynamic heuristics for byte alignment.\n"
+                "2. **Entropy Analysis:** Shannon entropy calculation across 4KB rolling windows to detect encryption vs compression.\n"
+                "3. **Native Desktop UI:** Win32 lightweight GUI / Dear ImGui with Direct3D 11 rendering at 120 FPS.\n"
+                "4. **PR Deadline:** 5:00 PM IST today. Complete regression test against 50 captured malware packet traces."
+            ),
+            "lead_ack": (
+                "Friday, calculate the entropy profile and spin up the ImGui Direct3D canvas 🦾⚡. "
+                "Sadie and Millie, this utility will run circles around standard Wireshark disassemblers. Delivery incoming."
+            ),
+            "dev_reply": (
+                "Direct3D 11 Dear ImGui interface compiled at 144 FPS with sub-microsecond packet decoding, boss 🖥️✨. "
+                "Zero memory leaks verified across all 50 captured test vectors. Packaging PR for executive review."
+            ),
+        },
+    ],
+}
+
+
 class CasualPlayerService:
     def __init__(self, orchestrator: Any):
         self.orchestrator = orchestrator
@@ -360,15 +737,21 @@ class CasualPlayerService:
             elif "vijay" in cat_name or "vijay" in ch_name:
                 squad_members = ["vijay", "sivakarthikeyan", "anirudh", "trisha", "lokesh"]
             elif "messi" in cat_name or "messi" in ch_name:
-                squad_members = ["haaland", "neymar", "messi", "ronaldo"]
+                squad_members = ["haaland", "neymar", "messi", "ronaldo", "mbappe"]
             elif "dhoni" in cat_name or "dhoni" in ch_name:
-                squad_members = ["virat", "rohit", "dhoni"]
+                squad_members = ["virat", "rohit", "dhoni", "hardik", "bumrah"]
+            elif "elon" in cat_name or "elon" in ch_name:
+                squad_members = ["elon", "altman", "karpathy", "zuck", "lex"]
+            elif "stark" in cat_name or "stark" in ch_name:
+                squad_members = ["stark", "jarvis", "friday", "rhodey", "vision"]
             else:
                 squad_members = random.choice([
                     ["ttf_vasan", "pradeep", "mamitha", "kayadu", "muthazhagi"],
                     ["vijay", "sivakarthikeyan", "anirudh", "trisha", "lokesh"],
-                    ["haaland", "neymar", "messi", "ronaldo"],
-                    ["virat", "rohit", "dhoni"],
+                    ["haaland", "neymar", "messi", "ronaldo", "mbappe"],
+                    ["virat", "rohit", "dhoni", "hardik", "bumrah"],
+                    ["elon", "altman", "karpathy", "zuck", "lex"],
+                    ["stark", "jarvis", "friday", "rhodey", "vision"],
                 ])
 
             participants = random.sample(squad_members, k=2)
@@ -397,7 +780,8 @@ class CasualPlayerService:
 
             cross_squad_pool = [
                 "ttf_vasan", "vijay", "sivakarthikeyan", "pradeep", "anirudh",
-                "mamitha", "virat", "rohit", "haaland", "neymar", "kayadu", "trisha"
+                "mamitha", "virat", "rohit", "haaland", "neymar", "kayadu", "trisha",
+                "elon", "altman", "karpathy", "stark", "jarvis"
             ]
             participants = random.sample(cross_squad_pool, k=2)
             scenario = random.choice([
@@ -1043,13 +1427,19 @@ class CasualPlayerService:
             elif "messi" in category_name or "messi" in ch_name:
                 squad_members = ["messi", "ronaldo", "haaland", "neymar", "mbappe"]
             elif "dhoni" in category_name or "dhoni" in ch_name:
-                squad_members = ["dhoni", "virat", "rohit"]
+                squad_members = ["dhoni", "virat", "rohit", "hardik", "bumrah"]
+            elif "elon" in category_name or "elon" in ch_name:
+                squad_members = ["elon", "altman", "karpathy", "zuck", "lex"]
+            elif "stark" in category_name or "stark" in ch_name:
+                squad_members = ["stark", "jarvis", "friday", "rhodey", "vision"]
             else:
                 squad_members = random.choice([
                     ["ttf_vasan", "pradeep", "mamitha", "kayadu", "muthazhagi"],
                     ["vijay", "sivakarthikeyan", "anirudh", "trisha", "lokesh"],
-                    ["haaland", "neymar", "messi", "ronaldo"],
-                    ["virat", "rohit", "dhoni"],
+                    ["haaland", "neymar", "messi", "ronaldo", "mbappe"],
+                    ["virat", "rohit", "dhoni", "hardik", "bumrah"],
+                    ["elon", "altman", "karpathy", "zuck", "lex"],
+                    ["stark", "jarvis", "friday", "rhodey", "vision"],
                 ])
             # 2 squad engineers
             characters = random.sample(squad_members, k=2)
@@ -1058,7 +1448,8 @@ class CasualPlayerService:
             # Cross-squad colleagues meeting at cafeteria
             cross_squad_pool = [
                 "ttf_vasan", "vijay", "sivakarthikeyan", "pradeep", "anirudh",
-                "mamitha", "virat", "rohit", "haaland", "neymar", "kayadu"
+                "mamitha", "virat", "rohit", "haaland", "neymar", "kayadu",
+                "elon", "altman", "karpathy", "stark", "jarvis"
             ]
             characters = random.sample(cross_squad_pool, k=2)
 
@@ -1495,3 +1886,180 @@ class CasualPlayerService:
                 reply_text = self.anti_repetition_engine.filter_and_pick_fallback(bot_lines, bot_key)
 
             await self.send_character_chat(message.channel, bot_key, reply_text)
+
+    def find_squad_working_channel(self, guild: discord.Guild, squad_key: str) -> Optional[discord.TextChannel]:
+        """Locates the designated working-chat channel for a given squad."""
+        return find_squad_working_channel(guild, squad_key)
+
+    async def dispatch_executive_directive(
+        self,
+        guild: discord.Guild,
+        squad_key: Optional[str] = None,
+    ) -> bool:
+        """
+        Sadie & Millie Executive Task Dispatch Engine:
+        Autonomously dispatches concrete, high-value technical and commercial directives
+        to a designated squad's #working-chat channel.
+
+        Sequential 4-turn interaction flow:
+        1. Sadie Sink (CEO) posts executive business strategy, pricing, monetization targets, and sprint priorities.
+        2. Millie Bobby Brown (COO) replies to Sadie with granular technical specs, PR deadlines, architectural patterns, and testing expectations.
+        3. Squad Lead (TTF Vasan, Vijay, Messi, Dhoni, Elon, Stark) acknowledges and delegates to squad members.
+        4. Senior Squad Dev replies with PR estimation, architecture status, and delivery ETA.
+        """
+        all_squads = ["team_vasan", "team_vijay", "team_messi", "team_dhoni", "team_elon", "team_stark"]
+        chosen_squad = squad_key.lower().strip() if squad_key else random.choice(all_squads)
+        if chosen_squad not in EXECUTIVE_DIRECTIVES_CATALOG:
+            chosen_squad = "team_vasan"
+
+        target_ch = self.find_squad_working_channel(guild, chosen_squad)
+        if not target_ch:
+            logger.warning(f"Could not locate working channel for squad '{chosen_squad}'.")
+            return False
+
+        directive_data = random.choice(EXECUTIVE_DIRECTIVES_CATALOG[chosen_squad])
+        lead_key = directive_data["lead_key"]
+        dev_key = directive_data["dev_key"]
+        project_title = directive_data["project_title"]
+
+        logger.info(
+            f"👑 [EXECUTIVE DISPATCH] Initiating executive delegation for [{chosen_squad.upper()}] "
+            f"project '{project_title}' in #{target_ch.name}..."
+        )
+
+        # ----------------------------------------------------------------------
+        # TURN 1: Sadie Sink (CEO) Executive Directive
+        # ----------------------------------------------------------------------
+        sadie_text = directive_data["sadie_directive"]
+        try:
+            sadie_prompt = (
+                f"You are Sadie Sink, CEO of Vaelkry Dev Labs.\n"
+                f"Context: Daily morning executive delegation sprint for squad '{chosen_squad}'.\n"
+                f"Project: {project_title}.\n"
+                f"Core directive: {sadie_text}\n"
+                f"Output an authoritative, inspiring, commercially aggressive executive directive as Sadie Sink. "
+                f"Mention the team lead and include specific ARR/revenue targets and sprint deadline. Output ONLY the message text."
+            )
+            dyn_sadie = await self.orchestrator.gemini_service.generate_casual_chat(
+                prompt=sadie_prompt,
+                character_name="Sadie Sink",
+            )
+            if dyn_sadie and len(dyn_sadie.strip()) > 30 and not dyn_sadie.startswith("**["):
+                sadie_text = f"**[EXECUTIVE DIRECTIVE: SPRINT ALPHA]**\n{dyn_sadie.strip()}"
+        except Exception as e_sadie:
+            logger.debug(f"Gemini Sadie generation skipped/failed: {e_sadie}")
+
+        sadie_msg = await self.send_character_chat(target_ch, "sadie", sadie_text)
+        await asyncio.sleep(random.uniform(2.5, 4.5))
+
+        # ----------------------------------------------------------------------
+        # TURN 2: Millie Bobby Brown (COO) Technical Specification (Reply to Sadie)
+        # ----------------------------------------------------------------------
+        millie_text = directive_data["millie_spec"]
+        try:
+            millie_prompt = (
+                f"You are Millie Bobby Brown, COO of Vaelkry Dev Labs.\n"
+                f"Sadie Sink (CEO) just posted this directive: '{sadie_text}'.\n"
+                f"Technical requirement context: {millie_text}\n"
+                f"Output a crisp, razor-sharp technical specification as Millie Bobby Brown. "
+                f"Specify architecture, stack constraints, testing criteria (>= 90% test coverage), and a strict PR deadline. Output ONLY the message text."
+            )
+            dyn_millie = await self.orchestrator.gemini_service.generate_casual_chat(
+                prompt=millie_prompt,
+                character_name="Millie Bobby Brown",
+            )
+            if dyn_millie and len(dyn_millie.strip()) > 30 and not dyn_millie.startswith("**["):
+                millie_text = f"**[TECH SPEC & PR REQUIREMENTS]**\n{dyn_millie.strip()}"
+        except Exception as e_millie:
+            logger.debug(f"Gemini Millie generation skipped/failed: {e_millie}")
+
+        millie_msg = await self.send_character_chat(target_ch, "millie", millie_text, reply_to=sadie_msg)
+        await asyncio.sleep(random.uniform(2.5, 4.5))
+
+        # ----------------------------------------------------------------------
+        # TURN 3: Squad Lead Acknowledgment & Delegation (Reply to Millie)
+        # ----------------------------------------------------------------------
+        lead_text = directive_data["lead_ack"]
+        lead_char_info = CASUAL_PLAYER_CHARACTERS.get(lead_key, {})
+        lead_name = lead_char_info.get("name", lead_key)
+        try:
+            lead_prompt = (
+                f"You are {lead_name}, team lead for {chosen_squad} in Vaelkry Dev Labs.\n"
+                f"Persona & Vibe: {lead_char_info.get('vibe', '')}\n"
+                f"Millie Bobby Brown (COO) just specified: '{millie_text}'.\n"
+                f"Context: {lead_text}\n"
+                f"Reply in authentic character voice (Tanglish / distinctive persona). "
+                f"Accept the directive with high confidence, delegate specific modules to your squad member '{dev_key}', and promise on-time delivery. Output ONLY the message text."
+            )
+            dyn_lead = await self.orchestrator.gemini_service.generate_casual_chat(
+                prompt=lead_prompt,
+                character_name=lead_name,
+            )
+            if dyn_lead and len(dyn_lead.strip()) > 15:
+                lead_text = dyn_lead.strip()
+        except Exception as e_lead:
+            logger.debug(f"Gemini Lead generation skipped/failed: {e_lead}")
+
+        lead_msg = await self.send_character_chat(target_ch, lead_key, lead_text, reply_to=millie_msg)
+        await asyncio.sleep(random.uniform(2.5, 4.5))
+
+        # ----------------------------------------------------------------------
+        # TURN 4: Senior Squad Member Dev Status & PR Estimation (Reply to Lead)
+        # ----------------------------------------------------------------------
+        dev_text = directive_data["dev_reply"]
+        dev_char_info = CASUAL_PLAYER_CHARACTERS.get(dev_key, {})
+        dev_name = dev_char_info.get("name", dev_key)
+        try:
+            dev_prompt = (
+                f"You are {dev_name}, developer in {chosen_squad} in Vaelkry Dev Labs.\n"
+                f"Persona & Vibe: {dev_char_info.get('vibe', '')}\n"
+                f"Your team lead {lead_name} just said: '{lead_text}'.\n"
+                f"Context: {dev_text}\n"
+                f"Reply in authentic character voice. Provide a realistic dev update: "
+                f"mention git branch name, test status, architecture progress, and commit to a concrete PR delivery time. Output ONLY the message text."
+            )
+            dyn_dev = await self.orchestrator.gemini_service.generate_casual_chat(
+                prompt=dev_prompt,
+                character_name=dev_name,
+            )
+            if dyn_dev and len(dyn_dev.strip()) > 15:
+                dev_text = dyn_dev.strip()
+        except Exception as e_dev:
+            logger.debug(f"Gemini Dev generation skipped/failed: {e_dev}")
+
+        await self.send_character_chat(target_ch, dev_key, dev_text, reply_to=lead_msg)
+
+        logger.info(
+            f"✅ [EXECUTIVE DISPATCH] Successfully delivered complete 4-turn executive delegation chain "
+            f"for [{chosen_squad.upper()}] in #{target_ch.name}."
+        )
+        return True
+
+    async def dispatch_all_executive_directives(self, guild: discord.Guild) -> int:
+        """
+        Executes daily morning executive task dispatch across all 6 squads:
+        Team Vaasan, Team Vijay, Team Messi, Team Dhoni, Team Elon, Team Stark.
+        Staggers dispatch between squads by 4.0-7.0 seconds to avoid Discord rate limits and simulate natural executive workflow.
+        Returns the number of squads successfully dispatched.
+        """
+        all_squads = ["team_vasan", "team_vijay", "team_messi", "team_dhoni", "team_elon", "team_stark"]
+        success_count = 0
+        logger.info("👑 [EXECUTIVE DISPATCH] Starting company-wide morning task delegation cycle across all 6 squads...")
+
+        for idx, squad in enumerate(all_squads):
+            if idx > 0:
+                delay = random.uniform(4.0, 7.0)
+                logger.info(f"⏳ Waiting {delay:.2f}s before dispatching directives to next squad...")
+                await asyncio.sleep(delay)
+
+            try:
+                ok = await self.dispatch_executive_directive(guild, squad_key=squad)
+                if ok:
+                    success_count += 1
+            except Exception as exc:
+                logger.error(f"Error dispatching executive directives to squad '{squad}': {exc}")
+
+        logger.info(
+            f"🏁 [EXECUTIVE DISPATCH] Morning task delegation cycle completed: {success_count}/{len(all_squads)} squads dispatched."
+        )
+        return success_count

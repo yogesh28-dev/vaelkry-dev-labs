@@ -881,7 +881,7 @@ class VaelkryBotClient(discord.Client):
         async def voice_profiles_slash(interaction: discord.Interaction):
             embed = discord.Embed(
                 title="🎙️ Vaelkry Dev Labs - Neural Voice Catalog",
-                description="All 22 bot personas configured with authentic Microsoft Edge-TTS / Azure neural voices, custom pitch offsets, and dynamic speed rates:",
+                description="All 32 bot personas across 6 engineering squads configured with authentic Microsoft Edge-TTS / Azure neural voices, custom pitch offsets, and dynamic speed rates:",
                 color=0x3498DB,
             )
 
@@ -914,7 +914,7 @@ class VaelkryBotClient(discord.Client):
 
         @self.tree.command(
             name="wake_all_vc",
-            description="Wakes all 22 bots, moves them to target VC (or Tech Cafe), undeafens/unmutes them & overrides sleep",
+            description="Wakes all 32 bots, moves them to target VC (or Tech Cafe), undeafens/unmutes them & overrides sleep",
         )
         @app_commands.describe(
             target_channel="Voice channel to gather all bots in (defaults to your current VC or Tech Cafe)",
@@ -983,6 +983,67 @@ class VaelkryBotClient(discord.Client):
             target_channel: Optional[discord.VoiceChannel] = None,
         ):
             await wake_all_vc_slash(interaction, target_channel=target_channel)
+
+        @self.tree.command(
+            name="executive_dispatch",
+            description="Triggers Sadie & Millie autonomous executive directive delegation to a squad (or all squads)",
+        )
+        @app_commands.describe(
+            squad="Target squad: team_vasan, team_vijay, team_messi, team_dhoni, team_elon, team_stark, or 'all'",
+        )
+        async def executive_dispatch_slash(
+            interaction: discord.Interaction,
+            squad: Optional[str] = None,
+        ):
+            if not interaction.guild:
+                await interaction.response.send_message("⚠️ Run within a corporate server!", ephemeral=True)
+                return
+
+            mem = interaction.guild.get_member(interaction.user.id) or interaction.user
+            if not is_admin_or_owner(mem, interaction.guild):
+                await interaction.response.send_message(
+                    "🛑 **Access Denied:** Only the CEO or Admin can trigger Executive Directives!",
+                    ephemeral=True,
+                )
+                return
+
+            await interaction.response.defer(ephemeral=False)
+            target_squad = squad.lower().strip() if squad else "all"
+
+            if target_squad in ("all", "all_squads", "every"):
+                count = await self.orchestrator.casual_player_service.dispatch_all_executive_directives(interaction.guild)
+                embed = discord.Embed(
+                    title="👑 Sadie & Millie Executive Task Dispatch Engine",
+                    description=(
+                        f"✅ **Daily delegations successfully dispatched to {count}/6 engineering squads!**\n\n"
+                        "• **Directives Issued:** Business strategy, pricing targets ($ ARR), and sprint priorities (Sadie Sink, CEO).\n"
+                        "• **Technical Specs:** Architecture guidelines, >= 90% test coverage, and PR deadlines (Millie Bobby Brown, COO).\n"
+                        "• **Channels Tagged:** #working-chat across Team Vaasan, Team Vijay, Team Messi, Team Dhoni, Team Elon, Team Stark.\n"
+                        "• **Status:** Squad leads and devs actively acknowledging and estimating delivery in their respective channels."
+                    ),
+                    color=discord.Color.gold(),
+                )
+                await interaction.followup.send(embed=embed)
+            else:
+                ok = await self.orchestrator.casual_player_service.dispatch_executive_directive(
+                    interaction.guild, squad_key=target_squad
+                )
+                if ok:
+                    embed = discord.Embed(
+                        title="👑 Sadie & Millie Executive Directives Dispatched",
+                        description=(
+                            f"✅ **Executive directives dispatched to [{target_squad.upper()}]!**\n\n"
+                            "• Sadie (CEO) & Millie (COO) posted strategy and specs.\n"
+                            "• Team lead and senior dev acknowledged in their squad's #working-chat."
+                        ),
+                        color=discord.Color.gold(),
+                    )
+                    await interaction.followup.send(embed=embed)
+                else:
+                    await interaction.followup.send(
+                        f"⚠️ Could not dispatch directive to '{target_squad}'. Ensure squad exists and #working-chat is accessible.",
+                        ephemeral=True,
+                    )
 
     async def on_ready(self):
         logger.info(
@@ -1086,7 +1147,7 @@ class VaelkryBotClient(discord.Client):
             )
             is_working_vc = (
                 "working" in ch_name
-                or any(t in cat_name for t in ("team vaasan", "team vasan", "team vijay", "team messi", "team dhoni"))
+                or any(t in cat_name for t in ("team vaasan", "team vasan", "team vijay", "team messi", "team dhoni", "team elon", "team stark"))
             )
 
             is_override = getattr(self.orchestrator.scheduler_service, "voice_override_active", False)
@@ -1474,6 +1535,31 @@ class AgentOrchestrator:
         if content.startswith("!unfollow"):
             msg = await self.moderator_service.stop_following(message.guild)
             await message.channel.send(msg)
+            return
+
+        # Prefix command: !dispatch [squad_name or 'all']
+        if content.startswith("!dispatch") or content.startswith("!executivedispatch"):
+            if not message.guild:
+                return
+            member = message.guild.get_member(message.author.id) or message.author
+            if not is_admin_or_owner(member, message.guild):
+                await message.channel.send("🛑 **Access Denied:** Only the CEO or Admin can trigger Executive Directives!")
+                return
+            parts = content.split(maxsplit=1)
+            target_squad = parts[1].strip().lower() if len(parts) > 1 else "all"
+
+            if target_squad in ("all", "all_squads", "every"):
+                await message.channel.send("👑 **Dispatching Sadie & Millie executive directives across all 6 squads...**")
+                count = await self.casual_player_service.dispatch_all_executive_directives(message.guild)
+                await message.channel.send(
+                    f"✅ **Executive task delegation complete!** Dispatched to `{count}/6` squads in their respective `#working-chat` channels."
+                )
+            else:
+                ok = await self.casual_player_service.dispatch_executive_directive(message.guild, squad_key=target_squad)
+                if ok:
+                    await message.channel.send(f"✅ **Executive directive dispatched to [{target_squad.upper()}]!** Check their `#working-chat`.")
+                else:
+                    await message.channel.send(f"⚠️ Could not dispatch directive to `{target_squad}`. Check squad name and channel accessibility.")
             return
 
         # Prefix command: !idcard [member]

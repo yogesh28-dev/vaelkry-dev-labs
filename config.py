@@ -73,6 +73,14 @@ class SystemConfig:
     def team_dhoni_agents(self) -> Dict[str, AgentConfig]:
         return {k: v for k, v in self.agents.items() if v.team == "team_dhoni"}
 
+    @property
+    def team_elon_agents(self) -> Dict[str, AgentConfig]:
+        return {k: v for k, v in self.agents.items() if v.team == "team_elon"}
+
+    @property
+    def team_stark_agents(self) -> Dict[str, AgentConfig]:
+        return {k: v for k, v in self.agents.items() if v.team == "team_stark"}
+
 
 # Corporate Engineering Squads Catalog
 SQUADS: Dict[str, dict] = {
@@ -99,6 +107,18 @@ SQUADS: Dict[str, dict] = {
         "lead": "dhoni",
         "members": ["dhoni", "virat", "rohit", "jadeja", "hardik"],
         "domain": "Clutch Incident Management, High-Pressure Production Fixes & Core Reliability",
+    },
+    "team_elon": {
+        "name": "Team Elon",
+        "lead": "elon",
+        "members": ["elon", "altman", "karpathy", "zuck", "lex"],
+        "domain": "Autonomous AI Systems, Deep Automation & Next-Gen Tech",
+    },
+    "team_stark": {
+        "name": "Team Stark",
+        "lead": "stark",
+        "members": ["stark", "jarvis", "friday", "rhodey", "vision"],
+        "domain": "Cybersecurity, Reverse Engineering & Native Desktop Internals",
     },
 }
 
@@ -131,6 +151,18 @@ BOT_TOKENS: Dict[str, str] = {
     "rohit": os.getenv("BOT_TOKEN_ROHIT", "").strip(),
     "jadeja": os.getenv("BOT_TOKEN_JADEJA", "").strip(),
     "hardik": os.getenv("BOT_TOKEN_HARDIK", "").strip(),
+    # Team Elon
+    "elon": os.getenv("BOT_TOKEN_ELON", "").strip(),
+    "altman": os.getenv("BOT_TOKEN_ALTMAN", "").strip(),
+    "karpathy": os.getenv("BOT_TOKEN_KARPATHY", "").strip(),
+    "zuck": os.getenv("BOT_TOKEN_ZUCK", "").strip(),
+    "lex": os.getenv("BOT_TOKEN_LEX", "").strip(),
+    # Team Stark
+    "stark": os.getenv("BOT_TOKEN_STARK", "").strip(),
+    "jarvis": os.getenv("BOT_TOKEN_JARVIS", "").strip(),
+    "friday": os.getenv("BOT_TOKEN_FRIDAY", "").strip(),
+    "rhodey": os.getenv("BOT_TOKEN_RHODEY", "").strip(),
+    "vision": os.getenv("BOT_TOKEN_VISION", "").strip(),
 }
 
 
@@ -189,6 +221,24 @@ def load_config() -> SystemConfig:
         ("hardik", "Hardik", "Swagger All-Rounder & Production Hotfix Specialist", "developer", "team_dhoni", "BOT_TOKEN_HARDIK", []),
     ]
 
+    # Team Elon Developer Agents (5) - Autonomous AI Systems & Next-Gen Tech
+    elon_definitions = [
+        ("elon", "Elon", "Team Lead & Techno-King (Multi-Agent Swarms & Autonomous AI)", "developer", "team_elon", "BOT_TOKEN_ELON", []),
+        ("altman", "Altman", "Chief AI Architect & Latent Reasoning Specialist", "developer", "team_elon", "BOT_TOKEN_ALTMAN", []),
+        ("karpathy", "Karpathy", "Neural Weights & Local GGUF Systems Lead", "developer", "team_elon", "BOT_TOKEN_KARPATHY", []),
+        ("zuck", "Zuck", "Open Weights & Synthetic Data Flywheel Lead", "developer", "team_elon", "BOT_TOKEN_ZUCK", []),
+        ("lex", "Lex", "Autonomous AI Sentinel & Ethical Agent Auditor", "developer", "team_elon", "BOT_TOKEN_LEX", []),
+    ]
+
+    # Team Stark Developer Agents (5) - Cybersecurity & Native Desktop Internals
+    stark_definitions = [
+        ("stark", "Stark", "Team Lead & Systems Internals Master (Reverse Eng & Win32)", "developer", "team_stark", "BOT_TOKEN_STARK", []),
+        ("jarvis", "Jarvis", "Kernel Telemetry & Protocol Specialist", "developer", "team_stark", "BOT_TOKEN_JARVIS", []),
+        ("friday", "Friday", "Reverse Engineering & Binary Decompiler Lead", "developer", "team_stark", "BOT_TOKEN_FRIDAY", []),
+        ("rhodey", "Rhodey", "War Machine & Zero-Trust Defense Sentinel", "developer", "team_stark", "BOT_TOKEN_RHODEY", []),
+        ("vision", "Vision", "Quantum Cryptography & Memory Architecture Lead", "developer", "team_stark", "BOT_TOKEN_VISION", []),
+    ]
+
     # Executive Moderator Agents (2) - Core Required
     mod_definitions = [
         ("sadie", "SadieSink", "Executive Moderator & Onboarding Lead", "moderator", "executives", "BOT_TOKEN_SADIE", []),
@@ -214,11 +264,13 @@ def load_config() -> SystemConfig:
                 next_tags=next_tags,
             )
 
-    # Check and load optional squads (Team Vijay, Team Messi, Team Dhoni)
+    # Check and load optional squads (Team Vijay, Team Messi, Team Dhoni, Team Elon, Team Stark)
     optional_squads = [
         ("Team Vijay", vijay_definitions),
         ("Team Messi", messi_definitions),
         ("Team Dhoni", dhoni_definitions),
+        ("Team Elon", elon_definitions),
+        ("Team Stark", stark_definitions),
     ]
 
     import logging

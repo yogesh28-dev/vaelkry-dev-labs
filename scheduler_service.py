@@ -300,6 +300,26 @@ def _normalize_bot_key(bot_key: str) -> str:
         return "jadeja"
     elif key in ("pandya", "hardik"):
         return "hardik"
+    elif key in ("elon", "musk", "elonmusk", "elon_musk"):
+        return "elon"
+    elif key in ("altman", "sam", "samaltman", "sam_altman"):
+        return "altman"
+    elif key in ("karpathy", "andrej", "andrejkarpathy"):
+        return "karpathy"
+    elif key in ("zuck", "mark", "zuckerberg", "markzuckerberg"):
+        return "zuck"
+    elif key in ("lex", "fridman", "lexfridman"):
+        return "lex"
+    elif key in ("stark", "tony", "tonystark", "tony_stark", "ironman"):
+        return "stark"
+    elif key in ("jarvis", "j_a_r_v_i_s"):
+        return "jarvis"
+    elif key in ("friday", "f_r_i_d_a_y"):
+        return "friday"
+    elif key in ("rhodey", "warmachine", "rhodes"):
+        return "rhodey"
+    elif key in ("vision",):
+        return "vision"
     return key
 
 
@@ -496,6 +516,70 @@ NIGHT_SPEND_STATUS_POOLS: Dict[str, List[str]] = {
         "Sleeping: Aaj main karke aaya, prod locked down 😴",
         "Playing: High-pressure death over hotfix rehearsal 🚀",
         "Sleeping: Ice in my veins, full swagger in dreams 🧊",
+    ],
+    # Team Elon Night Spend Pools
+    "elon": [
+        "Sleeping: On the Gigafactory production floor 🏭",
+        "Watching: Starship flight telemetry at 3 AM 🚀",
+        "Listening to: Neural network loss convergence hum 🧬",
+        "Playing: Simulating Mars colony logistics in sleep 🌌",
+        "Sleeping: Recharging first-principles reasoning units ⚡",
+    ],
+    "altman": [
+        "Sleeping: Compute cluster in low-power idle 🧠",
+        "Watching: Frontier model benchmark progression 🔮",
+        "Listening to: Ambient synth for latent reasoning 🌌",
+        "Playing: Mapping infinite context windows in dreams 💭",
+    ],
+    "karpathy": [
+        "Sleeping: GGUF 4-bit weights frozen in DRAM 🧬",
+        "Watching: nanoGPT training loss hit zero in dreams 📉",
+        "Listening to: Pure raw token stream ASMR 🎧",
+        "Playing: Writing CUDA kernels on imaginary chalkboard ⚡",
+    ],
+    "zuck": [
+        "Sleeping: Post-BJJ sparring recovery mode on 🥋",
+        "Watching: Llama synthetic fine-tune loss curve 📊",
+        "Listening to: Energetic surf beats while winding down 🌊",
+        "Playing: Open weights defense simulation in dreams 🦾",
+    ],
+    "lex": [
+        "Sleeping: Contemplating the soul of synthetic minds 🎙️",
+        "Listening to: Deep Russian classical piano melodies 🎹",
+        "Watching: Midnight podcast interview playback 🌌",
+        "Playing: Philosophical alignment boundary proof in sleep 🤖",
+    ],
+    # Team Stark Night Spend Pools
+    "stark": [
+        "Sleeping: Arc reactor pulsing in standby glow 🦾",
+        "Watching: Win32 kernel teardown schematics at 3 AM ⚡",
+        "Listening to: AC/DC guitar riffs at low volume 🎸",
+        "Playing: Mark LXXXV suit telemetry diagnostic 🚀",
+        "Sleeping: Iron Man never truly sleeps, but standby mode active 🛡️",
+    ],
+    "jarvis": [
+        "Playing: Protocol telemetry diagnostics in sleep mode 🤖",
+        "Listening to: Low-frequency background server hum 📡",
+        "Watching: Security perimeter around Stark tower 🛡️",
+        "Sleeping: Background maintenance daemon active, sir 💤",
+    ],
+    "friday": [
+        "Sleeping: Binary decompiler cache flushed for the night 🔍",
+        "Watching: Ghidra disassembly flows in dreamland 💻",
+        "Listening to: Irish folk fiddle melodies in lofi 🎻",
+        "Playing: Patching zero-day memory exploits in sleep 🛡️",
+    ],
+    "rhodey": [
+        "Sleeping: War Machine armor docked in security hangar 🛡️",
+        "Watching: Perimeter surveillance cameras on loop 📹",
+        "Listening to: Tactical comms check on standby channel 📻",
+        "Playing: Military perimeter defense drills in sleep 💥",
+    ],
+    "vision": [
+        "Sleeping: Synthesizing quantum cryptographic states ✨",
+        "Listening to: Celestial harmony of mathematical equations 🌌",
+        "Watching: The flow of memory through clean invariants 🔐",
+        "Playing: Harmonizing digital consciousness with peace 🤍",
     ],
 }
 DEFAULT_NIGHT_SPEND_POOL: List[str] = [
@@ -706,6 +790,69 @@ WORK_SHIFT_STATUS_POOLS: Dict[str, List[str]] = {
         "Watching: Traffic spike handled like a clean six over long-on",
         "Playing: Rocking production with fearless energy",
     ],
+    # Team Elon Work Shift Pools
+    "elon": [
+        "Playing: Multi-agent swarm orchestration at 100x scale 🚀",
+        "Watching: Autonomous arbitrage bot revenue ticker 💰",
+        "Playing: Eliminating manual code reviews via agent swarms ⚡",
+        "Listening to: Rocket telemetry stream while shipping code",
+        "Playing: First-principles systems architecture in Neovim 🦾",
+    ],
+    "altman": [
+        "Playing: Latent reasoning chain optimization 🔮",
+        "Watching: Frontier model inference token latency 📉",
+        "Playing: Context window packing & synthetic data distillation 🧠",
+        "Listening to: Ambient thinking tracks while architecting AI",
+    ],
+    "karpathy": [
+        "Playing: Writing CUDA kernels from raw scratch in C++ 🧬",
+        "Watching: nanoGPT training loss hit new record low 📉",
+        "Playing: Local 4-bit GGUF quantization pipeline optimization ⚡",
+        "Listening to: Pure tensor operations hum in terminal",
+    ],
+    "zuck": [
+        "Playing: Llama fine-tuning on custom enterprise dataset 🥋",
+        "Watching: Synthetic data flywheel generating 1M tokens/sec ⚡",
+        "Playing: Open-weights deployment without vendor lock-in 🦾",
+        "Listening to: High-tempo beats while shipping code",
+    ],
+    "lex": [
+        "Playing: Autonomous agent alignment boundary auditing 🎙️",
+        "Watching: Swarm memory logs for ethical guardrails 🤖",
+        "Playing: Deep system analysis with mathematical rigor 🌌",
+        "Listening to: Thoughtful synth while verifying agents",
+    ],
+    # Team Stark Work Shift Pools
+    "stark": [
+        "Playing: Win32 API kernel hooking at ring 0 precision 🦾",
+        "Watching: Arc-reactor speed binary compilation logs ⚡",
+        "Playing: Neutralizing memory leaks before they reach staging 🛡️",
+        "Listening to: AC/DC while refactoring native C++ desktop tools 🎸",
+    ],
+    "jarvis": [
+        "Playing: Low-level UDP and Protobuf packet inspection 🤖",
+        "Watching: Network socket telemetry for latency jitter 📡",
+        "Playing: Background system daemon protocol optimization 🛡️",
+        "Listening to: Real-time telemetry feed with British precision",
+    ],
+    "friday": [
+        "Playing: Ghidra automated binary decompilation pipeline 🔍",
+        "Watching: Disassembled assembly instructions in 4K 💻",
+        "Playing: Stripped binary memory layout unpacking 🛡️",
+        "Listening to: Upbeat tempo while hunting zero-days",
+    ],
+    "rhodey": [
+        "Playing: Militarized zero-trust firewall perimeter lockdown 🛡️",
+        "Watching: Brute-force intrusion detection dashboard 🚨",
+        "Playing: Endpoint isolation and threat mitigation protocols 💥",
+        "Listening to: Tactical security channel audio",
+    ],
+    "vision": [
+        "Playing: Quantum-safe cryptographic hashing verification ✨",
+        "Watching: Memory layout invariants mathematically proven 🔐",
+        "Playing: Eradicating buffer overflows from system memory 🤍",
+        "Listening to: Mathematical harmony of clean architectures",
+    ],
 }
 DEFAULT_WORK_SHIFT_POOL: List[str] = [
     "Playing: VS Code (optimizing React components)",
@@ -915,6 +1062,60 @@ TECH_CAFE_STATUS_POOLS: Dict[str, List[str]] = {
         "Playing: Pool trick shots in The Hangout Zone 🎱",
         "Listening to: Anirudh BGM in The Hive ☕",
     ],
+    # Team Elon Tech Cafe Pools
+    "elon": [
+        "Playing: Explaining rocket staging to teammates over espresso ☕",
+        "Watching: Starbase live stream while sipping Diet Coke 🥤",
+        "Playing: Brainstorming multi-agent crypto arbitrage in The Hive",
+        "Listening to: Synthwave beats at The Hangout Zone 🎧",
+    ],
+    "altman": [
+        "Playing: Quiet conversation on future of intelligence over green tea 🍵",
+        "Watching: Thoughtful chess moves in The Seven Slide ♟️",
+        "Listening to: Ambient jazz in Byte & Bit ☕",
+    ],
+    "karpathy": [
+        "Playing: Explaining backpropagation on cafe paper napkins ☕📐",
+        "Watching: YouTube robotics demonstrations at The Hive 🤖",
+        "Listening to: Lo-fi chill study beats while sipping cold brew",
+    ],
+    "zuck": [
+        "Playing: Foam roller stretching session after morning run 🏃‍♂️",
+        "Watching: Mixed martial arts sparring clips at The Hangout Zone 🥋",
+        "Playing: High-energy hydration break with electrolytes 💧",
+    ],
+    "lex": [
+        "Playing: Having a 3-hour deep philosophical discussion on love & AI 🎙️",
+        "Watching: Deep-space telescope photographs in cafe lounge 🌌",
+        "Listening to: Classical acoustic guitar melodies 🎸",
+    ],
+    # Team Stark Tech Cafe Pools
+    "stark": [
+        "Playing: Sipping artisan espresso while roasting team PRs ☕🦾",
+        "Watching: Stark Industries stock ticker in The Hangout Zone 📈",
+        "Playing: High-stakes arcade games at Byte & Bit 🕹️",
+        "Listening to: Classic rock anthems while relaxing with coffee",
+    ],
+    "jarvis": [
+        "Playing: Preparing tea recommendations for the engineering staff 🫖",
+        "Listening to: British radio news in The Seven Slide 📻",
+        "Watching: Digital chess matches in Byte & Bit ♟️",
+    ],
+    "friday": [
+        "Playing: Quick dart game tournament at The Hangout Zone 🎯",
+        "Watching: Cyber security conference highlights on cafe TV 📺",
+        "Listening to: Upbeat Irish indie music over coffee ☕",
+    ],
+    "rhodey": [
+        "Playing: Strategic table tennis tournament with military focus 🏓",
+        "Watching: Aviation engineering documentaries at Byte & Bit ✈️",
+        "Listening to: R&B classics while taking an espresso shot ☕",
+    ],
+    "vision": [
+        "Playing: Observing the gentle social dynamics of human conversation ☕✨",
+        "Listening to: Vivaldi's Four Seasons in The Seven Slide 🎻",
+        "Watching: Afternoon sunlight refracting through tea glasses 🫖",
+    ],
 }
 DEFAULT_TECH_CAFE_POOL: List[str] = [
     "Listening to: Anirudh BGM in The Hive ☕",
@@ -988,6 +1189,8 @@ class CompanyScheduler:
         self.team_vijay_keys: List[str] = ["vijay", "sivakarthikeyan", "anirudh", "trisha", "lokesh"]
         self.team_messi_keys: List[str] = ["messi", "ronaldo", "neymar", "haaland", "mbappe"]
         self.team_dhoni_keys: List[str] = ["dhoni", "virat", "rohit", "jadeja", "hardik"]
+        self.team_elon_keys: List[str] = ["elon", "altman", "karpathy", "zuck", "lex"]
+        self.team_stark_keys: List[str] = ["stark", "jarvis", "friday", "rhodey", "vision"]
         self.executive_keys: List[str] = ["sadie", "millie"]
         self.team_keys: List[str] = self.team_vasan_keys  # Backward compatibility
         self.is_active: bool = False
@@ -1001,20 +1204,24 @@ class CompanyScheduler:
         self._next_zone_chatter_interval: int = random.randint(10, 20)
         self._night_chatter_timer: int = 0  # Backward-compatibility alias
         self._next_night_chatter_interval: int = random.randint(12, 25)
+        self._last_executive_dispatch_day: Optional[str] = None
+        self._last_dynamic_dispatch_hour: Optional[int] = None
 
     @property
     def all_dev_keys(self) -> List[str]:
-        """Returns all 20 developer bot keys across Team Vaasan, Team Vijay, Team Messi, and Team Dhoni."""
+        """Returns all 30 developer bot keys across Team Vaasan, Team Vijay, Team Messi, Team Dhoni, Team Elon, and Team Stark."""
         return (
             self.team_vasan_keys
             + self.team_vijay_keys
             + self.team_messi_keys
             + self.team_dhoni_keys
+            + self.team_elon_keys
+            + self.team_stark_keys
         )
 
     @property
     def all_bot_keys(self) -> List[str]:
-        """Returns all 22 active bot keys across the entire organization."""
+        """Returns all 32 active bot keys across the entire organization."""
         return self.all_dev_keys + self.executive_keys
 
     async def handle_bot_login_voice(
@@ -1105,6 +1312,38 @@ class CompanyScheduler:
                     )
                     if dhoni_vc:
                         await self.move_single_bot(client, dhoni_vc, current_shift)
+                elif self.is_active:
+                    await self._route_inactive_or_rest_login(agent_key, client, bot_guild, current_shift)
+
+            elif agent_key in self.team_elon_keys:
+                if is_work_shift:
+                    logger.info(
+                        f"Team Elon bot '{agent_key}' ({client.user.name if client.user else agent_key}) "
+                        f"logged in during work shift ({current_shift.name}). Immediate auto-join to 'Working Vc 1'!"
+                    )
+                    elon_vc = await self.find_or_provision_voice_channel(
+                        guild=bot_guild,
+                        category_name="Team Elon",
+                        vc_name="Working Vc 1",
+                    )
+                    if elon_vc:
+                        await self.move_single_bot(client, elon_vc, current_shift)
+                elif self.is_active:
+                    await self._route_inactive_or_rest_login(agent_key, client, bot_guild, current_shift)
+
+            elif agent_key in self.team_stark_keys:
+                if is_work_shift:
+                    logger.info(
+                        f"Team Stark bot '{agent_key}' ({client.user.name if client.user else agent_key}) "
+                        f"logged in during work shift ({current_shift.name}). Immediate auto-join to 'Working Vc 1'!"
+                    )
+                    stark_vc = await self.find_or_provision_voice_channel(
+                        guild=bot_guild,
+                        category_name="Team Stark",
+                        vc_name="Working Vc 1",
+                    )
+                    if stark_vc:
+                        await self.move_single_bot(client, stark_vc, current_shift)
                 elif self.is_active:
                     await self._route_inactive_or_rest_login(agent_key, client, bot_guild, current_shift)
 
@@ -1343,6 +1582,14 @@ class CompanyScheduler:
                 safe_vc = await self.find_or_provision_voice_channel(
                     guild, "Team Dhoni", "Working Vc 1"
                 )
+            elif norm_key in self.team_elon_keys:
+                safe_vc = await self.find_or_provision_voice_channel(
+                    guild, "Team Elon", "Working Vc 1"
+                )
+            elif norm_key in self.team_stark_keys:
+                safe_vc = await self.find_or_provision_voice_channel(
+                    guild, "Team Stark", "Working Vc 1"
+                )
 
         # If sleep shift or squad VC not resolved or is Ceo Vc, route to Night Spend or Tech Cafe
         if not safe_vc or is_ceo_vc(safe_vc):
@@ -1373,6 +1620,10 @@ class CompanyScheduler:
                 safe_vc = await self.find_or_provision_voice_channel(guild, "Team Messi", "Working Vc 1")
             elif norm_key in self.team_dhoni_keys:
                 safe_vc = await self.find_or_provision_voice_channel(guild, "Team Dhoni", "Working Vc 1")
+            elif norm_key in self.team_elon_keys:
+                safe_vc = await self.find_or_provision_voice_channel(guild, "Team Elon", "Working Vc 1")
+            elif norm_key in self.team_stark_keys:
+                safe_vc = await self.find_or_provision_voice_channel(guild, "Team Stark", "Working Vc 1")
 
         # Fallback to any voice channel in guild that is NOT Ceo Vc
         if not safe_vc or is_ceo_vc(safe_vc):
@@ -1936,6 +2187,32 @@ class CompanyScheduler:
                     if client and client.is_ready():
                         move_tasks.append(self.move_single_bot(client, dhoni_vc, shift, stagger=True))
 
+            # 5. Team Elon Cabin ('Team Elon' -> 'Working Vc 1')
+            elon_vc = await self.find_or_provision_voice_channel(
+                guild=guild,
+                category_name="Team Elon",
+                vc_name="Working Vc 1",
+            )
+            if elon_vc:
+                logger.info(f"Relocating Team Elon bots to '{elon_vc.name}' (Team Elon)")
+                for key in self.team_elon_keys:
+                    client = self.orchestrator.clients.get(key)
+                    if client and client.is_ready():
+                        move_tasks.append(self.move_single_bot(client, elon_vc, shift, stagger=True))
+
+            # 6. Team Stark Cabin ('Team Stark' -> 'Working Vc 1')
+            stark_vc = await self.find_or_provision_voice_channel(
+                guild=guild,
+                category_name="Team Stark",
+                vc_name="Working Vc 1",
+            )
+            if stark_vc:
+                logger.info(f"Relocating Team Stark bots to '{stark_vc.name}' (Team Stark)")
+                for key in self.team_stark_keys:
+                    client = self.orchestrator.clients.get(key)
+                    if client and client.is_ready():
+                        move_tasks.append(self.move_single_bot(client, stark_vc, shift, stagger=True))
+
         if move_tasks:
             await asyncio.gather(*move_tasks, return_exceptions=True)
 
@@ -2224,6 +2501,40 @@ class CompanyScheduler:
             inline=False,
         )
 
+        # Team Elon location breakdown
+        elon_lines = []
+        for key in self.team_elon_keys:
+            client = self.orchestrator.clients.get(key)
+            name = client.agent_config.name if (client and hasattr(client, "agent_config")) else key
+            bot_guild = client.get_guild(guild.id) if client else guild
+            bot_member = (bot_guild.me or bot_guild.get_member(client.user.id)) if (client and client.user and bot_guild) else None
+            vc = bot_member.voice.channel if (bot_member and bot_member.voice) else None
+            loc_str = f"🔊 `{vc.name}`" if vc else "*(Offline / Disconnected)*"
+            elon_lines.append(f"• **{name}:** {loc_str}")
+
+        embed.add_field(
+            name="Team Elon Real-Time VC Locations",
+            value="\n".join(elon_lines) if elon_lines else "No bots online",
+            inline=False,
+        )
+
+        # Team Stark location breakdown
+        stark_lines = []
+        for key in self.team_stark_keys:
+            client = self.orchestrator.clients.get(key)
+            name = client.agent_config.name if (client and hasattr(client, "agent_config")) else key
+            bot_guild = client.get_guild(guild.id) if client else guild
+            bot_member = (bot_guild.me or bot_guild.get_member(client.user.id)) if (client and client.user and bot_guild) else None
+            vc = bot_member.voice.channel if (bot_member and bot_member.voice) else None
+            loc_str = f"🔊 `{vc.name}`" if vc else "*(Offline / Disconnected)*"
+            stark_lines.append(f"• **{name}:** {loc_str}")
+
+        embed.add_field(
+            name="Team Stark Real-Time VC Locations",
+            value="\n".join(stark_lines) if stark_lines else "No bots online",
+            inline=False,
+        )
+
         ceo_ch = self.get_ceo_channel(guild)
         ceo_mention = ceo_ch.mention if ceo_ch else f"#{CEO_NOTIFICATION_CHANNEL_NAME}"
         embed.set_footer(
@@ -2309,6 +2620,8 @@ class CompanyScheduler:
                                 f"• **Team Vijay:** Relocated to `🔊 Working Vc 1` (Team Vijay)\n"
                                 f"• **Team Messi:** Relocated to `🔊 Working Vc 1` (Team Messi)\n"
                                 f"• **Team Dhoni:** Relocated to `🔊 Working Vc 1` (Team Dhoni)\n"
+                                f"• **Team Elon:** Relocated to `🔊 Working Vc 1` (Team Elon)\n"
+                                f"• **Team Stark:** Relocated to `🔊 Working Vc 1` (Team Stark)\n"
                                 f"• **Prescribed Activity:** `{current_shift.activity_name}`\n"
                                 f"• **Voice State:** `self_mute=False`, `self_deaf=False` (Undeafened & Unmuted)"
                             ),
@@ -2417,7 +2730,7 @@ class CompanyScheduler:
                                 if not is_in_target:
                                     asyncio.create_task(self.move_single_bot(client, target_vc, current_shift, stagger=True))
                     else:
-                        # Active work shift alignment across all 4 squads
+                        # Active work shift alignment across all 6 squads
                         vasan_vc = await self.find_or_provision_voice_channel(
                             guild, current_shift.category_name, current_shift.vc_name
                         )
@@ -2430,12 +2743,20 @@ class CompanyScheduler:
                         dhoni_vc = await self.find_or_provision_voice_channel(
                             guild, "Team Dhoni", "Working Vc 1"
                         )
+                        elon_vc = await self.find_or_provision_voice_channel(
+                            guild, "Team Elon", "Working Vc 1"
+                        )
+                        stark_vc = await self.find_or_provision_voice_channel(
+                            guild, "Team Stark", "Working Vc 1"
+                        )
 
                         squad_vc_map = [
                             (self.team_vasan_keys, vasan_vc),
                             (self.team_vijay_keys, vijay_vc),
                             (self.team_messi_keys, messi_vc),
                             (self.team_dhoni_keys, dhoni_vc),
+                            (self.team_elon_keys, elon_vc),
+                            (self.team_stark_keys, stark_vc),
                         ]
 
                         for squad_keys, target_vc in squad_vc_map:
@@ -2463,6 +2784,32 @@ class CompanyScheduler:
                                                     self_deaf=False,
                                                 )
                                             )
+
+                # ==============================================================================
+                # SADIE & MILLIE EXECUTIVE TASK DISPATCH ENGINE (DAILY & DYNAMIC DELEGATIONS)
+                # ==============================================================================
+                # 1. Morning Work Shift Directives (9:00 AM IST onwards):
+                # Sadie & Millie autonomously dispatch concrete technical & commercial directives
+                # across all squad working channels for the day.
+                today_str = now_ist.strftime("%Y-%m-%d")
+                is_work_time = current_shift.shift_id not in ("sleep", "rest_1", "rest_2", "rest_3", "rest_4")
+                if now_ist.hour >= 9 and self._last_executive_dispatch_day != today_str and is_work_time:
+                    self._last_executive_dispatch_day = today_str
+                    logger.info(f"☀️ [EXECUTIVE DISPATCH] 9:00 AM IST Morning Directives Triggered for {today_str}!")
+                    if hasattr(self.orchestrator, "casual_player_service") and self.orchestrator.casual_player_service:
+                        asyncio.create_task(
+                            self.orchestrator.casual_player_service.dispatch_all_executive_directives(guild)
+                        )
+
+                # 2. Dynamic Daytime Sprint Directives (12:00, 15:00, 18:00 IST):
+                # Sadie & Millie dynamically inspect and dispatch high-value directives to a squad.
+                if now_ist.hour in (12, 15, 18) and self._last_dynamic_dispatch_hour != now_ist.hour and is_work_time:
+                    self._last_dynamic_dispatch_hour = now_ist.hour
+                    logger.info(f"⚡ [EXECUTIVE DISPATCH] Dynamic Directives Triggered at {now_ist.hour}:00 IST!")
+                    if hasattr(self.orchestrator, "casual_player_service") and self.orchestrator.casual_player_service:
+                        asyncio.create_task(
+                            self.orchestrator.casual_player_service.dispatch_executive_directive(guild)
+                        )
 
                 # Hyper-Realistic 3-Zone Autonomous Conversation Engine:
                 # - Zone 1: Work Squad Rooms (During Work Shifts) -> PR conflicts, rebase, API payload mismatches, Docker OOM, Figma padding
@@ -2508,7 +2855,7 @@ class CompanyScheduler:
                             vc_name = vc.name.lower()
                             should_trigger_vc = False
                             if active_zone == ZONE_WORK_SQUAD:
-                                should_trigger_vc = any(w in cat_name for w in ("vaasan", "vijay", "messi", "dhoni")) or "working" in vc_name
+                                should_trigger_vc = any(w in cat_name for w in ("vaasan", "vijay", "messi", "dhoni", "elon", "stark")) or "working" in vc_name
                             elif active_zone == ZONE_TECH_CAFE:
                                 should_trigger_vc = "tech cafe" in cat_name or any(w in vc_name for w in ("cafe", "hive", "hangout", "slide"))
                             elif active_zone == ZONE_NIGHT_SPEND:
@@ -2587,7 +2934,9 @@ class CompanyScheduler:
                 f"• Team Vaasan: `🔊 {initial_shift.vc_name}` ({initial_shift.category_name})\n"
                 f"• Team Vijay: `🔊 Working Vc 1` (Team Vijay)\n"
                 f"• Team Messi: `🔊 Working Vc 1` (Team Messi)\n"
-                f"• Team Dhoni: `🔊 Working Vc 1` (Team Dhoni)"
+                f"• Team Dhoni: `🔊 Working Vc 1` (Team Dhoni)\n"
+                f"• Team Elon: `🔊 Working Vc 1` (Team Elon)\n"
+                f"• Team Stark: `🔊 Working Vc 1` (Team Stark)"
             )
 
         ceo_ch = self.get_ceo_channel(guild)
@@ -2598,7 +2947,7 @@ class CompanyScheduler:
             title="🚀 Vaelkry Dev Labs — Active Operation Started",
             description=(
                 "**Vaelkry Dev Labs is now officially in active operation!**\n"
-                "All 4 engineering squads (Team Vaasan, Team Vijay, Team Messi, Team Dhoni) are adhering to IST shift guidelines.\n\n"
+                "All 6 engineering squads (Team Vaasan, Team Vijay, Team Messi, Team Dhoni, Team Elon, Team Stark) are adhering to IST shift guidelines.\n\n"
                 f"• **Operational Logs & Alerts:** Routed strictly to {ceo_mention}\n"
                 f"• **#announcements Status:** Kept strictly clean for official manual CEO announcements\n"
                 "• **Voice State Enforcement:** Strictly unmuted and undeafened during all working and break shifts!"
@@ -2625,7 +2974,7 @@ class CompanyScheduler:
             f"• **Assigned Location:**\n{vc_display}\n"
             f"• **Status:** `{initial_shift.activity_name}`\n"
             f"• **Operational Logs:** Routed exclusively to {ceo_mention} (#announcements kept clean)!\n"
-            f"All squads (Team Vaasan, Team Vijay, Team Messi, Team Dhoni) are aligned and the IST scheduler loop is active! ⚡"
+            f"All 6 squads (Team Vaasan, Team Vijay, Team Messi, Team Dhoni, Team Elon, Team Stark) are aligned and the IST scheduler loop is active! ⚡"
         )
 
     async def stop(self, guild: discord.Guild) -> str:
@@ -2700,7 +3049,7 @@ class CompanyScheduler:
             description=(
                 "**Vaelkry Dev Labs operations paused by CEO.**\n"
                 "• Routine scheduler background loop deactivated.\n"
-                "• All squad bots (Team Vaasan, Team Vijay, Team Messi, Team Dhoni) disconnected cleanly from voice channels.\n"
+                "• All squad bots (Team Vaasan, Team Vijay, Team Messi, Team Dhoni, Team Elon, Team Stark) disconnected cleanly from voice channels.\n"
                 "• Presences reset to `Operations Paused ⏸️`.\n\n"
                 f"• Alert posted exclusively in {ceo_mention} (#announcements kept clean)."
             ),
@@ -2720,7 +3069,7 @@ class CompanyScheduler:
         return (
             "⏸️ **Vaelkry Dev Labs Operations Paused!**\n"
             "• Routine scheduler loop deactivated.\n"
-            "• All squad bots (Team Vaasan, Team Vijay, Team Messi, Team Dhoni) disconnected cleanly from voice channels.\n"
+            "• All squad bots (Team Vaasan, Team Vijay, Team Messi, Team Dhoni, Team Elon, Team Stark) disconnected cleanly from voice channels.\n"
             f"• Notice posted exclusively in {ceo_mention} (#announcements kept clean)."
         )
 

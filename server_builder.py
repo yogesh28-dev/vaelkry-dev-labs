@@ -70,6 +70,16 @@ BLUEPRINT_STRUCTURE: List[Dict[str, Any]] = [
         "voice_channels": ["Working Vc 1", "Working Vc 2"],
     },
     {
+        "category": "Team Elon",
+        "text_channels": ["working-chat", "team-chat"],
+        "voice_channels": ["Working Vc 1", "Working Vc 2"],
+    },
+    {
+        "category": "Team Stark",
+        "text_channels": ["working-chat", "team-chat"],
+        "voice_channels": ["Working Vc 1", "Working Vc 2"],
+    },
+    {
         "category": "Night Spend",
         "text_channels": [],
         "voice_channels": ["Sleep Room 1", "Sleep Room 2", "Sleep Room 3"],
@@ -262,6 +272,92 @@ ENTERPRISE_ROLES: List[Dict[str, Any]] = [
         "mentionable": True,
         "for_bots": ["dhoni", "virat", "rohit", "jadeja", "hardik"],
     },
+    # Team Elon Corporate Roles
+    {
+        "name": "🚀 Team Lead | Team Elon",
+        "color": discord.Color.from_rgb(230, 126, 34),
+        "hoist": True,
+        "mentionable": True,
+        "for_bots": ["elon"],
+    },
+    {
+        "name": "🔮 Frontier Reasoning Architect",
+        "color": discord.Color.from_rgb(155, 89, 182),
+        "hoist": True,
+        "mentionable": True,
+        "for_bots": ["altman"],
+    },
+    {
+        "name": "🧬 Neural Weights & Local GGUF Lead",
+        "color": discord.Color.from_rgb(52, 152, 219),
+        "hoist": True,
+        "mentionable": True,
+        "for_bots": ["karpathy"],
+    },
+    {
+        "name": "🥋 Open Weights & Synthetic Data Lead",
+        "color": discord.Color.from_rgb(46, 204, 113),
+        "hoist": True,
+        "mentionable": True,
+        "for_bots": ["zuck"],
+    },
+    {
+        "name": "🎙️ Autonomous AI Alignment Sentinel",
+        "color": discord.Color.from_rgb(241, 196, 15),
+        "hoist": True,
+        "mentionable": True,
+        "for_bots": ["lex"],
+    },
+    {
+        "name": "🚀 Team Elon",
+        "color": discord.Color.from_rgb(230, 126, 34),
+        "hoist": True,
+        "mentionable": True,
+        "for_bots": ["elon", "altman", "karpathy", "zuck", "lex"],
+    },
+    # Team Stark Corporate Roles
+    {
+        "name": "🦾 Team Lead | Team Stark",
+        "color": discord.Color.from_rgb(192, 57, 43),
+        "hoist": True,
+        "mentionable": True,
+        "for_bots": ["stark"],
+    },
+    {
+        "name": "🤖 Kernel Telemetry & Protocol Specialist",
+        "color": discord.Color.from_rgb(41, 128, 185),
+        "hoist": True,
+        "mentionable": True,
+        "for_bots": ["jarvis"],
+    },
+    {
+        "name": "🔍 Binary Reverse Engineering Lead",
+        "color": discord.Color.from_rgb(26, 188, 156),
+        "hoist": True,
+        "mentionable": True,
+        "for_bots": ["friday"],
+    },
+    {
+        "name": "🛡️ War Machine & Zero-Trust Sentinel",
+        "color": discord.Color.from_rgb(127, 140, 141),
+        "hoist": True,
+        "mentionable": True,
+        "for_bots": ["rhodey"],
+    },
+    {
+        "name": "✨ Quantum Cryptography & Memory Architect",
+        "color": discord.Color.from_rgb(243, 156, 18),
+        "hoist": True,
+        "mentionable": True,
+        "for_bots": ["vision"],
+    },
+    {
+        "name": "🦾 Team Stark",
+        "color": discord.Color.from_rgb(192, 57, 43),
+        "hoist": True,
+        "mentionable": True,
+        "for_bots": ["stark", "jarvis", "friday", "rhodey", "vision"],
+    },
     {
         "name": "💻 Software Engineer",
         "color": discord.Color.teal(),
@@ -422,8 +518,8 @@ async def _sync_server_category_layout_internal(
             return "Working Vc 2"
         return None
 
-    # 1. Ensure all 4 squad categories exist and have strictly 2 text & 2 voice channels
-    standard_squads = ["Team Vaasan", "Team Vijay", "Team Messi", "Team Dhoni"]
+    # 1. Ensure all 6 squad categories exist and have strictly 2 text & 2 voice channels
+    standard_squads = ["Team Vaasan", "Team Vijay", "Team Messi", "Team Dhoni", "Team Elon", "Team Stark"]
     for squad_name in standard_squads:
         cat_squad = discord.utils.find(
             lambda c, s=squad_name: c.name.strip().lower() == s.lower()
@@ -554,7 +650,7 @@ async def _sync_server_category_layout_internal(
 
     top_categories.sort(key=top_cat_sort_key)
 
-    # Sort Tier 2: Team Vaasan -> Team Vijay -> Team Messi -> Team Dhoni -> any extra teams
+    # Sort Tier 2: Team Vaasan -> Team Vijay -> Team Messi -> Team Dhoni -> Team Elon -> Team Stark -> any extra teams
     def team_cat_sort_key(c: discord.CategoryChannel) -> int:
         c_name = c.name.strip().lower()
         if c_name in ("team vaasan", "team vasan"):
@@ -565,6 +661,10 @@ async def _sync_server_category_layout_internal(
             return 2
         if c_name == "team dhoni":
             return 3
+        if c_name == "team elon":
+            return 4
+        if c_name == "team stark":
+            return 5
         return 10 + getattr(c, "position", 0)
 
     team_categories.sort(key=team_cat_sort_key)
