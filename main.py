@@ -37,6 +37,9 @@ from agents import (
     build_autonomous_prototype_announcement_prompt,
     build_delegation_prompt,
     classify_task_domain,
+    ZONE_WORK_SQUAD,
+    ZONE_TECH_CAFE,
+    ZONE_NIGHT_SPEND,
 )
 from server_builder import (
     create_dynamic_team_category,
@@ -651,6 +654,33 @@ class VaelkryBotClient(discord.Client):
             await interaction.followup.send("🌙 **Late-Night Banter initiated in #cafeteria!** 🤫☕")
             asyncio.create_task(
                 self.orchestrator.casual_player_service.run_autonomous_night_chatter(interaction.guild)
+            )
+
+        @self.tree.command(
+            name="zone_chatter",
+            description="3-Zone Autonomous Banter: Simulates realistic conversation in Work Squad, Tech Cafe, or Dorms",
+        )
+        @app_commands.describe(
+            zone="Select the company zone for the autonomous conversation",
+        )
+        @app_commands.choices(
+            zone=[
+                app_commands.Choice(name="Zone 1: Work Squad Rooms (Dev Crunch & PRs)", value="work_squad"),
+                app_commands.Choice(name="Zone 2: Tech Cafe & Pantry (Chai, Samosa & Banter)", value="tech_cafe"),
+                app_commands.Choice(name="Zone 3: Night Spend / Dorms (Late-Night Whispers)", value="night_spend"),
+            ]
+        )
+        async def zone_chatter_slash(interaction: discord.Interaction, zone: Optional[app_commands.Choice[str]] = None):
+            if not interaction.guild:
+                await interaction.response.send_message("⚠️ Run within a corporate server!", ephemeral=True)
+                return
+
+            chosen_zone = zone.value if zone else None
+            zone_display = (chosen_zone or "current shift").replace("_", " ").title()
+            await interaction.response.defer()
+            await interaction.followup.send(f"🏢 **Triggering 3-Zone Autonomous Banter for [{zone_display}]!** 🚀")
+            asyncio.create_task(
+                self.orchestrator.casual_player_service.run_autonomous_zone_chatter(interaction.guild, zone=chosen_zone)
             )
 
         # ==================== BIDIRECTIONAL REAL-TIME AI VOICE ENGINE COMMANDS ====================
@@ -1618,6 +1648,28 @@ class AgentOrchestrator:
             await message.channel.send("🌙 **Late-night chatter initiated in #cafeteria!** 🤫☕")
             asyncio.create_task(
                 self.casual_player_service.run_autonomous_night_chatter(message.guild)
+            )
+            return
+
+        # 3-Zone Autonomous Banter Command: !zonechatter, !zone_chatter [work|cafe|night]
+        if content.startswith(("!zonechatter", "!zone_chatter")):
+            if not message.guild:
+                return
+            parts = content.split()
+            requested_zone = None
+            if len(parts) > 1:
+                z_arg = parts[1].lower().strip()
+                if any(w in z_arg for w in ("work", "squad", "crunch", "dev", "1")):
+                    requested_zone = ZONE_WORK_SQUAD
+                elif any(w in z_arg for w in ("cafe", "tech", "pantry", "chai", "2")):
+                    requested_zone = ZONE_TECH_CAFE
+                elif any(w in z_arg for w in ("night", "spend", "sleep", "dorm", "whisper", "3")):
+                    requested_zone = ZONE_NIGHT_SPEND
+
+            zone_name = (requested_zone or "Current Shift Zone").replace("_", " ").title()
+            await message.channel.send(f"🏢 **Triggering 3-Zone Autonomous Banter for [{zone_name}]!** 🚀")
+            asyncio.create_task(
+                self.casual_player_service.run_autonomous_zone_chatter(message.guild, zone=requested_zone)
             )
             return
 

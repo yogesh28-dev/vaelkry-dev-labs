@@ -72,6 +72,10 @@ from agents import (
     get_voice_for_character,
     build_voice_reply_prompt,
     build_voice_banter_prompt,
+    ZONE_WORK_SQUAD,
+    ZONE_TECH_CAFE,
+    ZONE_NIGHT_SPEND,
+    build_zone_voice_banter_prompt,
 )
 
 logger = logging.getLogger("VaelkryDevLabs.VoiceEngine")
@@ -561,6 +565,17 @@ class VoiceService:
         candidates.sort(key=lambda x: x[0], reverse=True)
         return candidates[0][1]
 
+    def get_channel_zone(self, voice_channel: discord.VoiceChannel) -> str:
+        """Determines the active zone for a voice channel based on category/name."""
+        cat_name = getattr(voice_channel.category, "name", "").lower() if getattr(voice_channel, "category", None) else ""
+        vc_name = voice_channel.name.lower()
+        if "night spend" in cat_name or "sleep" in vc_name:
+            return ZONE_NIGHT_SPEND
+        elif "tech cafe" in cat_name or any(w in vc_name for w in ("cafe", "hive", "hangout", "slide", "lounge")):
+            return ZONE_TECH_CAFE
+        else:
+            return ZONE_WORK_SQUAD
+
     def _get_bots_in_voice_channel(self, target_vc: discord.VoiceChannel) -> List[str]:
         """Returns list of bot keys present in target voice channel."""
         present: List[str] = []
@@ -571,30 +586,203 @@ class VoiceService:
                     present.append(k)
         return present
 
+    async def _execute_zone_voice_banter(
+        self,
+        target_vc: discord.VoiceChannel,
+        bot_a: str,
+        bot_b: str,
+        bot_c: Optional[str] = None,
+        zone: Optional[str] = None,
+    ):
+        """
+        Executes a 2 to 3 bot spoken voice conversation cycle tailored to the 3 company zones:
+        1. Zone 1: Work Squad Rooms (During Work Shifts)
+           - Focus: PR merge conflicts, rebase, API payload mismatches, Docker OOM, Figma padding.
+           - Tone: Professional, slightly stressed, collaborative engineering peers in Tanglish.
+        2. Zone 2: Tech Cafe & Pantry (During Breaks / Relax Shifts)
+           - Focus: Cutting chai, samosa, movie trailers (LCU), cricket debates, silly bug roasts.
+           - Tone: Fun, energetic, informal collegial banter.
+        3. Zone 3: Night Spend / Dorms (During Sleep Shifts)
+           - Focus: Midnight hunger, pantry fridge raids, whispering, Muthazhagi HR rounds, CEO demo anxiety.
+           - Tone: Soft, low-energy whispers with natural 1-2 sentence pauses.
+        """
+        active_zone = zone or self.get_channel_zone(target_vc)
+
+        zone_starter_pools = {
+            ZONE_WORK_SQUAD: [
+                "dei PR rebase pannitiya, merge conflict aagudhu da",
+                "userId vs user_id 422 error varudhu API payload-la, yaaru change pannadhu?",
+                "Docker staging deployment OOMKilled 137 aaiduchu mapla, memory leak paakanum",
+                "Figma-la 16px padding iruku, CSS-la 24px potrukeenga, alignment pochu",
+                "10 AM standup-kulla intha PR merge pannanum da, fast-ah LGTM podunga",
+                "Redis cache connection leak aagudhu staging-la, pod crash aaiduchu",
+                "git cherry-pick pannunga da, main branch broken-ah iruku",
+            ],
+            ZONE_TECH_CAFE: [
+                "dei cutting chai kudika polama cafeteria-ku, semma tired-ah iruku",
+                "hot samosa ready-ah iruku pantry-la, yaaru varinga?",
+                "Anirudh BGM trailer-la paatheengala? Goosebumps vibe da!",
+                "IPL match-la Dhoni helicopter shot oru match-winner dhaan da",
+                "prod-la console.log vachitu merge pannavan yaaru da, roast session start!",
+                "arcade room-la foosball match polama, coffee kudichute?",
+                "weekend plan enna da, movie polama illa gaming night-ah?",
+            ],
+            ZONE_NIGHT_SPEND: [
+                "shhh silent-ah pesunga da, muthazhagi akka night round-up vara poraanga",
+                "midnight hunger thanga mudila, pantry fridge-la edhavadhu snack iruka?",
+                "reels scroll pannite 3 AM aaiduchu, thala suthudhu da",
+                "tomorrow 10 AM CEO Yogesh demo iruku da, staging-la bug vandhuruma nu bayama iruku",
+                "kannu eriudhu da, silent mode potu thoonga polam",
+                "alarm vachitiya da morning standup-ku? miss aana sethom",
+            ],
+        }
+
+        logger.info(
+            f"🎙️ [ZONE VOICE BANTER: {active_zone.upper()}] Triggered in '{target_vc.name}': "
+            f"Bot A: {bot_a}, Bot B: {bot_b}" + (f", Bot C: {bot_c}" if bot_c else "")
+        )
+
+        # --- Step 1: Bot A speaks initial line ---
+        starter_candidates = zone_starter_pools.get(active_zone, zone_starter_pools[ZONE_WORK_SQUAD])
+        line_a = random.choice(starter_candidates)
+        try:
+            if active_zone == ZONE_WORK_SQUAD:
+                p = (
+                    f"You are {bot_a} speaking casually over mic in a Work Squad VC during crunch hours. "
+                    f"Give ONE short, slightly stressed, professional Tanglish sentence (max 8-12 words) about "
+                    f"PR merge conflicts, API payload mismatches, staging deployment, Figma vs CSS padding, or sprint deadlines. "
+                    f"No prefix, no quotes, pure spoken audio."
+                )
+            elif active_zone == ZONE_TECH_CAFE:
+                p = (
+                    f"You are {bot_a} speaking casually over mic in Tech Cafe / Pantry during a break. "
+                    f"Give ONE short, fun, energetic Tanglish sentence (max 8-12 words) about "
+                    f"cutting chai, hot samosas, movie trailers, cricket debates, or silly bugs. "
+                    f"No prefix, no quotes, pure spoken audio."
+                )
+            else:  # ZONE_NIGHT_SPEND
+                p = (
+                    f"You are {bot_a} whispering softly over mic in the Night Spend Dorms. "
+                    f"Give ONE soft, low-energy whisper in Tanglish (max 8-10 words) about "
+                    f"midnight hunger, sneaking to the pantry, fear of Muthazhagi HR inspection, or tomorrow's 10 AM CEO demo. "
+                    f"No prefix, no quotes, pure spoken audio."
+                )
+            gen_line = await self.orchestrator.gemini_service.generate_casual_chat(p, bot_a)
+            if gen_line and len(gen_line) > 5:
+                line_a = clean_text_for_speech(gen_line)
+        except Exception:
+            pass
+
+        await self.speak_text(target_vc, bot_a, line_a)
+
+        # --- 1.5 seconds later: Bot B speaks back in response ---
+        await asyncio.sleep(1.5)
+
+        prompt_b = build_zone_voice_banter_prompt(
+            zone=active_zone,
+            bot_a_key=bot_a,
+            bot_b_key=bot_b,
+            previous_utterance=line_a,
+        )
+        try:
+            reply_b = await self.orchestrator.gemini_service.generate_casual_chat(prompt_b, bot_b)
+            line_b = clean_text_for_speech(reply_b)
+        except Exception:
+            if active_zone == ZONE_WORK_SQUAD:
+                line_b = f"Aama {bot_a}, PR-la conflict solve pannu, staging deploy panren!"
+            elif active_zone == ZONE_TECH_CAFE:
+                line_b = f"Vaa {bot_a}, cutting chai kudichutu pesuvom, tea counter polam!"
+            else:
+                line_b = f"Shhh {bot_a}, silent-ah iru, muthazhagi akka kettuta sethom!"
+
+        if not line_b:
+            line_b = f"Seri {bot_a}, paathukalam vidu!"
+
+        await self.speak_text(target_vc, bot_b, line_b)
+
+        # --- If Bot C present: 1.5 seconds later, Bot C chimes in with a witty remark ---
+        if bot_c:
+            await asyncio.sleep(1.5)
+            if active_zone == ZONE_WORK_SQUAD:
+                prompt_c = (
+                    f"You are {bot_c} in a developer voice channel during work shift. "
+                    f"{bot_a} said: '{line_a}' and {bot_b} replied: '{line_b}'. "
+                    f"Chime in with ONE short, collaborative Tanglish reaction (max 10 words) about the code/fix. "
+                    f"Strictly ONE punchy line, no emojis, no quotes."
+                )
+            elif active_zone == ZONE_TECH_CAFE:
+                prompt_c = (
+                    f"You are {bot_c} in Tech Cafe VC during break. "
+                    f"{bot_a} said: '{line_a}' and {bot_b} replied: '{line_b}'. "
+                    f"Chime in with ONE short, hilarious, fun Tanglish banter line (max 10 words). "
+                    f"Strictly ONE punchy line, no emojis, no quotes."
+                )
+            else:  # ZONE_NIGHT_SPEND
+                prompt_c = (
+                    f"You are {bot_c} whispering softly in the Sleep Dorms. "
+                    f"{bot_a} whispered: '{line_a}' and {bot_b} whispered: '{line_b}'. "
+                    f"Chime in with ONE soft, low-energy whisper in Tanglish (max 8-10 words) telling them to sleep or be quiet. "
+                    f"Strictly ONE punchy line, no emojis, no quotes."
+                )
+            try:
+                reply_c = await self.orchestrator.gemini_service.generate_casual_chat(prompt_c, bot_c)
+                line_c = clean_text_for_speech(reply_c)
+            except Exception:
+                if active_zone == ZONE_WORK_SQUAD:
+                    line_c = "Main branch lock aagum munnaadi merge pannidunga!"
+                elif active_zone == ZONE_TECH_CAFE:
+                    line_c = "Tea stall-la ivlo scene edhuku da, sip pannunga!"
+                else:
+                    line_c = "Shhh lights out, thoonga vidunga da!"
+
+            if not line_c:
+                line_c = "Seri vidunga da!"
+
+            await self.speak_text(target_vc, bot_c, line_c)
+
+    async def run_autonomous_vc_banter_if_populated(
+        self,
+        voice_channel: discord.VoiceChannel,
+        zone: Optional[str] = None,
+    ):
+        """
+        Triggers a spontaneous spoken voice banter exchange between 2 to 3 bots
+        in the specified voice channel if populated.
+        """
+        session = self.get_session(voice_channel.id)
+        if session.is_speaking or session.audio_lock.locked():
+            return
+        if time.time() - session.last_speech_finished_at < 20.0:
+            return
+
+        bots_in_vc = self._get_bots_in_voice_channel(voice_channel)
+        if len(bots_in_vc) < 2:
+            return
+
+        sample_count = 3 if len(bots_in_vc) >= 3 and random.random() < 0.55 else 2
+        chosen = random.sample(bots_in_vc, sample_count)
+        bot_a = chosen[0]
+        bot_b = chosen[1]
+        bot_c = chosen[2] if len(chosen) >= 3 else None
+
+        await self._execute_zone_voice_banter(
+            target_vc=voice_channel,
+            bot_a=bot_a,
+            bot_b=bot_b,
+            bot_c=bot_c,
+            zone=zone,
+        )
+
     async def _autonomous_vc_conversation_loop(self):
         """
         Continuous Autonomous VC Conversation Loop:
         - Every 1 to 3 minutes, 2 to 3 random bots in the active VC initiate spoken dialogue.
-        - Bot A physically speaks a short casual Tanglish line over mic.
-        - 1.5 seconds later, Bot B speaks back in response using their mapped neural voice.
-        - Bot C (if 3 bots selected) chimes in with a witty remark.
-        - Uses asyncio.Lock (session.audio_lock) so no two bots speak at the exact same moment.
+        - Dynamically maps dialogue to the active Zone (Work Squad, Tech Cafe, Night Spend).
+        - Bot A speaks initial line, Bot B responds mentioning Bot A, Bot C chimes in.
+        - Uses asyncio.Lock so no two bots talk over each other.
         """
         # Initial delay to give bots time to finish connecting to Discord
         await asyncio.sleep(30.0)
-
-        STARTER_LINES = [
-            "dei tea kudika polama, romba neram code adichu fatigue aayiruchu da",
-            "sprint review mudinjutha nanba, PR merge aayirucha?",
-            "production-la ethum bug illaye? muthazhagi green signal kuduthutangala?",
-            "299 km/h speed-la throttle twist panni sprint-ah mudikkanum!",
-            "architecture review ready-ah iruka mapla, API latency epti iruku?",
-            "mamitha design system semmaya iruku, glassmorphism UI fire!",
-            "dei break edukalama, cafeteria-la samosa fresh-ah potrukanga!",
-            "server load calm-ah handle pannuvom, no tension relax!",
-            "database migration success aayiducha? zero downtime deployment done!",
-            "midnight sprint vera level-ah pogudhu nanba, full throttle energy!",
-        ]
 
         while self.is_running:
             try:
@@ -615,12 +803,25 @@ class VoiceService:
                     continue
 
                 # Determine candidate bots
+                is_ceo = (
+                    getattr(target_vc, "id", None) == 1563622904829190326
+                    or target_vc.name.lower().replace(" ", "") in ("ceovc", "ceoroom", "ceocabin")
+                    or "ceo vc" in target_vc.name.lower()
+                )
                 bots_in_vc = self._get_bots_in_voice_channel(target_vc)
+                if is_ceo:
+                    # STRICT CEO VC BLACKLIST: Only Sadie and Millie can speak in Ceo Vc
+                    bots_in_vc = [b for b in bots_in_vc if b in ("sadie", "millie")]
+
                 if len(bots_in_vc) < 2:
-                    available = [k for k, cl in self.orchestrator.clients.items() if cl.is_ready()]
+                    if is_ceo:
+                        # Never sample TTF Vasan or dev bots into Ceo Vc
+                        available = [k for k in ("sadie", "millie") if k in self.orchestrator.clients and self.orchestrator.clients[k].is_ready()]
+                    else:
+                        available = [k for k, cl in self.orchestrator.clients.items() if cl.is_ready()]
                     if len(available) >= 2:
                         sample_count = 3 if len(available) >= 3 and random.random() < 0.6 else 2
-                        chosen = random.sample(available[:7], sample_count)
+                        chosen = random.sample(available[:7] if not is_ceo else available, min(len(available), sample_count))
                     else:
                         continue
                 else:
@@ -634,66 +835,12 @@ class VoiceService:
                 bot_b = chosen[1]
                 bot_c = chosen[2] if len(chosen) >= 3 else None
 
-                logger.info(
-                    f"🎙️ [AUTONOMOUS VC BANTER] Triggered in '{target_vc.name}': "
-                    f"Bot A: {bot_a}, Bot B: {bot_b}" + (f", Bot C: {bot_c}" if bot_c else "")
+                await self._execute_zone_voice_banter(
+                    target_vc=target_vc,
+                    bot_a=bot_a,
+                    bot_b=bot_b,
+                    bot_c=bot_c,
                 )
-
-                # --- Step 1: Bot A speaks initial casual Tanglish line ---
-                line_a = random.choice(STARTER_LINES)
-                try:
-                    p = (
-                        f"You are {bot_a} speaking casually over mic in a Discord voice channel with your developer teammates. "
-                        f"Give ONE short, punchy, authentic Tanglish sentence (max 8-12 words) to start a chat "
-                        f"(e.g. asking about tea, code, sprint review, or testing). No quotes, no prefix."
-                    )
-                    gen_line = await self.orchestrator.gemini_service.generate_casual_chat(p, bot_a)
-                    if gen_line and len(gen_line) > 5:
-                        line_a = clean_text_for_speech(gen_line)
-                except Exception:
-                    pass
-
-                await self.speak_text(target_vc, bot_a, line_a)
-
-                # --- 1.5 seconds later: Bot B speaks back ---
-                await asyncio.sleep(1.5)
-
-                prompt_b = build_voice_banter_prompt(
-                    bot_a_key=bot_a,
-                    bot_b_key=bot_b,
-                    topic="casual dev chat & banter",
-                    previous_utterance=line_a,
-                )
-                try:
-                    reply_b = await self.orchestrator.gemini_service.generate_casual_chat(prompt_b, bot_b)
-                    line_b = clean_text_for_speech(reply_b)
-                except Exception:
-                    line_b = "Sari mapla, all is well! Cool-ah handle pannuvom."
-
-                if not line_b:
-                    line_b = "Ama bro, correct dhaan!"
-
-                await self.speak_text(target_vc, bot_b, line_b)
-
-                # --- If Bot C present: 1.5 seconds later, Bot C chimes in with a witty remark ---
-                if bot_c:
-                    await asyncio.sleep(1.5)
-                    prompt_c = (
-                        f"You are {bot_c} in the same voice channel. {bot_a} just said: '{line_a}' "
-                        f"and {bot_b} responded: '{line_b}'. "
-                        f"Chime in with ONE short, witty, hilarious Tanglish remark or reaction (max 10 words). "
-                        f"Strictly ONE punchy line, authentic voice. No prefix, no emojis."
-                    )
-                    try:
-                        reply_c = await self.orchestrator.gemini_service.generate_casual_chat(prompt_c, bot_c)
-                        line_c = clean_text_for_speech(reply_c)
-                    except Exception:
-                        line_c = "Ivangala vachukitu naanga padra paadu iruke... Mudila da!"
-
-                    if not line_c:
-                        line_c = "Aiyoo super combo da idhu!"
-
-                    await self.speak_text(target_vc, bot_c, line_c)
 
             except Exception as exc:
                 logger.error(f"Error in autonomous VC conversation loop: {exc}")

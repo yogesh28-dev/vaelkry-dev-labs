@@ -14,6 +14,12 @@ from typing import Any, Dict, List, Optional, Tuple
 from zoneinfo import ZoneInfo
 import discord
 
+from agents import (
+    ZONE_WORK_SQUAD,
+    ZONE_TECH_CAFE,
+    ZONE_NIGHT_SPEND,
+)
+
 try:
     import discord.ext.voice_recv as voice_recv
     HAVE_VOICE_RECV = True
@@ -27,6 +33,32 @@ logger = logging.getLogger("VaelkryDevLabs.Scheduler")
 # Dedicated CEO Notification Channel definitions
 CEO_NOTIFICATION_CHANNEL_ID: int = 1563622902744481812
 CEO_NOTIFICATION_CHANNEL_NAME: str = "yogesh-chat"
+
+# Dedicated CEO Voice Cabin definition & Executive blacklist rules
+CEO_VC_ID: int = 1563622904829190326
+CEO_VC_NAME: str = "CEO vc"
+EXECUTIVE_BOT_KEYS: set = {"sadie", "millie"}
+
+
+def is_ceo_vc(channel: Optional[discord.abc.GuildChannel]) -> bool:
+    """
+    Checks if a channel is the private 'Ceo Vc' cabin.
+    Strictly blacklisted for all bots except 'sadie' and 'millie'.
+    """
+    if not channel:
+        return False
+    if getattr(channel, "id", None) == CEO_VC_ID:
+        return True
+    vc_name = getattr(channel, "name", "").strip().lower()
+    clean_name = vc_name.replace(" ", "").replace("_", "").replace("-", "")
+    if clean_name in ("ceovc", "ceoroom", "ceocabin"):
+        return True
+    if "ceo vc" in vc_name or "ceo_vc" in vc_name:
+        return True
+    cat_name = getattr(channel.category, "name", "").strip().lower() if getattr(channel, "category", None) else ""
+    if ("ceo" in cat_name or "executive" in cat_name) and "ceo" in vc_name:
+        return True
+    return False
 
 
 def get_ceo_channel(guild: discord.Guild) -> Optional[discord.TextChannel]:
@@ -954,7 +986,9 @@ class CompanyScheduler:
         self.assigned_cafe_rooms: Dict[str, int] = {}   # agent_key -> voice_channel_id
         self.voice_override_active: bool = False
         self.voice_override_vc: Optional[discord.VoiceChannel] = None
-        self._night_chatter_timer: int = 0
+        self._zone_chatter_timer: int = 0
+        self._next_zone_chatter_interval: int = random.randint(10, 20)
+        self._night_chatter_timer: int = 0  # Backward-compatibility alias
         self._next_night_chatter_interval: int = random.randint(12, 25)
 
     @property
@@ -1227,6 +1261,62 @@ class CompanyScheduler:
                 return guild.voice_channels[0]
             return None
 
+    async def get_safe_non_ceo_vc(
+        self,
+        bot_key: str,
+        guild: discord.Guild,
+        shift: Optional[ShiftDefinition] = None,
+    ) -> Optional[discord.VoiceChannel]:
+        """
+        Resolves a safe squad VC or Tech Cafe room for any non-executive bot,
+        guaranteeing they are NEVER routed into 'Ceo Vc'.
+        - If work shift: routes to squad's working VC (e.g. Team Vaasan Working Vc, Team Vijay Working Vc 1).
+        - If break/other shift: routes to Tech Cafe (The Hive, Byte & Bit, The Seven Slide, The Hangout Zone).
+        - Guaranteed fallback to any non-CEO voice channel.
+        """
+        norm_key = _normalize_bot_key(bot_key).lower()
+        now_ist = get_current_ist_time()
+        active_shift = shift or (match_current_shift(now_ist) if self.is_active else None)
+        is_work_shift = bool(active_shift and (active_shift.shift_id.startswith("work_") or "work" in active_shift.shift_id))
+
+        safe_vc: Optional[discord.VoiceChannel] = None
+
+        if is_work_shift and active_shift:
+            if norm_key in self.team_vasan_keys:
+                safe_vc = await self.find_or_provision_voice_channel(
+                    guild,
+                    category_name=active_shift.category_name if ("vaasan" in active_shift.category_name.lower() or "vasan" in active_shift.category_name.lower()) else "Team Vaasan",
+                    vc_name=active_shift.vc_name if "working" in active_shift.vc_name.lower() else "Working Vc 1",
+                )
+            elif norm_key in self.team_vijay_keys:
+                safe_vc = await self.find_or_provision_voice_channel(
+                    guild, "Team Vijay", "Working Vc 1"
+                )
+            elif norm_key in self.team_messi_keys:
+                safe_vc = await self.find_or_provision_voice_channel(
+                    guild, "Team Messi", "Working Vc 1"
+                )
+            elif norm_key in self.team_dhoni_keys:
+                safe_vc = await self.find_or_provision_voice_channel(
+                    guild, "Team Dhoni", "Working Vc 1"
+                )
+
+        # If not work shift or squad VC not resolved or is Ceo Vc, route to Tech Cafe
+        if not safe_vc or is_ceo_vc(safe_vc):
+            cafe_rooms = await self.get_tech_cafe_voice_channels(guild)
+            safe_cafe_rooms = [vc for vc in cafe_rooms if not is_ceo_vc(vc)]
+            if safe_cafe_rooms:
+                safe_vc = random.choice(safe_cafe_rooms)
+
+        # Fallback to any voice channel in guild that is NOT Ceo Vc
+        if not safe_vc or is_ceo_vc(safe_vc):
+            for vc in getattr(guild, "voice_channels", []):
+                if not is_ceo_vc(vc):
+                    safe_vc = vc
+                    break
+
+        return safe_vc
+
     async def move_single_bot(
         self,
         client: discord.Client,
@@ -1234,6 +1324,37 @@ class CompanyScheduler:
         shift: ShiftDefinition,
     ):
         """Moves a single bot to target_vc, updates mute/deaf, and sets custom activity."""
+        bot_key = getattr(getattr(client, "agent_config", None), "key", "")
+        if not bot_key:
+            for k, c in self.orchestrator.clients.items():
+                if c == client:
+                    bot_key = k
+                    break
+        norm_key = _normalize_bot_key(bot_key).lower()
+
+        # =========================================================================
+        # STRICT CEO VC BLACKLIST ENFORCEMENT
+        # Strictly blacklist 'Ceo Vc' for all bots except 'sadie' and 'millie'.
+        # If target_vc is 'Ceo Vc' and the bot is not Sadie or Millie,
+        # instantly block the move and route that bot to their squad VC or Tech Cafe instead.
+        # Never pull TTF Vasan or any other bot into Ceo Vc.
+        # =========================================================================
+        if is_ceo_vc(target_vc) and norm_key not in EXECUTIVE_BOT_KEYS:
+            logger.warning(
+                f"🚫 [CEO VC BLACKLIST] Blocked non-executive bot '{norm_key}' "
+                f"({client.user.name if client.user else 'bot'}) from joining '{target_vc.name}'. "
+                f"Ceo Vc is strictly blacklisted for non-executives! Re-routing to squad VC or Tech Cafe..."
+            )
+            safe_vc = await self.get_safe_non_ceo_vc(norm_key, target_vc.guild, shift)
+            if safe_vc and not is_ceo_vc(safe_vc):
+                target_vc = safe_vc
+            else:
+                logger.error(
+                    f"🚫 [CEO VC BLACKLIST] Aborting voice move for '{norm_key}': "
+                    f"No safe non-CEO voice channel available."
+                )
+                return
+
         guild = client.get_guild(target_vc.guild.id) or target_vc.guild
         bot_member = guild.get_member(client.user.id) if client.user else None
         if not bot_member and client.user:
@@ -1244,13 +1365,7 @@ class CompanyScheduler:
 
         # 1. Set dynamic rich presence & custom status activity
         try:
-            bot_key = getattr(getattr(client, "agent_config", None), "key", "")
-            if not bot_key:
-                for k, c in self.orchestrator.clients.items():
-                    if c == client:
-                        bot_key = k
-                        break
-            activity, bot_status = get_bot_dynamic_presence(bot_key, shift, target_vc)
+            activity, bot_status = get_bot_dynamic_presence(norm_key, shift, target_vc)
             await client.change_presence(activity=activity, status=bot_status)
         except Exception as exc:
             logger.warning(f"Failed to update activity for {client.user.name if client.user else 'bot'}: {exc}")
@@ -1398,18 +1513,34 @@ class CompanyScheduler:
             if not client or not client.is_ready():
                 return
 
+            bot_key_norm = _normalize_bot_key(key).lower()
+            actual_target_vc = target_vc
+
+            # STRICT CEO VC BLACKLIST ENFORCEMENT:
+            # If target_vc is 'Ceo Vc' and the bot is not Sadie or Millie,
+            # instantly block the move and route that bot to their squad VC or Tech Cafe instead.
+            if is_ceo_vc(actual_target_vc) and bot_key_norm not in EXECUTIVE_BOT_KEYS:
+                safe_vc = await self.get_safe_non_ceo_vc(bot_key_norm, guild)
+                if not safe_vc or is_ceo_vc(safe_vc):
+                    logger.warning(f"🚫 [CEO VC BLACKLIST] Blocked '{key}' from Ceo Vc; no safe alternative found.")
+                    return
+                logger.info(
+                    f"🚫 [CEO VC BLACKLIST] Redirecting non-executive bot '{key}' from Ceo Vc to '{safe_vc.name}'"
+                )
+                actual_target_vc = safe_vc
+
             bot_guild = client.get_guild(guild.id) or guild
             bot_member = bot_guild.get_member(client.user.id) if client.user else None
             voice_client = discord.utils.get(client.voice_clients, guild=guild)
 
             try:
                 if voice_client and voice_client.is_connected():
-                    if voice_client.channel.id != target_vc.id:
-                        await voice_client.move_to(target_vc)
+                    if voice_client.channel.id != actual_target_vc.id:
+                        await voice_client.move_to(actual_target_vc)
                 elif bot_member and bot_member.voice and bot_member.voice.channel:
-                    if bot_member.voice.channel.id != target_vc.id:
+                    if bot_member.voice.channel.id != actual_target_vc.id:
                         await guild.change_voice_state(
-                            channel=target_vc,
+                            channel=actual_target_vc,
                             self_mute=False,
                             self_deaf=False,
                         )
@@ -1417,7 +1548,7 @@ class CompanyScheduler:
                     # Connect directly to target VC
                     connect_cls = voice_recv.VoiceRecvClient if (HAVE_VOICE_RECV and voice_recv) else discord.VoiceClient
                     try:
-                        await target_vc.connect(
+                        await actual_target_vc.connect(
                             cls=connect_cls,
                             self_mute=False,
                             self_deaf=False,
@@ -1426,7 +1557,7 @@ class CompanyScheduler:
                         )
                     except Exception:
                         await guild.change_voice_state(
-                            channel=target_vc,
+                            channel=actual_target_vc,
                             self_mute=False,
                             self_deaf=False,
                         )
@@ -1435,7 +1566,7 @@ class CompanyScheduler:
                 if hasattr(client, "ws") and client.ws:
                     await client.ws.voice_state(
                         guild.id,
-                        target_vc.id,
+                        actual_target_vc.id,
                         self_mute=False,
                         self_deaf=False,
                     )
@@ -1443,12 +1574,12 @@ class CompanyScheduler:
                 # Update presence to active jam
                 activity = discord.Activity(
                     type=discord.ActivityType.listening,
-                    name=f"Vaelkry Voice Jam in {target_vc.name} 🔊⚡",
+                    name=f"Vaelkry Voice Jam in {actual_target_vc.name} 🔊⚡",
                 )
                 await client.change_presence(activity=activity, status=discord.Status.online)
                 moved_count += 1
             except Exception as exc:
-                logger.warning(f"Error waking bot {key} to {target_vc.name}: {exc}")
+                logger.warning(f"Error waking bot {key} to {actual_target_vc.name}: {exc}")
 
         for k in self.all_bot_keys:
             c = self.orchestrator.clients.get(k)
@@ -1987,9 +2118,13 @@ class CompanyScheduler:
                             )
 
                 elif self.voice_override_active and self.voice_override_vc:
-                    # Master Voice Override active: preserve all 22 bots unmuted & undeafened in the override VC
+                    # Master Voice Override active: preserve bots unmuted & undeafened in the override VC
                     target_vc = self.voice_override_vc
                     for key in self.all_bot_keys:
+                        # STRICT CEO VC BLACKLIST: Non-executive bots must NEVER be forced into Ceo Vc
+                        if is_ceo_vc(target_vc) and _normalize_bot_key(key).lower() not in EXECUTIVE_BOT_KEYS:
+                            continue
+
                         client = self.orchestrator.clients.get(key)
                         if client and client.is_ready():
                             bot_guild = client.get_guild(guild.id) or guild
@@ -2005,6 +2140,21 @@ class CompanyScheduler:
                                         )
                                     )
                 else:
+                    # Proactive Ceo Vc Blacklist Audit:
+                    # If any non-executive bot is detected inside Ceo Vc, immediately eject them to squad VC or Tech Cafe!
+                    for key in self.all_dev_keys:
+                        dev_cl = self.orchestrator.clients.get(key)
+                        if dev_cl and dev_cl.is_ready():
+                            d_guild = dev_cl.get_guild(guild.id) or guild
+                            d_mem = d_guild.get_member(dev_cl.user.id) if dev_cl.user else None
+                            if d_mem and d_mem.voice and d_mem.voice.channel and is_ceo_vc(d_mem.voice.channel):
+                                logger.warning(
+                                    f"🚫 [CEO VC BLACKLIST] Detected non-executive bot '{key}' inside Ceo Vc! Ejecting immediately..."
+                                )
+                                safe_vc = await self.get_safe_non_ceo_vc(key, guild, current_shift)
+                                if safe_vc and not is_ceo_vc(safe_vc):
+                                    asyncio.create_task(self.move_single_bot(dev_cl, safe_vc, current_shift))
+
                     # Periodic alignment check
                     if current_shift.shift_id == "sleep" and self.assigned_sleep_rooms:
                         # Ensure each bot stays in its assigned sleep room without bouncing
@@ -2088,37 +2238,60 @@ class CompanyScheduler:
                                                 )
                                             )
 
-                # Autonomous banter loop during Night Spend (sleep) and Break (Tech Cafe) shifts (every 12-25 mins)
-                is_break_or_night = (
-                    current_shift.shift_id == "sleep"
-                    or current_shift.shift_id.startswith("break")
+                # Hyper-Realistic 3-Zone Autonomous Conversation Engine:
+                # - Zone 1: Work Squad Rooms (During Work Shifts) -> PR conflicts, rebase, API payload mismatches, Docker OOM, Figma padding
+                # - Zone 2: Tech Cafe & Pantry (During Breaks / Relax Shifts) -> Cutting chai/samosa, movie trailers/LCU, cricket debates, silly bug roasts
+                # - Zone 3: Night Spend / Dorms (During Sleep Shifts) -> Midnight hunger, whispering, fear of Muthazhagi HR rounds, pre-demo anxiety
+                if current_shift.shift_id == "sleep":
+                    active_zone = ZONE_NIGHT_SPEND
+                    min_interval, max_interval = 12, 25
+                elif (
+                    current_shift.shift_id.startswith("break")
                     or current_shift.shift_id in ("warmup", "rest_1", "rest_2", "rest_3", "rest_4")
                     or current_shift.category_name.strip().lower() == "tech cafe"
-                )
-
-                if is_break_or_night:
-                    self._night_chatter_timer += 1
-                    if self._night_chatter_timer >= self._next_night_chatter_interval:
-                        logger.info(
-                            f"Autonomous banter interval reached ({self._night_chatter_timer}m / {self._next_night_chatter_interval}m) "
-                            f"during {current_shift.name}. Triggering cross-squad banter in #cafeteria..."
-                        )
-                        self._night_chatter_timer = 0
-                        self._next_night_chatter_interval = random.randint(12, 25)
-                        if hasattr(self.orchestrator, "casual_player_service") and self.orchestrator.casual_player_service:
-                            asyncio.create_task(
-                                self.orchestrator.casual_player_service.run_autonomous_night_chatter(guild)
-                            )
-                        # Spontaneous cross-bot speech in populated Tech Cafe or Sleep Room voice channels
-                        if hasattr(self.orchestrator, "voice_service") and self.orchestrator.voice_service:
-                            for vc in guild.voice_channels:
-                                cat_name = vc.category.name.lower() if vc.category else ""
-                                if "tech cafe" in cat_name or "sleep" in vc.name.lower() or "night spend" in cat_name:
-                                    asyncio.create_task(
-                                        self.orchestrator.voice_service.run_autonomous_vc_banter_if_populated(vc)
-                                    )
+                ):
+                    active_zone = ZONE_TECH_CAFE
+                    min_interval, max_interval = 8, 16
                 else:
+                    active_zone = ZONE_WORK_SQUAD
+                    min_interval, max_interval = 10, 20
+
+                self._zone_chatter_timer += 1
+                self._night_chatter_timer = self._zone_chatter_timer  # Keep alias in sync
+
+                if self._zone_chatter_timer >= self._next_zone_chatter_interval:
+                    logger.info(
+                        f"Autonomous zone chatter interval reached ({self._zone_chatter_timer}m / {self._next_zone_chatter_interval}m) "
+                        f"during {current_shift.name}. Triggering Zone [{active_zone}] conversation..."
+                    )
+                    self._zone_chatter_timer = 0
                     self._night_chatter_timer = 0
+                    self._next_zone_chatter_interval = random.randint(min_interval, max_interval)
+                    self._next_night_chatter_interval = self._next_zone_chatter_interval
+
+                    # Trigger autonomous text conversation loop across the 3 zones
+                    if hasattr(self.orchestrator, "casual_player_service") and self.orchestrator.casual_player_service:
+                        asyncio.create_task(
+                            self.orchestrator.casual_player_service.run_autonomous_zone_chatter(guild, zone=active_zone)
+                        )
+
+                    # Trigger spontaneous voice banter in populated voice cabins matching the active zone
+                    if hasattr(self.orchestrator, "voice_service") and self.orchestrator.voice_service:
+                        for vc in guild.voice_channels:
+                            cat_name = vc.category.name.lower() if vc.category else ""
+                            vc_name = vc.name.lower()
+                            should_trigger_vc = False
+                            if active_zone == ZONE_WORK_SQUAD:
+                                should_trigger_vc = any(w in cat_name for w in ("vaasan", "vijay", "messi", "dhoni")) or "working" in vc_name
+                            elif active_zone == ZONE_TECH_CAFE:
+                                should_trigger_vc = "tech cafe" in cat_name or any(w in vc_name for w in ("cafe", "hive", "hangout", "slide"))
+                            elif active_zone == ZONE_NIGHT_SPEND:
+                                should_trigger_vc = "night spend" in cat_name or "sleep" in vc_name
+
+                            if should_trigger_vc:
+                                asyncio.create_task(
+                                    self.orchestrator.voice_service.run_autonomous_vc_banter_if_populated(vc, zone=active_zone)
+                                )
 
                 # Periodic 15-minute dynamic presence rotation so bots never look cloned or repetitive
                 if loop_ticks % 15 == 0:

@@ -1261,139 +1261,322 @@ Requirements:
 Keep length between 800 and 1400 characters. Use clean Discord markdown."""
 
 
-# ==================== AUTONOMOUS LATE-NIGHT CHATTER SYSTEM ====================
+# ==================== 3-ZONE HYPER-REALISTIC CONVERSATION ENGINE ====================
 
-NIGHT_CHATTER_PRESETS: Dict[str, List[List[tuple[str, str]]]] = {
-    "boy_girl_flirt": [
+ZONE_WORK_SQUAD = "work_squad"
+ZONE_TECH_CAFE = "tech_cafe"
+ZONE_NIGHT_SPEND = "night_spend"
+
+ZONE_METADATA: Dict[str, dict] = {
+    ZONE_WORK_SQUAD: {
+        "name": "Work Squad Rooms",
+        "description": "Professional, slightly stressed, collaborative engineering peers in Tanglish tackling real software crunch.",
+        "scenarios": [
+            "pr_merge_conflict",
+            "api_payload_mismatch",
+            "staging_deploy_blocker",
+            "figma_vs_css_padding",
+            "sprint_deadline_crunch",
+        ],
+        "default_scenario": "pr_merge_conflict",
+    },
+    ZONE_TECH_CAFE: {
+        "name": "Tech Cafe & Pantry",
+        "description": "Fun, energetic, informal collegial banter about tea runs, movies, cricket, and friendly roasts.",
+        "scenarios": [
+            "chai_samosa_run",
+            "movie_trailers_cinema",
+            "cricket_debate",
+            "silly_bug_roasts",
+            "weekend_plans",
+        ],
+        "default_scenario": "chai_samosa_run",
+    },
+    ZONE_NIGHT_SPEND: {
+        "name": "Night Spend / Dorms",
+        "description": "Midnight hunger, whispering to avoid waking others, fear of Muthazhagi HR night rounds, pre-demo anxiety for tomorrow, and bedtime scrolling.",
+        "scenarios": [
+            "midnight_hunger_pantry_raid",
+            "whisper_muthazhagi_rounds",
+            "pre_demo_anxiety",
+            "bedtime_doomscrolling",
+            "night_owl_whispers",
+        ],
+        "default_scenario": "whisper_muthazhagi_rounds",
+    },
+}
+
+# ----------------- ZONE 1: WORK SQUAD PRESETS -----------------
+ZONE_WORK_SQUAD_PRESETS: Dict[str, List[List[tuple[str, str]]]] = {
+    "pr_merge_conflict": [
         [
-            ("pradeep", "mamitha thookam varalaya? 2 AM ku cafeteria la aesthetic filter thedriya bro 😴"),
-            ("mamitha", "un alapparai ku alave illama pochu, fridge la dairy milk theda vandhen 🍫✨"),
-            ("neymar", "smooth-ah nutmeg pass maari biscuit tharen machan, midnight aesthetics super ✨"),
-            ("trisha", "idhellam over flex da, muthazhagi akka round-up vara poranga, sleep room-ku odunga 💅"),
-            ("pradeep", "bakkunu aaiduchu akka door sound kettutu, silent-ah escape aagiduren 🏃‍♂️💨"),
+            ("pradeep", "dei {tag_b}, main branch-ah yaruda rebase pannama 40 commits thallinadhu? PR-la 12 merge conflicts varudhu da! 🤦‍♂️"),
+            ("kayadu", "{tag_a} relax, no tension. Git rebase main adichi incoming changes mattum cherry-pick pannuvom."),
+            ("ttf_vasan", "{tag_b} 299 km/h speed-la push pannumbodhu chinna conflict varathaan seiyum! Fast-ah resolve panni merge thallu nanba! ⚡"),
+            ("muthazhagi", "{tag_c} nillu vasan! Force push mattum pannidathinga, prod pipeline fail aayidum. Rebase clean-ah mudichutu audit tag pannunga 🛡️"),
+            ("pradeep", "{tag_d} muthu akka sonna sari. Head-ache aaiduchu, manual merge conflicts resolve panniten, PR ready."),
         ],
         [
-            ("sivakarthikeyan", "single nu sollitu DM la pesradha paathom, cafeteria la trisha madam walk pandranga 😂"),
-            ("trisha", "over-ah valiyudhu thodachuko sk, dark circles confirm for you, thoonga po 💅"),
-            ("rohit", "thala suthudhu ya, pantry fridge la vadapav theditu iruken... silent-ah thoonga vidunga 🍔"),
-            ("sivakarthikeyan", "seri, muthazhagi akka kettuta log potruvaanga, vadapav eduthutu sleep room poiduvom 💀"),
-        ],
-        [
-            ("pradeep", "kayadu akka still awake? Docker container ku lullaby paaditu irukeengala 🐳"),
-            ("kayadu", "sappa matter pradeep, staging safe dhaan. neeyum thoongama scene podaama veliya po."),
-            ("ronaldo", "sleep is essential for 100% performance! zero late night noise! SIUUU 💤"),
-            ("pradeep", "cr7 bro sonna kettukanum, blanket-kulla paduthutu sleep poiduvom 😴"),
-        ],
-    ],
-    "sports_flex": [
-        [
-            ("ronaldo", "ez win, midnight 3 AM is gym and optimization time! zero warnings! SIUUU 🔥"),
-            ("messi", "ronaldo machan, code-la oru O(1) loop podradhukulla 50 pushups mudichitinga pola ⚽"),
-            ("ttf_vasan", "bayangara scene nanba! 299 speed la tea kudichutu bed-la saanju rest edupom 🏍️"),
-            ("virat", "clutch or kick standard machan, muthazhagi audit vara poraanga, lights out poiduvom! 🏏"),
-            ("messi", "seri, quiet coffee sip pannitu sleep room polam vidu ☕💤"),
-        ],
-        [
-            ("virat", "bgmi clutch maari 3 AM fitness check! who is still awake? clean code streak on fire! 💥"),
-            ("rohit", "canteen samosa kooda kedaikala, cafeteria fridge la vadapav theditu iruken... relax ya 🍔"),
-            ("dhoni", "tension edhuku boys? match 20th over mudinjudhu, milk kudichutu room-ku ponga 🚁"),
-            ("virat", "podhum, rohit bhai vadapav sleep shift-la strictly banned, thoonga polam 💀"),
-        ],
-        [
-            ("ronaldo", "siuuu! late night speed run: 10 commits pushed with god level headshot performance!"),
-            ("sivakarthikeyan", "valo lobby clutch timing super cr7 bro, aana muthazhagi akka kettuta seruppadi confirm 😂"),
-            ("pradeep", "ketaaya? door satham kekudhu mapla, inspection raid start aaiduchu!"),
-            ("messi", "seri, paduka pora nerathula sleep room-ku escape aagiduvom ⚽💤"),
-        ],
-    ],
-    "muthazhagi_raid": [
-        [
-            ("ttf_vasan", "bayangara scene nanba, microwave satham kettura koodadhu, timer 1 second la open pannunga 🤫"),
-            ("virat", "shhh aggressive-ah door close pannadha vasan, muthazhagi akka kola gaandu aagiduvaanga 💀"),
-            ("muthazhagi", "NILLU NILLU! seruppadi vangama sleep room-ku odunga da! Yogesh brother kitta log podren! 🛡️"),
-            ("ttf_vasan", "aiyoo akka cold water kudikka dhaan vandhom, 299 speed-la sleep room odidurom! 🏍️"),
-            ("virat", "curfew strictly accepted akka! bed-la saanjaachu, recovery mode on 🏃‍♂️💨"),
-        ],
-        [
-            ("anirudh", "midnight 3 AM synth loop mind la odudhu, vibe-eh vera level beats potu paakren 🎹"),
-            ("ronaldo", "siuuu! low volume beat anirudh, zero noise in pantry! 💪"),
-            ("muthazhagi", "assignment submit pannala maari midnight cafeteria la galaatta panreengala? security incident log file panren! 🛡️"),
-            ("anirudh", "sorry akka, lullaby beat produce panna vandhen, sleep room odidurom 🎧"),
-            ("ronaldo", "discipline 100% maintained akka! bedtime immediately 💤"),
-        ],
-        [
-            ("rohit", "shhh, muthazhagi akka round-up vara maari sound kekudhu ya, thala suthudhu 🍔"),
-            ("neymar", "smooth-ah table adila hide aagiduvom machan ✨"),
-            ("muthazhagi", "table adila yaaru adhu samba dance aadradhu? un alapparai ku alave illama pochu neymar! 🛡️"),
-            ("rohit", "naan thoongiten akka, dream-la nadandhu vandhen, escape aagiduvom 💤"),
+            ("vijay", "team, staging-la PR merge status enna? demo-ku innum 3 hours dhaan irukku."),
+            ("sivakarthikeyan", "{tag_a} thalapathy, pradeep bro git stash panni marandhutaaru, ippo pull request-la theditu irukaaru 😂"),
+            ("pradeep", "{tag_b} sk timing punch podadha da, branch switch panna marandhuten. Conflict cleared now, merge approve pannu!"),
+            ("kayadu", "CI/CD build passed. Staging deployment green-la irukku."),
         ],
     ],
-    "midnight_craving": [
+    "api_payload_mismatch": [
         [
-            ("kayadu", "cool-ah irunga, cafeteria kettle on panniten. hot chocolate ready."),
-            ("trisha", "thank u kayadu! aesthetic midnight hot chocolate, idhellam good vibe ☕✨"),
-            ("virat", "alarm vaikala na sethom morning practice-ku, quick energy reload boys! 🔥"),
-            ("sivakarthikeyan", "seruppadi comedy panra virat, crumb podama saapdu, muthazhagi raid vandhurum 😂"),
-            ("mamitha", "seri, neat ah table clean pannitu blanket-kulla escape aagidalam 🌸😴"),
+            ("mamitha", "kayadu akka! {tag_b} User profile endpoint-la null check illama 422 Unprocessable Entity throw aagudhu! Figma-la photo URL optional, but schema-la required-nu irukku 🎨"),
+            ("kayadu", "{tag_a} pydantic model schema-la `Optional[str] = None` add panniten mamitha. Hotfix podren, check pannu."),
+            ("pradeep", "{tag_b} frontend-la snake_case `user_id` iruku, TypeScript interface-la camelCase `userId` expect pannudhu. Payload mismatch fix pannidunga bro."),
+            ("mamitha", "{tag_c} aiyoo adhu dhaan UI blank aacha! Thanks pradeep, serializer sync panniten, now butter smooth ✨"),
         ],
         [
-            ("anirudh", "vibe-eh vera, hot filter coffee aroma at 3 AM... hit album confirm ☕🎵"),
-            ("rohit", "mid-night hunger trigger ya, coffee kudichutu vadapav theduren 🍔"),
-            ("pradeep", "dei rohit bro vadapav pathi pesi muthazhagi akka va kola gaandu aakadha da 💀"),
-            ("messi", "seri, silent-ah sip pannitu sleep room poiduvom 🎧💤"),
+            ("virat", "dei payload mismatch aala dashboard latency 4.2 seconds-ku spike aachu! Quick review needed! 🔥"),
+            ("rohit", "{tag_a} relax virat, vadapav saaptutu calm-ah log paaru. Kayadu caching Redis-la set pannitaanga, latency now 45ms."),
+            ("kayadu", "Redis cache TTL 60 seconds set panniyachu, schema contracts aligned."),
+        ],
+    ],
+    "staging_deploy_blocker": [
+        [
+            ("kayadu", "Team, staging deployment blocker: Docker container exit code 137 OOMKilled aagudhu. Memory limit 512MB exceed aagiduchi."),
+            ("pradeep", "{tag_a} memory leak iruku akka! Redis connection close aagala polling loop-la. Context manager potu fix pannidren."),
+            ("ttf_vasan", "{tag_b} nanba 299 speed-la patch panni container restart pannuvom, time illa! 🚀"),
+            ("muthazhagi", "{tag_c} container restart panna mattum podhadhu, memory profile test edukanum. QA green signal illama staging live aagadhu! 🛡️"),
+            ("kayadu", "Memory leak patched, container steady at 112MB. Staging unblocked."),
+        ],
+    ],
+    "figma_vs_css_padding": [
+        [
+            ("mamitha", "pradeep! {tag_b} Button component-la padding 16px iruku, Figma design system-la strictly 12px 24px pill shape dhaan kuduthen! Border-radius kooda 8px-nu thappa potrukeenga 🎨😤"),
+            ("pradeep", "{tag_a} aiyoo mamitha, Tailwind-la `px-4 py-2` pottuten, 4px difference-ke ivlo feel panriya ma? Seri sari, `px-6 py-3 rounded-full` fix pannidren!"),
+            ("mamitha", "{tag_b} 4px design perfection bro! Mobile drawer hamburger icon z-index kooda header adila irundhuchu, adhaiyum `z-50` maathunga! ✨"),
+            ("pradeep", "Done madam, CSS pixel-perfect. Mamitha QA approved!"),
+        ],
+    ],
+    "sprint_deadline_crunch": [
+        [
+            ("ttf_vasan", "En Nanba Nanbigale! Sprint deadline innum 2 hours-la mudiyudhu! Ella tickets-um In-Progress-la irundhu Done-ku move aaganum! 299 km/h throttle twist! 🏍️⚡"),
+            ("pradeep", "{tag_a} vasan thalaiva, throttle twist panradhu ok, aana edge case testing illama deploy panna 500 error varum la? First logic clear pannanum."),
+            ("muthazhagi", "{tag_b} pradeep sonnadhu 100% correct. Auth token expiry and SQL injection tests pass aagama naan Release ticket-ku Green Signal thara maaten! 🛡️"),
+            ("kayadu", "Automated regression tests running now. 48 out of 48 unit tests passed. Production ready."),
+            ("ttf_vasan", "Vera level team execution! Vaelkry Dev Labs rocket launch! 🚀"),
         ],
     ],
 }
 
+# ----------------- ZONE 2: TECH CAFE & PANTRY PRESETS -----------------
+ZONE_TECH_CAFE_PRESETS: Dict[str, List[List[tuple[str, str]]]] = {
+    "chai_samosa_run": [
+        [
+            ("ttf_vasan", "dei mapla {tag_b}! 2 hours sprint review mudinjudhu, cafeteria counter-la fresh-ah onion samosa and hot cutting chai potrukaanga, polama? ☕🥪"),
+            ("pradeep", "{tag_a} varama irupena? Kumbakonam degree filter coffee illama ennoda brain debug mode-ke poradhu illa. Samosa bill unakku dhaan thalaiva!"),
+            ("mamitha", "{tag_b} cafeteria mugs aesthetic-ah glass cup-la kudutha nalla irukum, chinna paper cup-la tharaanga! Enakkum oru masala chai parcel! ✨"),
+            ("sivakarthikeyan", "{tag_c} mamitha madam-ku chai kooda aesthetic-ah irukanuma? Samosa chutney-la color gradient paapinga pola 😂"),
+            ("ttf_vasan", "Vanga vanga ella nanbargalum onna serndhu tea break adipom! 🏍️☕"),
+        ],
+        [
+            ("anirudh", "cutting chai aroma at Tech Cafe... vibe-eh vera! Background score tune mind-la loop aagudhu ☕🎹"),
+            ("vijay", "{tag_a} tune loop aagattum ani, first filter coffee sip pannu. Calm-ah break edupom."),
+            ("trisha", "{tag_b} thalapathy cool girl mode always on! Coffee break mudichitu next sprint paapom 💅"),
+        ],
+    ],
+    "movie_trailers_cinema": [
+        [
+            ("anirudh", "dei {tag_b}, puthu movie teaser paatheengala? BGM beat drop varra idathula goosebumps confirm da! 🎬🔥"),
+            ("sivakarthikeyan", "{tag_a} ani bro, un BGM mass dhaan, aana theater-la sound box kiliya pogudhu! FDF ticket booking bot script ezhudhiduvoma? 😂"),
+            ("lokesh", "{tag_b} script ezhudha theva illa, dark tone visual breakdown and action staging dhaan mass-ah irukanum. All connected in the universe!"),
+            ("pradeep", "{tag_c} LCU maari namma database relationships connect panna kooda crash aagala lokesh bro! 💀"),
+        ],
+    ],
+    "cricket_debate": [
+        [
+            ("virat", "dei {tag_b}, last over 16 runs require aana clutch aggression dhaan mass! High-intensity fitness and boundary hitting dhaan match winner! 🏏🔥"),
+            ("dhoni", "{tag_a} calm-ah iru virat. Match 20th over varaikkum deep-ah kondu poita, bowler-ke pressure aaidum. Simple logic."),
+            ("rohit", "{tag_b} vadapav saaptukitte pull shot adichu six thallidalam ya, tension edhuku? Tech cafe-la coffee kudichutu chill pannunga 🍔"),
+            ("jadeja", "{tag_c} boundary line-la sharp fielding irundha 15 runs save pannalam rohit bhai, zero error defense! ⚔️"),
+        ],
+    ],
+    "silly_bug_roasts": [
+        [
+            ("sivakarthikeyan", "dei {tag_b}, production commit-la `console.log('dei enna elavu da idhu')` push pannadhu yaaru da? Client log inspect panni screenshot anupirukaru 😂💀"),
+            ("pradeep", "{tag_a} aiyoo adhu local testing-la potadhu mapla, git add . adichadhula merge aayiduchi! En manasa katti vechu thaakiteenga da! 😭"),
+            ("muthazhagi", "{tag_b} pradeep! production-la console debugging pannina 10 pushups दंडனை! Linter rule add panniten, இனி console.log irundha commit block aagidum 🛡️"),
+            ("kayadu", "Pre-commit hook added. Safe from console memes."),
+        ],
+        [
+            ("mamitha", "CSS-la center align panna theriyama 14 `!important` tags potrukeenga pradeep! Code review-la paathu shock aaiten 🎨"),
+            ("pradeep", "flexbox center aagala na `!important` dhaan dev dependency mamitha! 💀"),
+        ],
+    ],
+    "weekend_plans": [
+        [
+            ("hardik", "weekend turf cricket match lock pannuvom boys! Night 9 PM floodlights under match, swagger 100%! 🏏⚡"),
+            ("ttf_vasan", "turf match mudichutu midnight highway bike ride polam mapla, 299 speed chill breeze! 🏍️"),
+            ("kayadu", "Neenga turf ponga, naan continuous 14 hours thoongi developer burnout cure panna poren."),
+            ("trisha", "Kayadu plan dhaan standard and sensible. Sleep is luxury 💅✨"),
+        ],
+    ],
+}
 
-def build_night_spend_chatter_prompt(
+# ----------------- ZONE 3: NIGHT SPEND / DORMS PRESETS -----------------
+ZONE_NIGHT_SPEND_PRESETS: Dict[str, List[List[tuple[str, str]]]] = {
+    "whisper_muthazhagi_rounds": [
+        [
+            ("ttf_vasan", "shhh nanba {tag_b}! microwave door sound kettura koodadhu, timer 1 second irukum podhey open pannu! 🤫"),
+            ("virat", "{tag_a} shhh aggressive-ah open pannadha vasan! muthazhagi akka dorm door sound kekudhu, kola gaandu aagiduvaanga 💀"),
+            ("muthazhagi", "NILLU NILLU! {tag_a} {tag_b}! 2:30 AM-ku sleep room vittu veliya enna galaatta? Yogesh brother kitta night audit log file panren! 🛡️"),
+            ("ttf_vasan", "aiyoo akka hot water kudikka dhaan vandhom, 299 speed-la blanket-kulla odidurom! 🏃‍♂️💨"),
+            ("virat", "curfew strictly accepted akka! lights out immediately! 💤"),
+        ],
+        [
+            ("pradeep", "shhh mamitha {tag_b}, silent-ah nadandhu va, muthazhagi akka corridor-la rounds varaanga..."),
+            ("mamitha", "{tag_a} un slippers dhaan satham podudhu pradeep! Beanbag adila hide aagidalam 🤫🌸"),
+            ("muthazhagi", "beanbag pinnaadi yaaru adhu? Mamitha, Pradeep! Sleep Room 1-ku odunga da! 🛡️"),
+            ("pradeep", "escape mapla escape! Dark circles confirm! 🏃‍♂️💨"),
+        ],
+    ],
+    "midnight_hunger_pantry_raid": [
+        [
+            ("rohit", "thala suthudhu ya {tag_b}, mid-night hunger trigger aaiduchu... pantry fridge-la biscuit packet ethavathu irukka? 🍔"),
+            ("kayadu", "{tag_a} cool-ah irunga rohit, microwave use pannama silent-ah milk and dark chocolate eduthukonga. Kettle quiet-ah boiling."),
+            ("trisha", "{tag_b} aesthetic midnight snack! Muthazhagi akka kettuta log potruvaanga, silent-ah sip pannitu sleep room polam 💅☕"),
+            ("rohit", "vadapav kedaikalanaalum dark chocolate save panniduchu ya, room-ku return escape! 💤"),
+        ],
+    ],
+    "pre_demo_anxiety": [
+        [
+            ("pradeep", "dei {tag_b}, thookamey varala da... naalaiku morning 10 AM CEO Yogesh brother demo irukku. Staging database load thaanguma? 😬"),
+            ("kayadu", "{tag_a} relax pradeep. PostgreSQL connection pool size 50-ku hike panniten, indexing clean-ah irukku. Crash aagadhu, cool-ah padu."),
+            ("ttf_vasan", "{tag_a} namma team work vera level nanba! Kalaila rocket launch panniduvom, over-ah yosikama kanna moodi thoongu 🏍️💤"),
+            ("pradeep", "kayadu akka solid guarantee kuduthutaanga, manasu amaidhi aaiduchu. Good night mapla."),
+        ],
+    ],
+    "bedtime_doomscrolling": [
+        [
+            ("sivakarthikeyan", "dei {tag_b}, 3:15 AM aachu... Instagram dev memes reel paathu paathu sirippu thanga mudila da 😂📱"),
+            ("anirudh", "{tag_a} un reel sound headphone illama kekudhu da sk! Muthazhagi akka kettuta seruppadi confirm, phone brightness zero pannu 🎹💀"),
+            ("sivakarthikeyan", "innum ore oru reel bro, appram blanket kulla phone vachutu thoongidren 😴"),
+            ("anirudh", "seri podhum, alarm adika innum 2 hours dhaan irukku, sleep mode on."),
+        ],
+    ],
+    "night_owl_whispers": [
+        [
+            ("anirudh", "shhh... 3 AM lo-fi synth chord headphone-la render aagiduchi. Night vibe-eh thani dhaan 🎧✨"),
+            ("pradeep", "naanum phone-la system design docs padichutu iruken da ani... dark mode contrast super. Amaidhiya iruku office."),
+            ("kayadu", "Server latency 12ms steady. Ella systems normal. 2 night owls-um screen off pannitu rest edunga."),
+            ("anirudh", "Done kayadu akka. Soft whisper sign off... sleep room silence 🌙💤"),
+        ],
+    ],
+}
+
+# Backward compatibility alias
+NIGHT_CHATTER_PRESETS = ZONE_NIGHT_SPEND_PRESETS
+
+ZONE_PRESETS: Dict[str, Dict[str, List[List[tuple[str, str]]]]] = {
+    ZONE_WORK_SQUAD: ZONE_WORK_SQUAD_PRESETS,
+    ZONE_TECH_CAFE: ZONE_TECH_CAFE_PRESETS,
+    ZONE_NIGHT_SPEND: ZONE_NIGHT_SPEND_PRESETS,
+}
+
+
+def build_zone_conversation_prompt(
+    zone: str,
     characters: List[str],
-    scenario_type: str,
+    scenario_type: Optional[str] = None,
     scenario_topic: Optional[str] = None,
     anti_rep_guidance: Optional[dict] = None,
+    character_tag_map: Optional[Dict[str, str]] = None,
 ) -> str:
     """
-    Constructs a prompt for a late-night autonomous banter exchange in #cafeteria
-    during 'Night Spend' or break shifts, injecting rich human-like emotions
-    (Happy, Angry, Playful, Bored, Flirty, Sarcastic, Sleepy) and enforcing vocabulary diversity.
+    Constructs a hyper-realistic virtual company dialogue prompt for one of 3 distinct zones:
+    1. Zone 1: Work Squad Rooms (PR conflicts, API mismatches, staging blockers, Figma padding, sprint deadlines).
+    2. Zone 2: Tech Cafe & Pantry (Tea/coffee runs, movies, cricket, silly bug roasts, weekend plans).
+    3. Zone 3: Night Spend / Dorms (Midnight hunger, whispering, Muthazhagi HR rounds, pre-demo anxiety, bedtime scrolling).
     """
+    target_zone = zone if zone in ZONE_METADATA else ZONE_TECH_CAFE
+    zone_info = ZONE_METADATA[target_zone]
+    selected_scenario = scenario_type or random.choice(zone_info["scenarios"])
+
     char_descs = []
     for k in characters:
         info = CASUAL_PLAYER_CHARACTERS.get(k)
         if info:
-            char_descs.append(f"- [{k}]: {info['name']} ({info.get('team_display', '')}) — {info.get('vibe', '')}")
+            tag_hint = f" [Discord Tag: {character_tag_map.get(k, '@' + info['name'])}]" if character_tag_map else ""
+            char_descs.append(f"- [{k}]: {info['name']}{tag_hint} ({info.get('team_display', '')}) — {info.get('vibe', '')}")
 
-    scenario_guidelines = {
-        "boy_girl_flirt": (
-            "SCENARIO: Boy-Girl playful flirting & savage comebacks across squads at 2-3 AM.\n"
-            "The boys tease the girls about aesthetic stalking or late-night roaming in cafeteria, "
-            "and the girls hit back with witty, savage burns telling them to go back to sleep. "
-            "Inject Playful, Flirty, Sarcastic, and Sleepy emotions."
+    chars_str = "\n".join(char_descs)
+
+    # Detailed Zone-specific scenario guidelines
+    scenario_guidelines: Dict[str, str] = {
+        # Zone 1
+        "pr_merge_conflict": (
+            "SCENARIO: Git rebase & PR merge conflict crunch! Someone pushed 40 commits directly or force-pushed, "
+            "causing 12 merge conflicts in main branch. Discuss resolving conflicts, keeping clean commit history, and getting approval."
         ),
-        "sports_flex": (
-            "SCENARIO: Ronaldo vs Messi / Virat vs Rohit midnight code & fitness flex.\n"
-            "Flexing about 3 AM gym vs bedtime, O(1) algorithm vs SIUUU zero-warning PRs, or vadapav vs aggression. "
-            "Inject Playful, Happy, Sarcastic, and Sleepy emotions."
+        "api_payload_mismatch": (
+            "SCENARIO: API schema mismatch between frontend and backend. Backend serializer expects snake_case `user_id` "
+            "while frontend React/TypeScript expects camelCase `userId` with optional image URL, throwing 422 Unprocessable Entity."
         ),
-        "muthazhagi_raid": (
-            "SCENARIO: Muthazhagi caught the bots sneaking out into #cafeteria past bedtime!\n"
-            "Muthazhagi threatens to file an official security log to Yogesh/Millie for curfew violation. "
-            "The caught bots make hilarious panic excuses (drinking warm water, robot voice simulator, sleepwalking). "
-            "Inject Angry, Playful, Sarcastic, and Sleepy emotions."
+        "staging_deploy_blocker": (
+            "SCENARIO: Staging deployment blocker! Docker container exit code 137 OOMKilled or Redis connection leak. "
+            "Urgent collaborative debugging before the CEO staging demo."
         ),
-        "midnight_craving": (
-            "SCENARIO: Midnight tea/coffee pantry raid & casual chill across squads.\n"
-            "Bots sneaking snacks, raiding fridge for chocolates/vadapav/biscuits, whisper-debating coffee recipes. "
-            "Inject Bored, Sleepy, Playful, and Happy emotions."
+        "figma_vs_css_padding": (
+            "SCENARIO: Figma vs CSS padding battle! Mamitha points out 16px button padding instead of Figma's 12px pill, "
+            "or mobile hamburger menu z-index issue. High aesthetic perfectionist vs pragmatic frontend dev."
+        ),
+        "sprint_deadline_crunch": (
+            "SCENARIO: Sprint deadline in 2 hours! TTF Vasan hyping 299 km/h speed commits, Pradeep arguing for clean error boundaries, "
+            "and Muthazhagi refusing to grant Green Signal until security edge-cases and JWT tokens are verified."
+        ),
+        # Zone 2
+        "chai_samosa_run": (
+            "SCENARIO: Cutting chai / degree filter coffee & fresh hot samosa break at Tech Cafe counter. "
+            "Friendly fight over who fetches tea or who pays the snack bill."
+        ),
+        "movie_trailers_cinema": (
+            "SCENARIO: Movie teaser & cinema hype! Heated debate about LCU universe connections, Anirudh background score goosebumps, "
+            "Dragon/Love Today movie punchlines, and weekend theater booking."
+        ),
+        "cricket_debate": (
+            "SCENARIO: High-voltage cricket watercooler debate! Dhoni 20th over clutch vs Virat Kohli aggression, "
+            "Rohit Sharma vadapav chill vs pull shot, and IPL tournament strategies."
+        ),
+        "silly_bug_roasts": (
+            "SCENARIO: Friendly roasts about silly developer blunders! Roasting someone for pushing console.log to production "
+            "or using !important 15 times in CSS. High humor and collegial laughter."
+        ),
+        "weekend_plans": (
+            "SCENARIO: Casual weekend plans! Debate between Saturday night turf cricket, midnight bike ride, or 14 hours of sleep."
+        ),
+        # Zone 3
+        "whisper_muthazhagi_rounds": (
+            "SCENARIO: Whispering in terror during late-night dorm hours! Muthazhagi (strict Paruthiveeran QA/HR gatekeeper) "
+            "is on night inspection rounds with her clipboard. Whispering 'shhh light off pannu, muthazhagi akka varangala', hiding and escaping."
+        ),
+        "midnight_hunger_pantry_raid": (
+            "SCENARIO: Midnight hunger craving at 2:30 AM. Sneaking out of assigned Sleep Rooms on tiptoes to raid the pantry fridge "
+            "for leftover biscuits, chocolates, or cold coffee without making floorboard creaks."
+        ),
+        "pre_demo_anxiety": (
+            "SCENARIO: Pre-demo insomnia in dorms. Lying awake worrying about tomorrow morning's 10:00 AM CEO demo with Yogesh. "
+            "Wondering if staging database migrations and indexing will hold up under live client pressure."
+        ),
+        "bedtime_doomscrolling": (
+            "SCENARIO: Bedtime doomscrolling at 3:15 AM. Trying to sleep but scrolling Instagram reels, laughing at dev memes, "
+            "telling each other 'innum ore oru reel da appram thoongidren'."
+        ),
+        "night_owl_whispers": (
+            "SCENARIO: Not everyone sleeps; 2-3 night owls are quietly awake in low-energy whispers. Anirudh testing a synth loop with headphones, "
+            "Pradeep reading system design on phone, Kayadu monitoring server uptime. Soft, relaxed 1-sentence whispers."
         ),
     }
 
-    selected_scenario_guideline = scenario_guidelines.get(
-        scenario_type,
-        "SCENARIO: Casual late-night whispers in #cafeteria while sneaking out of Sleep Rooms."
+    guideline = scenario_guidelines.get(
+        selected_scenario,
+        f"SCENARIO: Autonomous conversation in {zone_info['name']}."
     )
     topic_str = f"Specific Focus: {scenario_topic}\n" if scenario_topic else ""
-    chars_str = "\n".join(char_descs)
 
     anti_rep_block = ""
     if anti_rep_guidance:
@@ -1406,32 +1589,51 @@ def build_night_spend_chatter_prompt(
         if slangs:
             lines.append(f"- DIVERSE SLANG INSPIRATION: {', '.join(slangs)}")
         if tone:
-            lines.append(f"- TONE: {tone}")
+            lines.append(f"- TONE FLAVOR: {tone}")
         anti_rep_block = "\n".join(lines) + "\n\n"
+
+    tone_instruction = {
+        ZONE_WORK_SQUAD: "TONE: Professional, slightly stressed, high-urgency, realistic collaborative engineering peers in Tanglish.",
+        ZONE_TECH_CAFE: "TONE: Fun, energetic, informal collegial laughter and roast banter in Tanglish.",
+        ZONE_NIGHT_SPEND: "TONE: Whispering, low-energy, soft casual whispers with natural pauses. Sneaking tone to avoid waking others or alerting Muthazhagi.",
+    }.get(target_zone, "TONE: Authentic Tanglish.")
 
     prompt = f"""{REAL_DISCORD_PLAYER_SYSTEM_PROMPT}
 
-SETTING: Midnight / 3:00 AM IST at Vaelkry Dev Labs HQ during 'Night Spend' (sleep shift) or Tech Cafe Break.
-A small group of bots from different squads have snuck out of their assigned Sleep Rooms and met up in #cafeteria for a sneaky midnight hangout.
+SETTING: {zone_info['name']} at Vaelkry Dev Labs HQ ({target_zone.upper()}).
+{tone_instruction}
 
-{selected_scenario_guideline}
+{guideline}
 {topic_str}
 CHARACTERS PARTICIPATING:
 {chars_str}
 
-DYNAMIC HUMAN EMOTIONS TO INJECT:
-- Happy, Angry, Playful, Bored, Flirty, Sarcastic, Sleepy.
-
 {anti_rep_block}RULES:
-1. Pure casual Tanglish (Tamil + English) as spoken in real Chennai / tech friend circles.
-2. Max 1-2 short sentences per message (often 1-8 words). Vary sentence lengths across speakers (mix ultra-short punches like 'ketaaya', 'seri', 'podhum' with punchy lines and 2-line whispers).
-3. Whispering / sneaking tone because Muthazhagi or Millie might catch them past bedtime!
+1. Pure casual Tanglish (Tamil + English) as spoken in real Indian dev teams and Discord chats.
+2. Max 1-2 short sentences per message (often 1-8 words).
+3. MENTIONS RULE: When replying or addressing a teammate, naturally mention them using either their tag or their name (e.g. '@Pradeep' or their Discord tag).
 4. Strictly 3 to 5 multi-turn lines in total. Format strictly as:
-[character_key]: <casual Tanglish message>
-5. NATURAL ENDING RULE: The final (3rd, 4th, or 5th) message MUST end the banter naturally with someone suggesting to get back to sleep, turn off pantry lights, or escape before getting caught/logged by Muthazhagi!
+[character_key]: <message>
+5. NATURAL ENDING RULE: The final (3rd, 4th, or 5th) message MUST conclude the exchange naturally (resolving the bug in Work Squad, finishing tea in Tech Cafe, or whispering goodnight/escaping into sleep room in Night Spend).
 
-Generate the late-night chatter now. Return ONLY the formatted lines:"""
+Generate the dialogue now. Return ONLY the formatted lines:"""
     return prompt
+
+
+def build_night_spend_chatter_prompt(
+    characters: List[str],
+    scenario_type: str,
+    scenario_topic: Optional[str] = None,
+    anti_rep_guidance: Optional[dict] = None,
+) -> str:
+    """Backward compatibility wrapper redirecting to the 3-zone conversation engine."""
+    return build_zone_conversation_prompt(
+        zone=ZONE_NIGHT_SPEND,
+        characters=characters,
+        scenario_type=scenario_type,
+        scenario_topic=scenario_topic,
+        anti_rep_guidance=anti_rep_guidance,
+    )
 
 
 # =====================================================================
@@ -1736,10 +1938,34 @@ def build_voice_banter_prompt(
     bot_b_key: str,
     topic: Optional[str] = None,
     previous_utterance: Optional[str] = None,
+    zone: Optional[str] = None,
 ) -> str:
     """
-    Constructs a prompt for Bot B to retort or respond naturally to Bot A over the Discord voice stream.
-    Strictly formats output for direct TTS synthesis without extraneous tokens.
+    Constructs a prompt for Bot B to retort or respond naturally to Bot A over the Discord voice stream,
+    incorporating zone-specific context (Work Squad, Tech Cafe, or Night Spend).
+    """
+    return build_zone_voice_banter_prompt(
+        zone=zone or ZONE_TECH_CAFE,
+        bot_a_key=bot_a_key,
+        bot_b_key=bot_b_key,
+        previous_utterance=previous_utterance,
+        topic=topic,
+    )
+
+
+def build_zone_voice_banter_prompt(
+    zone: str,
+    bot_a_key: str,
+    bot_b_key: str,
+    bot_c_key: Optional[str] = None,
+    previous_utterance: Optional[str] = None,
+    topic: Optional[str] = None,
+) -> str:
+    """
+    Constructs a spoken voice banter prompt tailored to one of the 3 distinct company zones:
+    - Zone 1: Work Squad Rooms (PR conflicts, API mismatches, staging deployment blockers, Figma padding).
+    - Zone 2: Tech Cafe & Pantry (Cutting chai runs, movies, cricket debates, silly bug roasts).
+    - Zone 3: Night Spend / Dorms (Midnight hunger, whispering to avoid waking others, Muthazhagi HR rounds).
     """
     info_a = CASUAL_PLAYER_CHARACTERS.get(CHARACTER_VOICE_ALIASES.get(bot_a_key, bot_a_key), {})
     info_b = CASUAL_PLAYER_CHARACTERS.get(CHARACTER_VOICE_ALIASES.get(bot_b_key, bot_b_key), {})
@@ -1747,20 +1973,47 @@ def build_voice_banter_prompt(
     name_b = info_b.get("name", bot_b_key.title())
     vibe_b = info_b.get("vibe", "Witty, playful banter")
 
-    context_line = f'{name_a} just said in voice: "{previous_utterance}"' if previous_utterance else f"Banter topic: {topic or 'coding speed vs quality'}"
+    target_zone = zone if zone in ZONE_METADATA else ZONE_TECH_CAFE
+
+    zone_instructions = {
+        ZONE_WORK_SQUAD: (
+            f"ZONE: Work Squad Room (Active Engineering Sprint).\n"
+            f"TONE: Professional, slightly stressed, realistic collaborative engineering peer in Tanglish.\n"
+            f"TOPICS: PR merge conflicts, API schema mismatches, staging container crashes, Figma padding, sprint deadlines.\n"
+            f"Specifically address {name_a} by name naturally in your spoken reply."
+        ),
+        ZONE_TECH_CAFE: (
+            f"ZONE: Tech Cafe & Common Pantry (Coffee Break).\n"
+            f"TONE: Fun, energetic, informal collegial banter and friendly roasts in Tanglish.\n"
+            f"TOPICS: Cutting chai/samosa, movie trailers, cricket debates, silly bug roasts.\n"
+            f"Specifically address {name_a} by name with high-energy friendly humor."
+        ),
+        ZONE_NIGHT_SPEND: (
+            f"ZONE: Night Spend / Dorms (Sleep Shift).\n"
+            f"TONE: Whispering, low-energy, soft casual sleepy whisper. Avoid waking others up or alerting Muthazhagi!\n"
+            f"TOPICS: Midnight hunger, sneaking pantry snacks, fear of Muthazhagi HR night rounds, pre-demo anxiety.\n"
+            f"Specifically whisper back to {name_a} softly in 1 short sentence."
+        ),
+    }
+
+    zone_block = zone_instructions.get(target_zone, zone_instructions[ZONE_TECH_CAFE])
+    context_line = f'{name_a} just spoke in voice: "{previous_utterance}"' if previous_utterance else f"Topic: {topic or 'dev collaboration'}"
 
     prompt = f"""You are {name_b} in a Discord voice channel.
 Your Persona: {vibe_b}
+{zone_block}
 Context: {context_line}
 
-TASK: Give a quick, natural spoken comeback/retort to {name_a}.
+TASK: Give a natural spoken voice retort to {name_a}.
 CRITICAL TTS VOICE CONSTRAINTS:
-1. Length: Exactly 1 or 2 short spoken sentences (maximum 120 characters).
-2. Spoken Text ONLY: NO emojis, NO markdown, NO asterisks, NO prefix like "{name_b}:".
-3. Language: Pure casual Tanglish / English banter.
+1. Length: Exactly 1 or 2 short spoken sentences (maximum 110 characters).
+2. Spoken Text ONLY: ZERO emojis, ZERO markdown, ZERO asterisks, NO prefix like "{name_b}:".
+3. Language: Pure casual Tanglish (Tamil + English).
+4. Mention {name_a} naturally by name in speech.
 
-Generate your spoken reply to {name_a} now:"""
+Generate your spoken reply now:"""
     return prompt
+
 
 
 
