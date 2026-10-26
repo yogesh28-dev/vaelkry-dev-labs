@@ -1033,6 +1033,10 @@ class CompanyScheduler:
                 except Exception:
                     pass
 
+            # IMMEDIATE CEO VC INSPECTION & EVICTION ON LOGIN:
+            # If any non-executive bot (especially TTF Vasan) is in Ceo Vc upon login, evict them immediately!
+            await self.evict_unauthorized_bots_from_ceo_vc(bot_guild)
+
             now_ist = get_current_ist_time()
             current_shift = match_current_shift(now_ist)
             is_work_shift = current_shift.shift_id.startswith("work_")
@@ -1148,29 +1152,34 @@ class CompanyScheduler:
         Dynamically fetches all voice channels under the 'Night Spend' category.
         Falls back to any voice channels containing 'sleep' or auto-provisions if none exist.
         """
+        cats = getattr(guild, "categories", [])
+        if not isinstance(cats, (list, tuple)):
+            cats = []
         night_spend_cat = discord.utils.find(
-            lambda c: c.name.strip().lower() == "night spend",
-            guild.categories,
+            lambda c: hasattr(c, "name") and c.name.strip().lower() == "night spend",
+            cats,
         )
-        if night_spend_cat and night_spend_cat.voice_channels:
+        if night_spend_cat and getattr(night_spend_cat, "voice_channels", None):
             return list(night_spend_cat.voice_channels)
 
         # Fallback 1: Voice channels in guild with 'sleep' in the name
-        sleep_vcs = [vc for vc in guild.voice_channels if "sleep" in vc.name.lower()]
+        sleep_vcs = [vc for vc in getattr(guild, "voice_channels", []) if "sleep" in vc.name.lower()]
         if sleep_vcs:
             return sleep_vcs
 
         # Fallback 2: Auto-provision Night Spend category with Sleep Room 1, 2, 3
         try:
-            if not night_spend_cat:
+            if not night_spend_cat and hasattr(guild, "create_category"):
                 night_spend_cat = await guild.create_category(name="Night Spend")
-            r1 = await night_spend_cat.create_voice_channel(name="Sleep Room 1")
-            r2 = await night_spend_cat.create_voice_channel(name="Sleep Room 2")
-            r3 = await night_spend_cat.create_voice_channel(name="Sleep Room 3")
-            return [r1, r2, r3]
+            if night_spend_cat and hasattr(night_spend_cat, "create_voice_channel"):
+                r1 = await night_spend_cat.create_voice_channel(name="Sleep Room 1")
+                r2 = await night_spend_cat.create_voice_channel(name="Sleep Room 2")
+                r3 = await night_spend_cat.create_voice_channel(name="Sleep Room 3")
+                return [r1, r2, r3]
+            return []
         except Exception as exc:
             logger.error(f"Error provisioning fallback sleep rooms: {exc}")
-            if guild.voice_channels:
+            if getattr(guild, "voice_channels", None):
                 return [guild.voice_channels[0]]
             return []
 
@@ -1180,33 +1189,41 @@ class CompanyScheduler:
         'The Seven Slide', 'Byte & Bit', 'The Hive', 'The Hangout Zone'.
         Auto-provisions or searches by name if category is missing.
         """
+        cats = getattr(guild, "categories", [])
+        if not isinstance(cats, (list, tuple)):
+            cats = []
         tech_cafe_cat = discord.utils.find(
-            lambda c: c.name.strip().lower() == "tech cafe",
-            guild.categories,
+            lambda c: hasattr(c, "name") and c.name.strip().lower() == "tech cafe",
+            cats,
         )
-        if tech_cafe_cat and tech_cafe_cat.voice_channels:
+        if tech_cafe_cat and getattr(tech_cafe_cat, "voice_channels", None):
             return list(tech_cafe_cat.voice_channels)
 
         expected_names = ["The Seven Slide", "Byte & Bit", "The Hive", "The Hangout Zone"]
         # Fallback 1: match by name across guild
-        found = [vc for vc in guild.voice_channels if vc.name.strip().lower() in [n.lower() for n in expected_names]]
-        if found:
-            return found
+        vcs = getattr(guild, "voice_channels", [])
+        if isinstance(vcs, (list, tuple)):
+            found = [vc for vc in vcs if hasattr(vc, "name") and vc.name.strip().lower() in [n.lower() for n in expected_names]]
+            if found:
+                return found
 
         # Fallback 2: auto-provision Tech Cafe category with all 4 rooms
         try:
-            if not tech_cafe_cat:
+            if not tech_cafe_cat and hasattr(guild, "create_category"):
                 tech_cafe_cat = await guild.create_category(name="Tech Cafe")
             vcs = []
-            for name in expected_names:
-                vc = discord.utils.find(lambda v: v.name.strip().lower() == name.lower(), tech_cafe_cat.voice_channels)
-                if not vc:
-                    vc = await tech_cafe_cat.create_voice_channel(name=name)
-                vcs.append(vc)
-            return vcs
+            if tech_cafe_cat and hasattr(tech_cafe_cat, "create_voice_channel"):
+                existing_vcs = getattr(tech_cafe_cat, "voice_channels", [])
+                for name in expected_names:
+                    vc = discord.utils.find(lambda v: hasattr(v, "name") and v.name.strip().lower() == name.lower(), existing_vcs)
+                    if not vc:
+                        vc = await tech_cafe_cat.create_voice_channel(name=name)
+                    vcs.append(vc)
+                return vcs
+            return []
         except Exception as exc:
             logger.error(f"Error provisioning fallback Tech Cafe channels: {exc}")
-            if guild.voice_channels:
+            if getattr(guild, "voice_channels", None):
                 return [guild.voice_channels[0]]
             return []
 
@@ -1228,26 +1245,30 @@ class CompanyScheduler:
             except Exception as cat_err:
                 logger.warning(f"Could not auto-ensure Team Vijay category in find_or_provision: {cat_err}")
 
+        cats = getattr(guild, "categories", [])
+        if not isinstance(cats, (list, tuple)):
+            cats = []
         category = discord.utils.find(
-            lambda c: c.name.strip().lower() == category_name.strip().lower(),
-            guild.categories,
+            lambda c: hasattr(c, "name") and c.name.strip().lower() == category_name.strip().lower(),
+            cats,
         )
-        if category:
+        if category and getattr(category, "voice_channels", None):
             vc = discord.utils.find(
-                lambda v: v.name.strip().lower() == vc_name.strip().lower(),
+                lambda v: hasattr(v, "name") and v.name.strip().lower() == vc_name.strip().lower(),
                 category.voice_channels,
             )
             if vc:
                 return vc
-            if category.voice_channels:
-                return category.voice_channels[0]
+            return category.voice_channels[0]
 
-        vc = discord.utils.find(
-            lambda v: v.name.strip().lower() == vc_name.strip().lower(),
-            guild.voice_channels,
-        )
-        if vc:
-            return vc
+        guild_vcs = getattr(guild, "voice_channels", [])
+        if isinstance(guild_vcs, (list, tuple)):
+            vc = discord.utils.find(
+                lambda v: hasattr(v, "name") and v.name.strip().lower() == vc_name.strip().lower(),
+                guild_vcs,
+            )
+            if vc:
+                return vc
 
         try:
             if not category:
@@ -1301,12 +1322,18 @@ class CompanyScheduler:
                     guild, "Team Dhoni", "Working Vc 1"
                 )
 
-        # If not work shift or squad VC not resolved or is Ceo Vc, route to Tech Cafe
+        # If not work shift or squad VC not resolved or is Ceo Vc, route to Night Spend or Tech Cafe
         if not safe_vc or is_ceo_vc(safe_vc):
-            cafe_rooms = await self.get_tech_cafe_voice_channels(guild)
-            safe_cafe_rooms = [vc for vc in cafe_rooms if not is_ceo_vc(vc)]
-            if safe_cafe_rooms:
-                safe_vc = random.choice(safe_cafe_rooms)
+            if active_shift and active_shift.shift_id == "sleep":
+                sleep_rooms = await self.get_night_spend_voice_channels(guild)
+                safe_sleep_rooms = [vc for vc in sleep_rooms if not is_ceo_vc(vc)]
+                if safe_sleep_rooms:
+                    safe_vc = random.choice(safe_sleep_rooms)
+            else:
+                cafe_rooms = await self.get_tech_cafe_voice_channels(guild)
+                safe_cafe_rooms = [vc for vc in cafe_rooms if not is_ceo_vc(vc)]
+                if safe_cafe_rooms:
+                    safe_vc = random.choice(safe_cafe_rooms)
 
         # Fallback to any voice channel in guild that is NOT Ceo Vc
         if not safe_vc or is_ceo_vc(safe_vc):
@@ -1316,6 +1343,93 @@ class CompanyScheduler:
                     break
 
         return safe_vc
+
+    async def evict_unauthorized_bots_from_ceo_vc(self, guild: discord.Guild):
+        """
+        Immediate Ceo Vc Inspection & Eviction:
+        Inspects 'Ceo Vc' (ID: 1563622904829190326 or name variants).
+        If any bot other than 'sadie' and 'millie' (especially TTF Vasan) is inside 'Ceo Vc',
+        instantly disconnects or moves them to their assigned room.
+        Guarantees that TTF Vasan or any other developer bot does not remain in Ceo Vc even for one cycle.
+        """
+        if not guild:
+            return
+
+        now_ist = get_current_ist_time()
+        current_shift = match_current_shift(now_ist)
+
+        # 1. Resolve CEO VC channel
+        ceo_vc = guild.get_channel(CEO_VC_ID)
+        if not ceo_vc or not isinstance(ceo_vc, discord.VoiceChannel):
+            ceo_vc = discord.utils.find(lambda c: is_ceo_vc(c) and isinstance(c, discord.VoiceChannel), getattr(guild, "voice_channels", []))
+
+        # 2. Inspect all bots across orchestrator
+        for key, client in list(self.orchestrator.clients.items()):
+            norm_key = _normalize_bot_key(key).lower()
+            if norm_key in EXECUTIVE_BOT_KEYS:
+                continue  # Sadie and Millie are authorized
+
+            if not client or not client.is_ready():
+                continue
+
+            bot_guild = client.get_guild(guild.id) or guild
+            bot_member = bot_guild.get_member(client.user.id) if client.user else None
+            vc_conn = discord.utils.get(client.voice_clients, guild=bot_guild)
+
+            # Check if bot is inside Ceo Vc
+            is_in_ceo = False
+            if bot_member and bot_member.voice and bot_member.voice.channel and is_ceo_vc(bot_member.voice.channel):
+                is_in_ceo = True
+            elif vc_conn and vc_conn.is_connected() and vc_conn.channel and is_ceo_vc(vc_conn.channel):
+                is_in_ceo = True
+            elif ceo_vc and client.user and any(m.id == client.user.id for m in getattr(ceo_vc, "members", [])):
+                is_in_ceo = True
+
+            if is_in_ceo:
+                logger.warning(
+                    f"🚫 [IMMEDIATE CEO VC EVICTION] Detected unauthorized bot '{norm_key}' "
+                    f"({client.user.name if client.user else 'bot'}) inside Ceo Vc! Evicting immediately..."
+                )
+                safe_vc = await self.get_safe_non_ceo_vc(norm_key, bot_guild, current_shift)
+                if safe_vc and not is_ceo_vc(safe_vc):
+                    try:
+                        await self.move_single_bot(client, safe_vc, current_shift)
+                    except Exception as evict_err:
+                        logger.error(
+                            f"Failed to move unauthorized bot '{norm_key}' to safe VC: {evict_err}. Force disconnecting..."
+                        )
+                        if vc_conn:
+                            try:
+                                await vc_conn.disconnect(force=True)
+                            except Exception:
+                                pass
+                        try:
+                            await bot_guild.change_voice_state(channel=None)
+                        except Exception:
+                            pass
+                        if hasattr(client, "ws") and client.ws:
+                            try:
+                                await client.ws.voice_state(guild.id, None)
+                            except Exception:
+                                pass
+                else:
+                    logger.warning(
+                        f"🚫 [IMMEDIATE CEO VC EVICTION] No safe non-CEO VC found for '{norm_key}'. Force disconnecting..."
+                    )
+                    if vc_conn:
+                        try:
+                            await vc_conn.disconnect(force=True)
+                        except Exception:
+                            pass
+                    try:
+                        await bot_guild.change_voice_state(channel=None)
+                    except Exception:
+                        pass
+                    if hasattr(client, "ws") and client.ws:
+                        try:
+                            await client.ws.voice_state(guild.id, None)
+                        except Exception:
+                            pass
 
     async def move_single_bot(
         self,
@@ -2039,13 +2153,17 @@ class CompanyScheduler:
 
     async def _run_loop(self, guild: discord.Guild):
         """Continuous 1-minute background loop monitoring IST shift transitions."""
-        logger.info("IST Routine Scheduler background loop started.")
+        logger.info("IST Routine Scheduler 30-second background loop started.")
         loop_ticks = 0
         while self.is_active:
             try:
                 loop_ticks += 1
                 now_ist = get_current_ist_time()
                 current_shift = match_current_shift(now_ist)
+
+                # Unconditional Immediate Ceo Vc Inspection & Eviction on every 30-second cycle:
+                # Strictly evicts any bot other than Sadie and Millie (especially TTF Vasan) from Ceo Vc instantly!
+                await self.evict_unauthorized_bots_from_ceo_vc(guild)
 
                 # Check if shift changed
                 if current_shift.shift_id != self.current_shift_id:
@@ -2318,14 +2436,14 @@ class CompanyScheduler:
             except Exception as exc:
                 logger.exception(f"Error in scheduler background loop: {exc}")
 
-            await asyncio.sleep(60)
+            await asyncio.sleep(30)
 
     async def start(self, guild: discord.Guild) -> str:
         """
         Activates the company lifecycle:
         1. Posts operational start status embed strictly to #yogesh-chat (1563622902744481812).
         2. Evaluates current IST time and immediately relocates developer bots.
-        3. Starts the 1-minute scheduler background loop.
+        3. Starts the 30-second scheduler background loop.
         """
         if self.is_active:
             return "⚠️ **Company is already in active operation!** The IST scheduler is running."
@@ -2333,13 +2451,17 @@ class CompanyScheduler:
         self.is_active = True
         self.voice_override_active = False
         self.voice_override_vc = None
+
+        # Inspect and evict unauthorized bots from Ceo Vc immediately on startup
+        await self.evict_unauthorized_bots_from_ceo_vc(guild)
+
         now_ist = get_current_ist_time()
         initial_shift = match_current_shift(now_ist)
 
         # Immediately apply current IST shift
         await self.apply_shift(guild, initial_shift)
 
-        # Launch 1-minute routine loop
+        # Launch 30-second routine loop
         if self._loop_task and not self._loop_task.done():
             self._loop_task.cancel()
         self._loop_task = asyncio.create_task(self._run_loop(guild))

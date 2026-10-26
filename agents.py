@@ -1442,6 +1442,13 @@ ZONE_NIGHT_SPEND_PRESETS: Dict[str, List[List[tuple[str, str]]]] = {
             ("trisha", "{tag_b} aesthetic midnight snack! Muthazhagi akka kettuta log potruvaanga, silent-ah sip pannitu sleep room polam 💅☕"),
             ("rohit", "vadapav kedaikalanaalum dark chocolate save panniduchu ya, room-ku return escape! 💤"),
         ],
+        [
+            ("haaland", "shhh {tag_b}... robot hunger trigger aaiduchu da! 3 AM pantry fridge-la protein shake or biscuit ethavathu irukka? 🤖🍞"),
+            ("neymar", "{tag_a} haha haaland machan! Silent-ah tiptoe panni va, samba step potu fridge door open panren 🕺🍫"),
+            ("pradeep", "dei haaland neymar! Whisper pannunga da, muthazhagi akka dorm inspection-la caught aana sprint audit confirm! 😭"),
+            ("haaland", "calories secured, zero latency escape back to sleep room! 🤖💤"),
+            ("neymar", "shhh good night mapla, blanket inside silence 🌙✨"),
+        ],
     ],
     "pre_demo_anxiety": [
         [

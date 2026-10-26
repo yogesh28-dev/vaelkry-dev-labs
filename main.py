@@ -997,6 +997,8 @@ class VaelkryBotClient(discord.Client):
                     self.agent_config.key, self, target_guild
                 )
             )
+            # Ensure 24/7 autonomous background chatter loop is running
+            self.orchestrator.casual_player_service.ensure_autonomous_chatting_loop()
 
     async def on_message(self, message: discord.Message):
         await self.orchestrator.handle_incoming_message(self, message)
@@ -1031,6 +1033,21 @@ class VaelkryBotClient(discord.Client):
             await self.orchestrator.moderator_service.handle_voice_state_patrol_trigger(member, before, after)
             await self.orchestrator.moderator_service.handle_follower_voice_update(member, before, after)
             await self.orchestrator.moderator_service.sync_moderator_voice_state(member, after)
+
+        # Immediate Ceo Vc Eviction: If any bot other than Sadie and Millie is inside Ceo Vc, evict instantly!
+        if member.bot and after.channel:
+            from scheduler_service import is_ceo_vc, EXECUTIVE_BOT_KEYS, _normalize_bot_key
+            if is_ceo_vc(after.channel):
+                bot_k = self.orchestrator.bot_user_ids.get(member.id, "")
+                if not bot_k:
+                    for k, cl in self.orchestrator.clients.items():
+                        if cl.user and cl.user.id == member.id:
+                            bot_k = k
+                            break
+                if _normalize_bot_key(bot_k).lower() not in EXECUTIVE_BOT_KEYS:
+                    asyncio.create_task(
+                        self.orchestrator.scheduler_service.evict_unauthorized_bots_from_ceo_vc(member.guild)
+                    )
 
         # Responsive Live Mic Listening: dynamically listen when humans enter/leave VC
         if self.agent_config.key == "ttf_vasan":

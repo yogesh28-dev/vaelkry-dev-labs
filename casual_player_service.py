@@ -227,6 +227,225 @@ class CasualPlayerService:
         self._webhook_cache: Dict[int, discord.Webhook] = {}
         self._chat_history: Dict[int, List[dict]] = {}
         self._banter_lock = asyncio.Lock()
+        self._autonomous_banter_task: Optional[asyncio.Task] = None
+        self.is_running: bool = True
+
+        # Launch 24/7 autonomous background chatter loop
+        self._start_background_tasks()
+
+    def _start_background_tasks(self):
+        """Initializes the fully automatic 24/7 realistic chatting loop (45-90s interval)."""
+        try:
+            loop = asyncio.get_event_loop()
+            if not self._autonomous_banter_task or self._autonomous_banter_task.done():
+                self._autonomous_banter_task = loop.create_task(self._autonomous_chatting_loop())
+        except RuntimeError:
+            pass
+
+    def ensure_autonomous_chatting_loop(self):
+        """Ensures the 24/7 autonomous chatter loop is active."""
+        if not self.is_running:
+            self.is_running = True
+        try:
+            loop = asyncio.get_event_loop()
+            if not self._autonomous_banter_task or self._autonomous_banter_task.done():
+                self._autonomous_banter_task = loop.create_task(self._autonomous_chatting_loop())
+                logger.info("24/7 Autonomous Chatter Loop initialized.")
+        except Exception as exc:
+            logger.debug(f"Could not launch autonomous chat loop: {exc}")
+
+    def cleanup_all(self):
+        """Stops background chatter tasks."""
+        self.is_running = False
+        if self._autonomous_banter_task and not self._autonomous_banter_task.done():
+            self._autonomous_banter_task.cancel()
+            self._autonomous_banter_task = None
+
+    def get_current_shift_type(self) -> str:
+        """
+        Determines whether the active IST shift is 'work', 'break', or 'sleep'.
+        """
+        scheduler = getattr(self.orchestrator, "scheduler_service", None)
+        shift_id = getattr(scheduler, "current_shift_id", None)
+        if not shift_id:
+            try:
+                from scheduler_service import match_current_shift, get_current_ist_time
+                now_ist = get_current_ist_time()
+                shift = match_current_shift(now_ist)
+                shift_id = shift.shift_id
+            except Exception:
+                shift_id = "work_1"
+
+        shift_id = (shift_id or "").lower()
+        if shift_id == "sleep":
+            return "sleep"
+        elif "break" in shift_id or shift_id in ("warmup", "rest_1", "rest_2", "rest_3", "rest_4"):
+            return "break"
+        else:
+            return "work"
+
+    async def _autonomous_chatting_loop(self):
+        """
+        Fully Automatic 24/7 Autonomous Chatter Loop (runs every 45 to 90 seconds).
+        Zero manual commands needed. Runs continuously in the background:
+        - Resolves connected guild from active clients.
+        - Triggers contextual multi-bot conversations tailored to the current IST shift (Work, Break, or Sleep).
+        - Bots speak in authentic Tanglish, reply to each other with native Discord replies,
+          and display realistic 2-4 second human typing delays.
+        """
+        # Give bot clients 15 seconds to connect to Discord gateway on startup
+        await asyncio.sleep(15.0)
+        logger.info("24/7 Autonomous Banter Loop running (45-90s cycle).")
+        while self.is_running:
+            try:
+                guild = None
+                for client in self.orchestrator.clients.values():
+                    if client.is_ready() and client.guilds:
+                        guild = client.guilds[0]
+                        break
+
+                if guild:
+                    await self._execute_autonomous_shift_banter(guild)
+            except asyncio.CancelledError:
+                break
+            except Exception as exc:
+                logger.debug(f"Error in autonomous chatting loop: {exc}")
+
+            delay = random.uniform(45.0, 90.0)
+            try:
+                await asyncio.sleep(delay)
+            except asyncio.CancelledError:
+                break
+
+    async def _execute_autonomous_shift_banter(self, guild: discord.Guild):
+        """
+        Executes a spontaneous conversation cycle matching the active IST shift:
+        1. Work Shift:
+           - 2 bots automatically start arguing or collaborating about PRs, merge conflicts,
+             and code reviews in their respective team chat channels (#working-chat, #the-launchpad).
+        2. Break Shift:
+           - Bots spontaneously roast each other, discuss tea/samosa, and banter in #cafeteria.
+        3. Sleep Shift:
+           - Night-owl bots (like Haaland, Neymar, Pradeep) send late-night whispers,
+             complaining about hunger or laughing about bugs in #cafeteria / sleep rooms.
+        """
+        if not guild:
+            return
+
+        if self._banter_lock.locked():
+            logger.debug("Banter lock already active; skipping autonomous cycle.")
+            return
+
+        shift_type = self.get_current_shift_type()
+
+        if shift_type == "work":
+            # Target channels: prefer #the-launchpad or #working-chat
+            work_candidates = [
+                c for c in getattr(guild, "text_channels", [])
+                if c.name.lower() in ("working-chat", "the-launchpad")
+            ]
+            if not work_candidates:
+                work_candidates = [
+                    c for c in getattr(guild, "text_channels", [])
+                    if any(w in c.name.lower() for w in ("working-chat", "the-launchpad", "team-chat", "work", "dev"))
+                ]
+            target_ch = random.choice(work_candidates) if work_candidates else None
+
+            # Determine squad members based on channel context
+            ch_name = target_ch.name.lower() if target_ch else ""
+            cat_name = getattr(getattr(target_ch, "category", None), "name", "").lower() if target_ch else ""
+
+            if "launchpad" in ch_name or "vaasan" in cat_name or "vasan" in ch_name:
+                squad_members = ["ttf_vasan", "pradeep", "mamitha", "kayadu", "muthazhagi"]
+            elif "vijay" in cat_name or "vijay" in ch_name:
+                squad_members = ["vijay", "sivakarthikeyan", "anirudh", "trisha", "lokesh"]
+            elif "messi" in cat_name or "messi" in ch_name:
+                squad_members = ["haaland", "neymar", "messi", "ronaldo"]
+            elif "dhoni" in cat_name or "dhoni" in ch_name:
+                squad_members = ["virat", "rohit", "dhoni"]
+            else:
+                squad_members = random.choice([
+                    ["ttf_vasan", "pradeep", "mamitha", "kayadu", "muthazhagi"],
+                    ["vijay", "sivakarthikeyan", "anirudh", "trisha", "lokesh"],
+                    ["haaland", "neymar", "messi", "ronaldo"],
+                    ["virat", "rohit", "dhoni"],
+                ])
+
+            participants = random.sample(squad_members, k=2)
+            scenario = random.choice([
+                "pr_merge_conflict_battle",
+                "api_payload_mismatch",
+                "docker_oom_staging_blocker",
+                "sprint_deadline_crunch",
+            ])
+            await self.run_autonomous_zone_chatter(
+                guild=guild,
+                zone=ZONE_WORK_SQUAD,
+                custom_scenario=scenario,
+                participants=participants,
+                target_channel=target_ch,
+            )
+
+        elif shift_type == "break":
+            # Break Shift: spontaneously roast each other, discuss tea/samosa, and banter in #cafeteria
+            target_ch = find_cafeteria_channel(guild)
+            if not target_ch and hasattr(guild, "text_channels"):
+                target_ch = discord.utils.find(
+                    lambda c: any(w in c.name.lower() for w in ("cafeteria", "pantry", "lounge", "cafe", "hangout")),
+                    guild.text_channels,
+                )
+
+            cross_squad_pool = [
+                "ttf_vasan", "vijay", "sivakarthikeyan", "pradeep", "anirudh",
+                "mamitha", "virat", "rohit", "haaland", "neymar", "kayadu", "trisha"
+            ]
+            participants = random.sample(cross_squad_pool, k=2)
+            scenario = random.choice([
+                "cutting_chai_samosa_run",
+                "friendly_roast_production_bug",
+                "movie_trailer_lcu_debate",
+                "cricket_ipl_debate",
+                "weekend_plans",
+            ])
+            await self.run_autonomous_zone_chatter(
+                guild=guild,
+                zone=ZONE_TECH_CAFE,
+                custom_scenario=scenario,
+                participants=participants,
+                target_channel=target_ch,
+            )
+
+        else:
+            # Sleep Shift: Night-owl bots (like Haaland, Neymar, Pradeep) send late-night whispers,
+            # complaining about hunger or laughing about bugs in #cafeteria / sleep rooms
+            target_ch = find_cafeteria_channel(guild)
+            if not target_ch and hasattr(guild, "text_channels"):
+                target_ch = discord.utils.find(
+                    lambda c: any(w in c.name.lower() for w in ("cafeteria", "pantry", "dorm", "night", "sleep", "lounge")),
+                    guild.text_channels,
+                )
+
+            core_night_owls = ["haaland", "neymar", "pradeep"]
+            all_night_owls = ["haaland", "neymar", "pradeep", "sivakarthikeyan", "ttf_vasan", "rohit", "anirudh"]
+            bot1 = random.choice(core_night_owls)
+            bot2 = random.choice([b for b in all_night_owls if b != bot1])
+            participants = [bot1, bot2]
+
+            scenario = random.choice([
+                "midnight_hunger_pantry_raid",
+                "whisper_muthazhagi_rounds",
+                "pre_demo_anxiety",
+                "bedtime_doomscrolling",
+                "night_owl_whispers",
+            ])
+            await self.run_autonomous_zone_chatter(
+                guild=guild,
+                zone=ZONE_NIGHT_SPEND,
+                custom_scenario=scenario,
+                participants=participants,
+                target_channel=target_ch,
+            )
+
 
     def _record_message(self, channel_id: int, sender: str, text: str):
         if channel_id not in self._chat_history:
@@ -284,10 +503,10 @@ class CasualPlayerService:
         # Track message in AntiRepetitionEngine to update vocabulary history and length modes
         self.anti_repetition_engine.record_message(char_key, text)
 
-        # Human-like typing delay proportional to message length (1.5 to 3.5 seconds)
+        # Human-like typing delay proportional to message length (2.0 to 4.0 seconds)
         char_count = len(text)
-        calc_delay = 1.5 + min(2.0, (char_count / 120.0) * 1.5)
-        realistic_delay = min(3.5, max(1.5, calc_delay + random.uniform(-0.25, 0.25)))
+        calc_delay = 2.0 + min(1.8, (char_count / 100.0) * 1.5)
+        realistic_delay = min(4.0, max(2.0, calc_delay + random.uniform(-0.2, 0.2)))
 
         if hasattr(channel, "typing"):
             try:
@@ -728,6 +947,8 @@ class CasualPlayerService:
         guild: discord.Guild,
         zone: Optional[str] = None,
         custom_scenario: Optional[str] = None,
+        participants: Optional[List[str]] = None,
+        target_channel: Optional[discord.TextChannel] = None,
     ):
         """
         Hyper-Realistic Autonomous 3-Zone Conversation Engine:
@@ -736,22 +957,22 @@ class CasualPlayerService:
            - Focus: PR merge conflicts, git rebase, API payload mismatches (userId vs user_id),
              Docker OOMKilled staging blockers, Figma vs CSS padding, sprint crunch.
            - Tone: Professional, slightly stressed, collaborative engineering peers in Tanglish.
-           - Target: Squad text channels (#working-chat, #team-chat in Team Vaasan / Team Vijay).
+           - Target: Squad text channels (#working-chat, #the-launchpad).
         2. Zone 2: Tech Cafe & Pantry (During Breaks / Relax Shifts)
            - Focus: Cutting chai / samosa runs, movie trailers / LCU theories, cricket debates,
              friendly roasts about silly bugs (console.log in prod), weekend plans.
            - Tone: Fun, energetic, informal collegial banter.
-           - Target: #cafeteria / tech-cafe / lounge.
+           - Target: #cafeteria.
         3. Zone 3: Night Spend / Dorms (During Sleep Shifts)
            - Focus: Midnight hunger / pantry fridge raids, whispering to avoid waking others,
              fear of Muthazhagi HR/QA night inspection rounds, pre-demo anxiety for 10 AM CEO demo,
              bedtime scrolling reels.
-           - Dynamic: 2-3 night owls in soft, low-energy whispers with natural pauses.
-           - Target: #cafeteria (sneaking out) or squad dorm channels.
+           - Dynamic: 2 night owls (Haaland, Neymar, Pradeep, Sivakarthikeyan, TTF Vasan) in soft whispers.
+           - Target: #cafeteria (sneaking into pantry) or dorm text channels.
 
         Mentions & Chaining:
         - Resolves live member tags (<@{id}>) for natural in-text mentions.
-        - Employs native Discord replies (reply_to=prev_msg) so bots converse in authentic threads.
+        - Employs native Discord replies (reply_to=prev_msg) with 2-4s typing delay.
         """
         if self._banter_lock.locked():
             logger.debug("Banter lock active; skipping zone chatter cycle.")
@@ -772,30 +993,32 @@ class CasualPlayerService:
             zone = ZONE_WORK_SQUAD
 
         # 2. Resolve Target Channel according to Zone
-        target_ch = None
-        if zone == ZONE_WORK_SQUAD:
-            # Prefer work squad text channels
-            work_candidates = [
-                c for c in getattr(guild, "text_channels", [])
-                if any(w in c.name.lower() for w in ("working-chat", "team-chat", "work", "engineering", "dev"))
-            ]
-            if work_candidates:
-                target_ch = random.choice(work_candidates)
-        elif zone == ZONE_TECH_CAFE:
-            target_ch = find_cafeteria_channel(guild)
-            if not target_ch and hasattr(guild, "text_channels"):
-                target_ch = discord.utils.find(
-                    lambda c: any(w in c.name.lower() for w in ("cafeteria", "pantry", "lounge", "cafe", "hangout")),
-                    guild.text_channels,
-                )
-        elif zone == ZONE_NIGHT_SPEND:
-            # Night owls sneak into cafeteria pantry or whisper in team chat
-            target_ch = find_cafeteria_channel(guild)
-            if not target_ch and hasattr(guild, "text_channels"):
-                target_ch = discord.utils.find(
-                    lambda c: any(w in c.name.lower() for w in ("cafeteria", "pantry", "dorm", "night", "lounge")),
-                    guild.text_channels,
-                )
+        target_ch = target_channel
+        if not target_ch:
+            if zone == ZONE_WORK_SQUAD:
+                # Prefer work squad text channels (#working-chat, #the-launchpad)
+                work_candidates = [
+                    c for c in getattr(guild, "text_channels", [])
+                    if c.name.lower() in ("working-chat", "the-launchpad")
+                    or any(w in c.name.lower() for w in ("working-chat", "the-launchpad", "team-chat", "work", "dev"))
+                ]
+                if work_candidates:
+                    target_ch = random.choice(work_candidates)
+            elif zone == ZONE_TECH_CAFE:
+                target_ch = find_cafeteria_channel(guild)
+                if not target_ch and hasattr(guild, "text_channels"):
+                    target_ch = discord.utils.find(
+                        lambda c: any(w in c.name.lower() for w in ("cafeteria", "pantry", "lounge", "cafe", "hangout")),
+                        guild.text_channels,
+                    )
+            elif zone == ZONE_NIGHT_SPEND:
+                # Night owls sneak into cafeteria pantry or whisper in team chat
+                target_ch = find_cafeteria_channel(guild)
+                if not target_ch and hasattr(guild, "text_channels"):
+                    target_ch = discord.utils.find(
+                        lambda c: any(w in c.name.lower() for w in ("cafeteria", "pantry", "dorm", "night", "sleep", "lounge")),
+                        guild.text_channels,
+                    )
 
         # Fallback channel if specific zone channel not found
         if not target_ch and hasattr(guild, "text_channels") and guild.text_channels:
@@ -808,39 +1031,44 @@ class CasualPlayerService:
 
         # 3. Select Participants based on Zone
         characters: List[str] = []
-        if zone == ZONE_WORK_SQUAD:
+        if participants:
+            characters = list(participants)
+        elif zone == ZONE_WORK_SQUAD:
             category_name = getattr(target_ch.category, "name", "").lower() if getattr(target_ch, "category", None) else ""
-            if "vijay" in category_name or "vijay" in target_ch.name.lower():
+            ch_name = target_ch.name.lower()
+            if "vijay" in category_name or "vijay" in ch_name:
                 squad_members = ["vijay", "sivakarthikeyan", "anirudh", "trisha", "lokesh"]
-            elif "vaasan" in category_name or "vasan" in target_ch.name.lower():
+            elif "vaasan" in category_name or "vasan" in ch_name or "launchpad" in ch_name:
                 squad_members = ["ttf_vasan", "pradeep", "mamitha", "kayadu", "muthazhagi"]
+            elif "messi" in category_name or "messi" in ch_name:
+                squad_members = ["messi", "ronaldo", "haaland", "neymar", "mbappe"]
+            elif "dhoni" in category_name or "dhoni" in ch_name:
+                squad_members = ["dhoni", "virat", "rohit"]
             else:
                 squad_members = random.choice([
                     ["ttf_vasan", "pradeep", "mamitha", "kayadu", "muthazhagi"],
                     ["vijay", "sivakarthikeyan", "anirudh", "trisha", "lokesh"],
+                    ["haaland", "neymar", "messi", "ronaldo"],
+                    ["virat", "rohit", "dhoni"],
                 ])
-            # 2 to 3 squad engineers
-            num_bots = random.randint(2, 3)
-            characters = random.sample(squad_members, k=min(num_bots, len(squad_members)))
+            # 2 squad engineers
+            characters = random.sample(squad_members, k=2)
 
         elif zone == ZONE_TECH_CAFE:
-            # 2 to 4 cross-squad colleagues meeting at cafeteria
-            num_bots = random.randint(2, 4)
-            squad_pool = [
-                ["ttf_vasan", "pradeep", "mamitha", "kayadu"],
-                ["vijay", "sivakarthikeyan", "anirudh", "trisha"],
-                ["virat", "rohit", "dhoni"],
-                ["messi", "ronaldo"],
+            # Cross-squad colleagues meeting at cafeteria
+            cross_squad_pool = [
+                "ttf_vasan", "vijay", "sivakarthikeyan", "pradeep", "anirudh",
+                "mamitha", "virat", "rohit", "haaland", "neymar", "kayadu"
             ]
-            chosen_squads = random.sample(squad_pool, k=min(num_bots, len(squad_pool)))
-            characters = [random.choice(s) for s in chosen_squads]
-            random.shuffle(characters)
+            characters = random.sample(cross_squad_pool, k=2)
 
         elif zone == ZONE_NIGHT_SPEND:
-            # 2 to 3 night owls sneaking late at night
-            num_bots = random.randint(2, 3)
-            night_owls = ["sivakarthikeyan", "pradeep", "ttf_vasan", "mamitha", "anirudh", "trisha", "rohit", "muthazhagi"]
-            characters = random.sample(night_owls, k=min(num_bots, len(night_owls)))
+            # 2 night owls sneaking late at night (Haaland, Neymar, Pradeep, SK, TTF Vasan, Rohit)
+            core_night_owls = ["haaland", "neymar", "pradeep"]
+            all_night_owls = ["haaland", "neymar", "pradeep", "sivakarthikeyan", "ttf_vasan", "rohit", "anirudh"]
+            bot1 = random.choice(core_night_owls)
+            bot2 = random.choice([b for b in all_night_owls if b != bot1])
+            characters = [bot1, bot2]
 
         # 4. Resolve Scenario
         zone_presets = ZONE_PRESETS.get(zone, {})
@@ -905,10 +1133,21 @@ class CasualPlayerService:
                     char_b = characters[1] if len(characters) > 1 else "pradeep"
                     tag_a = character_tag_map.get(char_a, f"@{char_a}")
                     tag_b = character_tag_map.get(char_b, f"@{char_b}")
+                    preset_speakers = []
+                    for spk, _ in raw_preset:
+                        if spk not in preset_speakers:
+                            preset_speakers.append(spk)
+
                     parsed_turns = []
                     for spk, text_line in raw_preset[:5]:
+                        mapped_spk = spk
+                        if len(characters) == 2 and spk not in characters:
+                            if len(preset_speakers) >= 2:
+                                mapped_spk = char_a if spk == preset_speakers[0] else char_b
+                            else:
+                                mapped_spk = char_a
                         fmt_line = text_line.replace("{tag_a}", tag_a).replace("{tag_b}", tag_b)
-                        parsed_turns.append((spk, fmt_line))
+                        parsed_turns.append((mapped_spk, fmt_line))
             elif len(parsed_turns) > 5:
                 parsed_turns = parsed_turns[:5]
 
