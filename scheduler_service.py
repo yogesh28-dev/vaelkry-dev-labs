@@ -1533,27 +1533,14 @@ class CompanyScheduler:
             logger.warning(f"Failed to update activity for {client.user.name if client.user else 'bot'}: {exc}")
 
         # 2. Strict mute/deaf determination:
-        # Enforce False for all non-sleep shifts, when voice override is active, or inside Tech Cafe / Working VCs
+        # Sleep shift (Night Spend): strictly self_mute=True and self_deaf=True for ALL bots (including TTF Vasan)
+        # unless an explicit master voice override (!wakevc / /wake_all_vc) is active.
+        # All working shifts, break shifts, or wake overrides strictly enforce unmuted & undeafened.
         is_sleep = (shift.shift_id == "sleep") and not self.voice_override_active
-        target_mute = True if is_sleep else False
-        target_deaf = True if is_sleep else False
-
-        if self.voice_override_active:
-            target_mute = False
-            target_deaf = False
-
-        vc_name_lower = target_vc.name.lower()
-        cat_name_lower = target_vc.category.name.lower() if target_vc.category else ""
-        if "sleep" not in vc_name_lower and "night spend" not in cat_name_lower:
-            target_mute = False
-            target_deaf = False
-
-        # Strictly enforce unmuted & undeafened for all squad working cabins and all work shifts
-        if (
-            any(t in cat_name_lower for t in ("team vijay", "team messi", "team dhoni", "team vaasan", "team vasan"))
-            or "working" in vc_name_lower
-            or shift.shift_id.startswith("work_")
-        ):
+        if is_sleep:
+            target_mute = True
+            target_deaf = True
+        else:
             target_mute = False
             target_deaf = False
 
@@ -2384,8 +2371,9 @@ class CompanyScheduler:
                                     asyncio.create_task(self.move_single_bot(dev_cl, safe_vc, current_shift, stagger=False))
 
                     # Periodic alignment check
-                    if current_shift.shift_id == "sleep" and self.assigned_sleep_rooms:
-                        # Ensure each bot stays in its assigned sleep room without bouncing
+                    if current_shift.shift_id == "sleep" and self.assigned_sleep_rooms and not self.voice_override_active:
+                        # Ensure each bot stays in its assigned sleep room without bouncing,
+                        # and strictly obeys self_mute=True and self_deaf=True (including TTF Vasan).
                         for key, room_id in self.assigned_sleep_rooms.items():
                             client = self.orchestrator.clients.get(key)
                             target_vc = guild.get_channel(room_id)
@@ -2394,11 +2382,21 @@ class CompanyScheduler:
                                 bot_guild = client.get_guild(guild.id) or guild
                                 bot_member = bot_guild.get_member(client.user.id) if client.user else None
                                 is_in_target = (
-                                    (vc_conn and vc_conn.is_connected() and vc_conn.channel and vc_conn.channel.id == target_vc.id)
-                                    or (bot_member and bot_member.voice and bot_member.voice.channel and bot_member.voice.channel.id == target_vc.id)
+                                    (vc_conn and vc_conn.is_connected() and getattr(vc_conn, "channel", None) and vc_conn.channel.id == target_vc.id)
+                                    or (bot_member and getattr(bot_member, "voice", None) and getattr(bot_member.voice, "channel", None) and bot_member.voice.channel.id == target_vc.id)
                                 )
                                 if not is_in_target:
                                     asyncio.create_task(self.move_single_bot(client, target_vc, current_shift, stagger=True))
+                                elif bot_member and getattr(bot_member, "voice", None) and (not bot_member.voice.self_mute or not bot_member.voice.self_deaf):
+                                    if hasattr(client, "ws") and client.ws:
+                                        asyncio.create_task(
+                                            client.ws.voice_state(
+                                                guild.id,
+                                                target_vc.id,
+                                                self_mute=True,
+                                                self_deaf=True,
+                                            )
+                                        )
                     elif (
                         current_shift.category_name.strip().lower() == "tech cafe"
                         or current_shift.shift_id.startswith("break")

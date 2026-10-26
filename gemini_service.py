@@ -17,9 +17,9 @@ class GeminiService:
         self.client = genai.Client(api_key=api_key)
         self.candidate_models = candidate_models or [
             "gemini-3.5-flash",
-            "gemini-3.1-flash-lite",
+            "gemini-flash-lite-latest",
+            "gemini-3-flash-preview",
             "gemini-3.8-flash",
-            "gemini-flash-latest",
         ]
 
     async def generate_response(self, prompt: str, agent_name: str) -> str:
@@ -52,8 +52,8 @@ class GeminiService:
         logger.error(f"All Gemini models exhausted for {agent_name}: {last_exception}")
         # In-character fallback if API experiences transient global outage
         return (
-            f"**[{agent_name}]**: Ayyo nanba, network throttle konjam lag aaguthu! "
-            f"API busy-ah iruku, but namma plan lock aayiruchu! ⚡"
+            f"**[{agent_name}]**: Konjam network throttle iruku nanba, "
+            f"sprint work-la continue pannuvom! 💻⚡"
         )
 
     async def generate_casual_chat(

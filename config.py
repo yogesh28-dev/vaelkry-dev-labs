@@ -41,9 +41,9 @@ class SystemConfig:
     gemini_models: List[str] = field(
         default_factory=lambda: [
             "gemini-3.5-flash",
-            "gemini-3.1-flash-lite",
+            "gemini-flash-lite-latest",
+            "gemini-3-flash-preview",
             "gemini-3.8-flash",
-            "gemini-flash-latest",
         ]
     )
     agents: Dict[str, AgentConfig] = field(default_factory=dict)
