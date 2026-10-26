@@ -1002,6 +1002,10 @@ class VaelkryBotClient(discord.Client):
             await self.orchestrator.moderator_service.handle_follower_voice_update(member, before, after)
             await self.orchestrator.moderator_service.sync_moderator_voice_state(member, after)
 
+        # Responsive Live Mic Listening: dynamically listen when humans enter/leave VC
+        if self.agent_config.key == "ttf_vasan":
+            self.orchestrator.voice_service.handle_voice_state_update(member, before, after)
+
         # Force Undeafen & Unmute for our bots in Tech Cafe or Working VCs
         if self.user and member.id == self.user.id and after.channel:
             ch_name = after.channel.name.lower()

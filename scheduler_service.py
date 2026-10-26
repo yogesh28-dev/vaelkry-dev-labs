@@ -1316,7 +1316,9 @@ class CompanyScheduler:
                         await voice_client.disconnect(force=True)
                     except Exception:
                         pass
+                connect_cls = voice_recv.VoiceRecvClient if (HAVE_VOICE_RECV and voice_recv) else discord.VoiceClient
                 await target_vc.connect(
+                    cls=connect_cls,
                     self_mute=target_mute,
                     self_deaf=target_deaf,
                     reconnect=True,

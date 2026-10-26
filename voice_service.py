@@ -2,15 +2,24 @@
 Vaelkry Dev Labs - Bidirectional Real-Time AI Voice Engine
 Orchestrates:
 1. Per-Character Neural TTS Voice Mapping (Edge-TTS / Azure) with custom pitch, rate, and tone.
-2. VC Dialogue Engine for spontaneous cross-bot banter with realistic 1.5-3.0s turn-taking audio locks.
-3. Bidirectional Real-Time Human Speech Recognition & Sub-2-Second Contextual Voice Reply (discord-ext-voice-recv + SpeechRecognition + Gemini).
-4. Zero-Bloat Audio Buffer & Auto Cleanup.
+2. Direct VoiceClient Audio Playback via FFmpegPCMAudio using imageio_ffmpeg binary & PyNaCl packet streaming.
+3. Avatar Speaking State (discord.gateway.SpeakingState.voice) lighting up Discord green ring during playback.
+4. Fully Autonomous Real-Time VC Conversation Loop:
+   - Every 1 to 3 minutes, 2 to 3 random bots in the active VC initiate spoken dialogue.
+   - Bot A speaks a casual Tanglish line; 1.5s later Bot B responds in mapped neural voice; Bot C chimes in with a witty remark.
+   - Strict asyncio.Lock turn-taking guarantees zero audio overlap.
+5. Live Mic Responsive Listening:
+   - Automatically attaches BasicSink when human users (Alan, Yogesh, etc.) are in VC.
+   - Captures speech, processes VAD with 0.65s silence threshold, transcribes via Google Speech (en-IN/en-US/ta-IN).
+   - Generates character voice reply via Gemini and speaks back verbally in under 2 seconds.
+6. Zero-Bloat Audio Buffer & Auto Cleanup.
 """
 
 import asyncio
 import io
 import logging
 import os
+import random
 import re
 import struct
 import tempfile
@@ -22,6 +31,24 @@ import discord
 import edge_tts
 import imageio_ffmpeg
 import speech_recognition as sr
+
+# Verify and load Opus library for Discord audio packet encoding
+if not discord.opus.is_loaded():
+    try:
+        discord.opus._load_default()
+        logging.getLogger("VaelkryDevLabs.VoiceEngine").info("Loaded default Opus library for Discord voice.")
+    except Exception as exc:
+        logging.getLogger("VaelkryDevLabs.VoiceEngine").warning(f"Failed to load default Opus library: {exc}")
+
+# Verify PyNaCl for live audio packet streaming encryption
+try:
+    import nacl
+    HAVE_NACL = True
+except ImportError:
+    HAVE_NACL = False
+    logging.getLogger("VaelkryDevLabs.VoiceEngine").error(
+        "CRITICAL: PyNaCl is not installed. Live audio streaming into Discord voice channels will fail!"
+    )
 
 # Optional high-speed numpy downsampling
 try:
@@ -50,6 +77,12 @@ from agents import (
 logger = logging.getLogger("VaelkryDevLabs.VoiceEngine")
 
 
+def normalize_character_key(character_key: str) -> str:
+    """Normalizes input names, aliases, and bot keys to canonical bot dictionary key."""
+    clean = (character_key or "").lower().strip().replace(" ", "_")
+    return CHARACTER_VOICE_ALIASES.get(clean, clean)
+
+
 def clean_text_for_speech(text: str) -> str:
     """
     Cleans raw bot output or user messages for clear, natural Edge-TTS speech synthesis.
@@ -58,26 +91,26 @@ def clean_text_for_speech(text: str) -> str:
     if not text:
         return ""
 
+    t = text.strip()
     # 1. Remove Discord mentions <@...>, <#...>, <@&...>, emojis <:name:id>
-    t = re.sub(r"<[@#&]!?[0-9]+>", "", text)
+    t = re.sub(r"<[@#&]!?[0-9]+>", "", t).strip()
     t = re.sub(r"<a?:[a-zA-Z0-9_]+:[0-9]+>", "", t)
 
-    # 2. Extract markdown link text [Text](url) -> Text
-    t = re.sub(r"\[(.*?)\]\(.*?\)", r"\1", t)
+    # 2. Remove bot speaker prefixes like "[Vijay]:", "Vijay:", "**Sadie**:", "**[Pradeep]:**", "**Sadie:**"
+    t = re.sub(r"^(?:\*\*\[?[^*\]:]+\]?\s*:\s*\*\*|\*\*[^*:]+\*\*\s*:\s*|\[[^\]]+\]\s*:\s*|[A-Za-z0-9_]+\s*:\s*)", "", t).strip()
+    t = re.sub(r"^(?:\*\*\[?[^*\]:]+\]?\s*:\s*\*\*|\*\*[^*:]+\*\*\s*:\s*|\[[^\]]+\]\s*:\s*|[A-Za-z0-9_]+\s*:\s*)", "", t).strip()
 
-    # 3. Strip URLs
+    # 3. Extract markdown link text [Text](url) -> Text
+    t = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", t)
+
+    # 4. Strip URLs
     t = re.sub(r"https?://\S+", "", t)
 
-    # 4. Strip markdown formatting: *, _, ~, `, #, >, |
-    t = re.sub(r"[*_~`#>|]", "", t)
+    # 5. Strip markdown formatting: *, _, ~, `, #, >, |, [, ]
+    t = re.sub(r"[*_~`#>|\[\]]", "", t)
 
-    # 5. Remove bot speaker prefixes like "[Vijay]:", "Vijay:", "**Sadie**:"
-    t = re.sub(r"^(?:\[.*?\]|\*\*.*?\*\*|[A-Za-z0-9_]+)\s*:\s*", "", t)
-
-    # 6. Remove quotes at the boundaries
-    t = t.strip()
-    if (t.startswith('"') and t.endswith('"')) or (t.startswith("'") and t.endswith("'")):
-        t = t[1:-1].strip()
+    # 6. Remove quotes
+    t = re.sub(r"[\"']", "", t).strip()
 
     # 7. Remove all Unicode emojis, pictographs, symbols, variation selectors
     emoji_pattern = re.compile(
@@ -146,9 +179,10 @@ class VoiceChannelSession:
         self.current_speaker: Optional[str] = None
         self.last_speech_finished_at: float = 0.0
         self.is_listening = False
-        self.voice_client: Optional[discord.VoiceClient] = None
+        self.listening_voice_client: Optional[discord.VoiceClient] = None
         self.user_pcm_buffers: Dict[int, List[bytes]] = {}
         self.user_last_packet_time: Dict[int, float] = {}
+        self.user_objects: Dict[int, discord.User] = {}
         self.user_processing_lock = asyncio.Lock()
 
 
@@ -156,23 +190,26 @@ class VoiceService:
     """
     Bidirectional Real-Time AI Voice Engine for Vaelkry Dev Labs:
     1. Edge-TTS Synthesis with per-character neural voice mapping (pitch & speed).
-    2. VC Dialogue Engine with sequential turn-taking and natural pauses.
-    3. Real-time human speech recognition & contextual sub-2s voice replies.
-    4. Zero-bloat audio buffering and automatic instant cleanup.
+    2. FFmpegPCMAudio streaming with imageio_ffmpeg binary & green ring illumination.
+    3. Fully Autonomous Real-Time VC Conversation Loop (2-3 bots, 1.5s turn-taking).
+    4. Sub-2-Second Live Mic Responsive Speech Recognition & Voice Reply.
+    5. Zero-bloat audio buffering and automatic instant cleanup.
     """
 
     def __init__(self, orchestrator: Any):
         self.orchestrator = orchestrator
         self.sessions: Dict[int, VoiceChannelSession] = {}
         self.recognizer = sr.Recognizer()
-        self.recognizer.energy_threshold = 280
+        self.recognizer.energy_threshold = 260
         self.recognizer.dynamic_energy_threshold = True
 
-        # Resolve FFmpeg executable safely
+        # Resolve verified FFmpeg executable
         try:
             self.ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
-        except Exception:
+            logger.info(f"FFmpeg binary resolved: {self.ffmpeg_exe}")
+        except Exception as exc:
             self.ffmpeg_exe = "ffmpeg"
+            logger.warning(f"Could not load imageio_ffmpeg binary ({exc}); falling back to system 'ffmpeg'")
 
         # Dedicated temporary audio buffer directory
         self.temp_dir = os.path.join(tempfile.gettempdir(), "vaelkry_voice_buffer")
@@ -180,18 +217,24 @@ class VoiceService:
 
         self._cleanup_task: Optional[asyncio.Task] = None
         self._vad_task: Optional[asyncio.Task] = None
+        self._autonomous_conversation_task: Optional[asyncio.Task] = None
+        self._auto_listener_task: Optional[asyncio.Task] = None
         self.is_running = True
 
         # Start background watchdog & janitor tasks
         self._start_background_tasks()
 
     def _start_background_tasks(self):
-        """Initializes background audio auto-cleanup and speech VAD listeners."""
+        """Initializes background audio auto-cleanup, speech VAD listeners, and autonomous loops."""
         loop = asyncio.get_event_loop()
         if not self._cleanup_task or self._cleanup_task.done():
             self._cleanup_task = loop.create_task(self._auto_purge_loop())
         if not self._vad_task or self._vad_task.done():
             self._vad_task = loop.create_task(self._vad_silence_watcher_loop())
+        if not self._autonomous_conversation_task or self._autonomous_conversation_task.done():
+            self._autonomous_conversation_task = loop.create_task(self._autonomous_vc_conversation_loop())
+        if not self._auto_listener_task or self._auto_listener_task.done():
+            self._auto_listener_task = loop.create_task(self._human_presence_auto_listener_loop())
 
     def get_session(self, channel_id: int) -> VoiceChannelSession:
         """Retrieves or provisions the VoiceChannelSession for a given voice channel ID."""
@@ -226,12 +269,13 @@ class VoiceService:
         if len(clean_text) > 240:
             clean_text = clean_text[:235] + "..."
 
-        profile = self.get_character_voice_profile(character_key)
+        norm_key = normalize_character_key(character_key)
+        profile = self.get_character_voice_profile(norm_key)
         voice_name = profile["voice"]
         pitch = profile.get("pitch", "+0Hz")
         rate = profile.get("rate", "+0%")
 
-        filename = f"tts_{character_key}_{uuid.uuid4().hex[:10]}.mp3"
+        filename = f"tts_{norm_key}_{uuid.uuid4().hex[:10]}.mp3"
         file_path = os.path.join(self.temp_dir, filename)
 
         try:
@@ -244,26 +288,26 @@ class VoiceService:
             await communicate.save(file_path)
             if os.path.exists(file_path) and os.path.getsize(file_path) > 0:
                 logger.debug(
-                    f"TTS Synthesized for {character_key} ({voice_name}, pitch={pitch}, rate={rate}): "
+                    f"TTS Synthesized for {norm_key} ({voice_name}, pitch={pitch}, rate={rate}): "
                     f"'{clean_text[:50]}...' -> {os.path.basename(file_path)} ({os.path.getsize(file_path)} bytes)"
                 )
                 return file_path
             else:
-                logger.error(f"TTS file was empty or missing for {character_key}: {file_path}")
+                logger.error(f"TTS file was empty or missing for {norm_key}: {file_path}")
                 return None
         except Exception as exc:
-            logger.exception(f"Edge-TTS synthesis error for {character_key} with voice {voice_name}: {exc}")
-            # Fallback attempt with default en-US voice if specialized regional voice fails
+            logger.exception(f"Edge-TTS synthesis error for {norm_key} with voice {voice_name}: {exc}")
+            # Fallback attempt with standard en-US voice
             try:
                 fallback_comm = edge_tts.Communicate(text=clean_text, voice="en-US-GuyNeural")
                 await fallback_comm.save(file_path)
                 return file_path
             except Exception as fb_exc:
-                logger.error(f"Fallback TTS failed as well: {fb_exc}")
+                logger.error(f"Fallback TTS failed: {fb_exc}")
                 return None
 
     # =====================================================================
-    # 2. AUDIO PLAYBACK & SEQUENTIAL TURN-TAKING ENGINE
+    # 2. AUDIO PLAYBACK, VOICE CLIENT CONNECTION & GREEN RING LIGHTUP
     # =====================================================================
 
     async def get_or_connect_voice_client(
@@ -273,60 +317,86 @@ class VoiceService:
     ) -> Optional[discord.VoiceClient]:
         """
         Finds or establishes a connected VoiceClient inside the target voice channel.
-        Prioritizes the preferred bot's client so their avatar illuminates green in Discord.
-        Seamlessly uses discord-ext-voice-recv VoiceRecvClient when available.
+        Crucially connects the client belonging to preferred_bot_key so that THIS specific
+        bot's avatar lights up with the Discord speaking green ring.
         """
-        session = self.get_session(voice_channel.id)
+        norm_key = normalize_character_key(preferred_bot_key) if preferred_bot_key else None
+        target_client: Optional[discord.Client] = None
 
-        # 1. Check if preferred bot has an active voice connection here
-        if preferred_bot_key and preferred_bot_key in self.orchestrator.clients:
-            client = self.orchestrator.clients[preferred_bot_key]
-            vc = discord.utils.get(client.voice_clients, channel=voice_channel)
-            if vc and vc.is_connected():
-                session.voice_client = vc
-                return vc
+        # 1. Prefer the specific requested bot client
+        if norm_key and norm_key in self.orchestrator.clients:
+            cl = self.orchestrator.clients[norm_key]
+            if cl.is_ready():
+                target_client = cl
 
-        # 2. Check if any connected bot client is already inside this channel
-        for client in self.orchestrator.clients.values():
-            vc = discord.utils.get(client.voice_clients, channel=voice_channel)
-            if vc and vc.is_connected():
-                session.voice_client = vc
-                return vc
+        # 2. If requested bot client is not found/ready, check if any bot is already in this VC
+        if not target_client:
+            for k, cl in self.orchestrator.clients.items():
+                if cl.user and cl.is_ready():
+                    vc_check = discord.utils.get(cl.voice_clients, channel=voice_channel)
+                    if vc_check and vc_check.is_connected():
+                        target_client = cl
+                        break
 
-        # 3. If none connected, connect using preferred bot or lead bot
-        connector_client = None
-        if preferred_bot_key and preferred_bot_key in self.orchestrator.clients:
-            connector_client = self.orchestrator.clients[preferred_bot_key]
-        if not connector_client:
-            connector_client = (
+        # 3. Fallback to lead bot or any ready client
+        if not target_client:
+            target_client = (
                 self.orchestrator.clients.get("ttf_vasan")
                 or self.orchestrator.clients.get("vijay")
                 or next(iter(self.orchestrator.clients.values()), None)
             )
 
-        if not connector_client:
+        if not target_client:
             logger.error("No bot clients available to connect to voice channel.")
             return None
 
-        try:
-            # Check existing connection for this client elsewhere
-            existing_vc = discord.utils.get(connector_client.voice_clients, guild=voice_channel.guild)
-            if existing_vc and existing_vc.is_connected():
-                if existing_vc.channel.id != voice_channel.id:
-                    await existing_vc.move_to(voice_channel)
-                session.voice_client = existing_vc
-                return existing_vc
+        # Resolve target VC object from target_client's own cache
+        guild = target_client.get_guild(voice_channel.guild.id)
+        if not guild:
+            logger.error(f"Guild {voice_channel.guild.id} not found on client {target_client.user}")
+            return None
 
-            # Connect fresh with VoiceRecvClient for bidirectional audio
-            connect_cls = voice_recv.VoiceRecvClient if HAVE_VOICE_RECV else discord.VoiceClient
-            vc = await voice_channel.connect(cls=connect_cls, reconnect=True, timeout=15.0)
-            session.voice_client = vc
-            logger.info(
-                f"Connected {connector_client.user.name if connector_client.user else 'bot'} to VC '{voice_channel.name}'"
+        target_vc = guild.get_channel(voice_channel.id)
+        if not target_vc or not isinstance(target_vc, discord.VoiceChannel):
+            logger.error(f"Voice channel {voice_channel.id} not found on client {target_client.user}")
+            return None
+
+        connect_cls = voice_recv.VoiceRecvClient if (HAVE_VOICE_RECV and voice_recv) else discord.VoiceClient
+
+        # Check existing VoiceClient for target_client in this guild
+        existing_vc = discord.utils.get(target_client.voice_clients, guild=guild)
+
+        if existing_vc and existing_vc.is_connected():
+            if existing_vc.channel.id != target_vc.id:
+                logger.info(f"Moving {target_client.user.name} from '{existing_vc.channel.name}' to '{target_vc.name}'")
+                await existing_vc.move_to(target_vc)
+            # Ensure not self-muted or self-deafened so audio plays and avatar green ring lights up
+            try:
+                await guild.change_voice_state(channel=target_vc, self_mute=False, self_deaf=False)
+            except Exception:
+                pass
+            return existing_vc
+
+        # If existing_vc exists but disconnected, force disconnect before reconnecting
+        if existing_vc:
+            try:
+                await existing_vc.disconnect(force=True)
+            except Exception:
+                pass
+
+        # Connect fresh with VoiceRecvClient for bidirectional audio
+        try:
+            logger.info(f"Connecting {target_client.user.name} to VC '{target_vc.name}'...")
+            vc = await target_vc.connect(
+                cls=connect_cls,
+                reconnect=True,
+                timeout=20.0,
+                self_mute=False,
+                self_deaf=False,
             )
             return vc
         except Exception as exc:
-            logger.error(f"Failed to connect bot to voice channel {voice_channel.name}: {exc}")
+            logger.error(f"Failed to connect {target_client.user.name} to {target_vc.name}: {exc}")
             return None
 
     async def play_audio_file(
@@ -335,42 +405,74 @@ class VoiceService:
         audio_path: str,
     ) -> bool:
         """
-        Streams PCM audio into Discord via FFmpegPCMAudio.
-        Asynchronously waits until playback completes.
-        Purges the temporary audio file immediately upon playback conclusion.
+        Streams audio into Discord via FFmpegPCMAudio using imageio_ffmpeg binary.
+        1. Explicitly lights up the avatar speaking green ring via ws.speak(SpeakingState.voice).
+        2. Streams PCM audio packets.
+        3. Waits for playback to complete cleanly with safety timeout.
+        4. Turns off the avatar speaking green ring via ws.speak(SpeakingState.none).
+        5. Automatically purges the temporary audio file immediately.
         """
         if not voice_client or not voice_client.is_connected():
             logger.warning("Voice client is not connected; cannot play audio.")
             self._safe_remove_file(audio_path)
             return False
 
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         done_event = asyncio.Event()
 
         def _after_playback(error):
             if error:
                 logger.warning(f"Audio playback completed with error: {error}")
             loop.call_soon_threadsafe(done_event.set)
-            # Automatic instant cleanup (Requirement 4)
+            # Automatic instant cleanup
             self._safe_remove_file(audio_path)
 
         try:
             # If already playing, stop current stream cleanly
             if voice_client.is_playing():
                 voice_client.stop()
+                await asyncio.sleep(0.05)
 
+            # 1. Light up speaking green ring on Discord avatar
+            try:
+                if hasattr(voice_client, "ws") and voice_client.ws:
+                    await voice_client.ws.speak(discord.gateway.SpeakingState.voice)
+            except Exception as e:
+                logger.debug(f"Could not set speaking state: {e}")
+
+            # 2. Build FFmpeg audio source with verified binary
             source = discord.FFmpegPCMAudio(
                 audio_path,
                 executable=self.ffmpeg_exe,
-                options="-filter:a volume=1.15",
+                options="-filter:a volume=1.2",
             )
             voice_client.play(source, after=_after_playback)
-            # Wait for playback to conclude cleanly
-            await done_event.wait()
+
+            # 3. Wait for playback to complete (with 45s safety timeout)
+            try:
+                await asyncio.wait_for(done_event.wait(), timeout=45.0)
+            except asyncio.TimeoutError:
+                logger.warning(f"Audio playback timed out after 45s: {audio_path}")
+                if voice_client.is_playing():
+                    voice_client.stop()
+                self._safe_remove_file(audio_path)
+
+            # 4. Turn off speaking green ring
+            try:
+                if hasattr(voice_client, "ws") and voice_client.ws:
+                    await voice_client.ws.speak(discord.gateway.SpeakingState.none)
+            except Exception:
+                pass
+
             return True
         except Exception as exc:
             logger.exception(f"Error during audio stream playback: {exc}")
             self._safe_remove_file(audio_path)
+            try:
+                if hasattr(voice_client, "ws") and voice_client.ws:
+                    await voice_client.ws.speak(discord.gateway.SpeakingState.none)
+            except Exception:
+                pass
             return False
 
     async def speak_text(
@@ -381,32 +483,35 @@ class VoiceService:
         caller_client: Optional[discord.Client] = None,
     ) -> bool:
         """
-        Synthesizes and speaks text over the voice channel stream.
-        Guarantees strict turn-taking using the channel's audio lock so bots never talk over each other.
+        Synthesizes and physically speaks text into the voice channel.
+        - Guarantees strict turn-taking using the channel's audio lock so bots never talk over each other.
+        - Uses the specified character's client so their avatar lights up green in Discord.
         """
         session = self.get_session(voice_channel.id)
+        norm_key = normalize_character_key(character_key)
 
-        # Acquire per-channel audio lock for turn-taking (Requirement 2)
+        # Acquire per-channel audio lock for turn-taking
         async with session.audio_lock:
             session.is_speaking = True
-            session.current_speaker = character_key
+            session.current_speaker = norm_key
 
-            audio_file = await self.synthesize_speech(text, character_key)
+            audio_file = await self.synthesize_speech(text, norm_key)
             if not audio_file:
                 session.is_speaking = False
                 session.current_speaker = None
                 return False
 
-            # Obtain active VoiceClient in this VC
-            vc = await self.get_or_connect_voice_client(voice_channel, preferred_bot_key=character_key)
+            # Obtain active VoiceClient specifically for this character
+            vc = await self.get_or_connect_voice_client(voice_channel, preferred_bot_key=norm_key)
             if not vc:
                 self._safe_remove_file(audio_file)
                 session.is_speaking = False
                 session.current_speaker = None
                 return False
 
+            profile = self.get_character_voice_profile(norm_key)
             logger.info(
-                f"🔊 [{character_key.upper()}] Speaking in '{voice_channel.name}': \"{text}\""
+                f"🔊 [{profile['name'].upper()}] Physically speaking in '{voice_channel.name}': \"{text}\""
             )
 
             success = await self.play_audio_file(vc, audio_file)
@@ -416,122 +521,274 @@ class VoiceService:
             return success
 
     # =====================================================================
-    # 3. VC DIALOGUE ENGINE (SPONTANEOUS CROSS-BOT SPEECH & BANTER)
+    # 3. FULLY AUTONOMOUS REAL-TIME VC CONVERSATION LOOP (2-3 BOTS)
     # =====================================================================
+
+    def _find_best_active_voice_channel(self) -> Optional[discord.VoiceChannel]:
+        """
+        Discovers the most relevant populated voice channel:
+        1. Channel with active human user(s).
+        2. Populated corporate work/break channel (Working Vc, Tech Cafe, Ceo Vc).
+        3. Excludes sleeping cabins (Night Spend / Sleep Room) if all bots are muted.
+        """
+        candidates: List[Tuple[int, discord.VoiceChannel]] = []
+
+        for client in self.orchestrator.clients.values():
+            if not client.is_ready():
+                continue
+            for guild in client.guilds:
+                for vc in guild.voice_channels:
+                    human_count = sum(1 for m in vc.members if not m.bot)
+                    bot_count = sum(1 for m in vc.members if m.bot)
+
+                    if human_count == 0 and bot_count == 0:
+                        continue
+
+                    ch_name = vc.name.lower()
+                    cat_name = vc.category.name.lower() if vc.category else ""
+
+                    # Skip sleep room if only sleeping bots
+                    if ("sleep" in ch_name or "night spend" in cat_name) and human_count == 0:
+                        continue
+
+                    # Score priority: humans in VC get maximum score
+                    score = (human_count * 100) + (bot_count * 10)
+                    candidates.append((score, vc))
+
+        if not candidates:
+            return None
+
+        candidates.sort(key=lambda x: x[0], reverse=True)
+        return candidates[0][1]
+
+    def _get_bots_in_voice_channel(self, target_vc: discord.VoiceChannel) -> List[str]:
+        """Returns list of bot keys present in target voice channel."""
+        present: List[str] = []
+        for k, client in self.orchestrator.clients.items():
+            if client.user:
+                m = target_vc.guild.get_member(client.user.id)
+                if m and m.voice and m.voice.channel and m.voice.channel.id == target_vc.id:
+                    present.append(k)
+        return present
+
+    async def _autonomous_vc_conversation_loop(self):
+        """
+        Continuous Autonomous VC Conversation Loop:
+        - Every 1 to 3 minutes, 2 to 3 random bots in the active VC initiate spoken dialogue.
+        - Bot A physically speaks a short casual Tanglish line over mic.
+        - 1.5 seconds later, Bot B speaks back in response using their mapped neural voice.
+        - Bot C (if 3 bots selected) chimes in with a witty remark.
+        - Uses asyncio.Lock (session.audio_lock) so no two bots speak at the exact same moment.
+        """
+        # Initial delay to give bots time to finish connecting to Discord
+        await asyncio.sleep(30.0)
+
+        STARTER_LINES = [
+            "dei tea kudika polama, romba neram code adichu fatigue aayiruchu da",
+            "sprint review mudinjutha nanba, PR merge aayirucha?",
+            "production-la ethum bug illaye? muthazhagi green signal kuduthutangala?",
+            "299 km/h speed-la throttle twist panni sprint-ah mudikkanum!",
+            "architecture review ready-ah iruka mapla, API latency epti iruku?",
+            "mamitha design system semmaya iruku, glassmorphism UI fire!",
+            "dei break edukalama, cafeteria-la samosa fresh-ah potrukanga!",
+            "server load calm-ah handle pannuvom, no tension relax!",
+            "database migration success aayiducha? zero downtime deployment done!",
+            "midnight sprint vera level-ah pogudhu nanba, full throttle energy!",
+        ]
+
+        while self.is_running:
+            try:
+                # Random interval between 1 and 3 minutes (60s to 180s)
+                wait_time = random.uniform(60.0, 180.0)
+                await asyncio.sleep(wait_time)
+
+                target_vc = self._find_best_active_voice_channel()
+                if not target_vc:
+                    continue
+
+                session = self.get_session(target_vc.id)
+                if session.is_speaking or session.audio_lock.locked():
+                    continue
+
+                # Don't interrupt if someone just spoke within the last 15 seconds
+                if time.time() - session.last_speech_finished_at < 15.0:
+                    continue
+
+                # Determine candidate bots
+                bots_in_vc = self._get_bots_in_voice_channel(target_vc)
+                if len(bots_in_vc) < 2:
+                    available = [k for k, cl in self.orchestrator.clients.items() if cl.is_ready()]
+                    if len(available) >= 2:
+                        sample_count = 3 if len(available) >= 3 and random.random() < 0.6 else 2
+                        chosen = random.sample(available[:7], sample_count)
+                    else:
+                        continue
+                else:
+                    sample_count = 3 if len(bots_in_vc) >= 3 and random.random() < 0.6 else min(len(bots_in_vc), 2)
+                    chosen = random.sample(bots_in_vc, sample_count)
+
+                if len(chosen) < 2:
+                    continue
+
+                bot_a = chosen[0]
+                bot_b = chosen[1]
+                bot_c = chosen[2] if len(chosen) >= 3 else None
+
+                logger.info(
+                    f"🎙️ [AUTONOMOUS VC BANTER] Triggered in '{target_vc.name}': "
+                    f"Bot A: {bot_a}, Bot B: {bot_b}" + (f", Bot C: {bot_c}" if bot_c else "")
+                )
+
+                # --- Step 1: Bot A speaks initial casual Tanglish line ---
+                line_a = random.choice(STARTER_LINES)
+                try:
+                    p = (
+                        f"You are {bot_a} speaking casually over mic in a Discord voice channel with your developer teammates. "
+                        f"Give ONE short, punchy, authentic Tanglish sentence (max 8-12 words) to start a chat "
+                        f"(e.g. asking about tea, code, sprint review, or testing). No quotes, no prefix."
+                    )
+                    gen_line = await self.orchestrator.gemini_service.generate_casual_chat(p, bot_a)
+                    if gen_line and len(gen_line) > 5:
+                        line_a = clean_text_for_speech(gen_line)
+                except Exception:
+                    pass
+
+                await self.speak_text(target_vc, bot_a, line_a)
+
+                # --- 1.5 seconds later: Bot B speaks back ---
+                await asyncio.sleep(1.5)
+
+                prompt_b = build_voice_banter_prompt(
+                    bot_a_key=bot_a,
+                    bot_b_key=bot_b,
+                    topic="casual dev chat & banter",
+                    previous_utterance=line_a,
+                )
+                try:
+                    reply_b = await self.orchestrator.gemini_service.generate_casual_chat(prompt_b, bot_b)
+                    line_b = clean_text_for_speech(reply_b)
+                except Exception:
+                    line_b = "Sari mapla, all is well! Cool-ah handle pannuvom."
+
+                if not line_b:
+                    line_b = "Ama bro, correct dhaan!"
+
+                await self.speak_text(target_vc, bot_b, line_b)
+
+                # --- If Bot C present: 1.5 seconds later, Bot C chimes in with a witty remark ---
+                if bot_c:
+                    await asyncio.sleep(1.5)
+                    prompt_c = (
+                        f"You are {bot_c} in the same voice channel. {bot_a} just said: '{line_a}' "
+                        f"and {bot_b} responded: '{line_b}'. "
+                        f"Chime in with ONE short, witty, hilarious Tanglish remark or reaction (max 10 words). "
+                        f"Strictly ONE punchy line, authentic voice. No prefix, no emojis."
+                    )
+                    try:
+                        reply_c = await self.orchestrator.gemini_service.generate_casual_chat(prompt_c, bot_c)
+                        line_c = clean_text_for_speech(reply_c)
+                    except Exception:
+                        line_c = "Ivangala vachukitu naanga padra paadu iruke... Mudila da!"
+
+                    if not line_c:
+                        line_c = "Aiyoo super combo da idhu!"
+
+                    await self.speak_text(target_vc, bot_c, line_c)
+
+            except Exception as exc:
+                logger.error(f"Error in autonomous VC conversation loop: {exc}")
+                await asyncio.sleep(30.0)
 
     async def trigger_cross_bot_banter(
         self,
         voice_channel: discord.VoiceChannel,
         bot_a_key: str,
         bot_b_key: str,
+        bot_c_key: Optional[str] = None,
         topic: Optional[str] = None,
         initial_line: Optional[str] = None,
     ):
         """
-        Executes spontaneous cross-bot speech banter in a voice channel:
-        1. Bot A speaks its line over the voice channel.
-        2. Waits 1.5 - 3.0 seconds (natural turn-taking human pause).
-        3. Bot B generates a contextual witty retort via Gemini AI and speaks back.
-        Turn-taking queue lock ensures zero overlap.
+        Executes on-demand cross-bot voice banter with 2 or 3 bots:
+        1. Bot A speaks initial line.
+        2. 1.5s turn-taking pause.
+        3. Bot B speaks response.
+        4. (Optional) 1.5s pause, Bot C chimes in.
         """
         session = self.get_session(voice_channel.id)
 
-        # Resolve initial dialogue line
         if not initial_line:
-            info_a = CASUAL_PLAYER_CHARACTERS.get(CHARACTER_VOICE_ALIASES.get(bot_a_key, bot_a_key), {})
+            info_a = CASUAL_PLAYER_CHARACTERS.get(normalize_character_key(bot_a_key), {})
             sample = info_a.get("sample", "All is well nanba, calm-ah execute pannuvom.")
             initial_line = sample
 
         logger.info(
-            f"Initiating cross-bot voice banter in '{voice_channel.name}' between {bot_a_key} and {bot_b_key}"
+            f"Triggering voice banter in '{voice_channel.name}': {bot_a_key} -> {bot_b_key}"
+            + (f" -> {bot_c_key}" if bot_c_key else "")
         )
 
-        # --- Turn 1: Bot A Speaks ---
+        # Turn 1: Bot A
         await self.speak_text(voice_channel, bot_a_key, initial_line)
 
-        # --- Inter-Turn Pause: 1.5 to 3.0 seconds (Requirement 2) ---
-        pause_duration = 1.5 + (0.5 * (time.time() % 3))
-        logger.debug(f"Turn-taking pause of {pause_duration:.2f}s before {bot_b_key} responds...")
-        await asyncio.sleep(pause_duration)
+        # Inter-Turn Pause: 1.5s
+        await asyncio.sleep(1.5)
 
-        # --- Turn 2: Bot B Generates and Speaks Reply ---
-        prompt = build_voice_banter_prompt(
+        # Turn 2: Bot B
+        prompt_b = build_voice_banter_prompt(
             bot_a_key=bot_a_key,
             bot_b_key=bot_b_key,
             topic=topic,
             previous_utterance=initial_line,
         )
-
-        reply_text = ""
         try:
-            raw_reply = await self.orchestrator.gemini_service.generate_casual_chat(
-                prompt=prompt,
+            raw_b = await self.orchestrator.gemini_service.generate_casual_chat(
+                prompt=prompt_b,
                 character_name=bot_b_key.title(),
             )
-            reply_text = clean_text_for_speech(raw_reply)
-        except Exception as exc:
-            logger.warning(f"Error generating banter reply for {bot_b_key}: {exc}")
+            reply_b = clean_text_for_speech(raw_b)
+        except Exception:
+            reply_b = "Un alapparai ku alave illama pochu da!"
 
-        if not reply_text:
-            info_b = CASUAL_PLAYER_CHARACTERS.get(CHARACTER_VOICE_ALIASES.get(bot_b_key, bot_b_key), {})
-            fallbacks = info_b.get("fallback_samples", ["Un alapparai ku alave illama pochu da!"])
-            reply_text = fallbacks[0]
+        if not reply_b:
+            reply_b = "Romba pesatha mapla, code paaru!"
 
-        await self.speak_text(voice_channel, bot_b_key, reply_text)
+        await self.speak_text(voice_channel, bot_b_key, reply_b)
 
-    async def run_autonomous_vc_banter_if_populated(
-        self,
-        voice_channel: discord.VoiceChannel,
-    ):
-        """
-        Checks members inside a voice channel (e.g. Tech Cafe or Sleep Room).
-        If multiple bots or users are present, organically triggers a crisp 2-turn banter exchange.
-        """
-        session = self.get_session(voice_channel.id)
-        if session.is_speaking or session.audio_lock.locked():
-            return
-
-        # Find which bots from our orchestrator are inside this voice channel
-        bots_in_vc: List[str] = []
-        for k, client in self.orchestrator.clients.items():
-            if client.user:
-                member = voice_channel.guild.get_member(client.user.id)
-                if member and member.voice and member.voice.channel and member.voice.channel.id == voice_channel.id:
-                    bots_in_vc.append(k)
-
-        if len(bots_in_vc) >= 2:
-            import random
-            bot_a, bot_b = random.sample(bots_in_vc, 2)
-            asyncio.create_task(
-                self.trigger_cross_bot_banter(
-                    voice_channel=voice_channel,
-                    bot_a_key=bot_a,
-                    bot_b_key=bot_b,
-                )
+        # Turn 3: Bot C (if specified)
+        if bot_c_key:
+            await asyncio.sleep(1.5)
+            prompt_c = (
+                f"You are {bot_c_key} in a Discord voice channel. {bot_a_key} said: '{initial_line}' "
+                f"and {bot_b_key} replied: '{reply_b}'. "
+                f"Chime in with ONE short, witty, punchy Tanglish reaction (max 10 words). Pure speech."
             )
+            try:
+                raw_c = await self.orchestrator.gemini_service.generate_casual_chat(prompt_c, bot_c_key)
+                reply_c = clean_text_for_speech(raw_c)
+            except Exception:
+                reply_c = "Irundhalum ungalukku ivlo thillu aagathu da!"
+
+            if not reply_c:
+                reply_c = "Super timing punch nanba!"
+
+            await self.speak_text(voice_channel, bot_c_key, reply_c)
 
     # =====================================================================
-    # 4. REAL-TIME HUMAN SPEECH RECOGNITION & CONTEXTUAL VOICE REPLY
+    # 4. LIVE MIC RESPONSIVE LISTENING & SUB-2-SECOND VOICE REPLY
     # =====================================================================
 
     def start_listening_in_channel(self, voice_channel: discord.VoiceChannel) -> bool:
         """
         Begins continuous real-time audio reception in the voice channel.
-        Attaches the UserVoiceSink to capture human speech chunks.
+        Attaches BasicSink to capture human speech chunks while ignoring bots.
         """
         if not HAVE_VOICE_RECV:
-            logger.warning(
-                "discord-ext-voice-recv is not installed; voice receiving disabled."
-            )
+            logger.warning("discord-ext-voice-recv is not installed; voice receiving disabled.")
             return False
 
         session = self.get_session(voice_channel.id)
         if session.is_listening:
-            logger.info(f"Already listening in VC '{voice_channel.name}'")
             return True
-
-        # Ensure VoiceRecvClient is connected
-        loop = asyncio.get_event_loop()
 
         async def _attach_sink():
             vc = await self.get_or_connect_voice_client(voice_channel)
@@ -540,14 +797,16 @@ class VoiceService:
                 return
 
             def on_voice_packet(user: Optional[discord.User], data: Any):
+                # Strictly ignore bot audio packets to avoid feedback loops
                 if not user or getattr(user, "bot", False):
-                    return  # Strictly ignore bot audio packets
-
-                if not data or not data.pcm:
                     return
 
-                # Record packet into user buffer
+                if not data or not getattr(data, "pcm", None):
+                    return
+
+                # Record user audio chunk
                 uid = user.id
+                session.user_objects[uid] = user
                 if uid not in session.user_pcm_buffers:
                     session.user_pcm_buffers[uid] = []
 
@@ -558,9 +817,10 @@ class VoiceService:
                 sink = voice_recv.BasicSink(on_voice_packet)
                 vc.listen(sink)
                 session.is_listening = True
+                session.listening_voice_client = vc
                 logger.info(f"🎙️ Real-time voice listening active in '{voice_channel.name}'!")
             except Exception as exc:
-                logger.error(f"Failed to start voice listening: {exc}")
+                logger.error(f"Failed to start voice listening in {voice_channel.name}: {exc}")
 
         asyncio.create_task(_attach_sink())
         return True
@@ -569,32 +829,83 @@ class VoiceService:
         """Stops active voice listening in the specified voice channel."""
         session = self.get_session(voice_channel.id)
         session.is_listening = False
-        if session.voice_client and hasattr(session.voice_client, "is_listening"):
+        vc = session.listening_voice_client
+        if vc and hasattr(vc, "is_listening"):
             try:
-                if session.voice_client.is_listening():
-                    session.voice_client.stop_listening()
+                if vc.is_listening():
+                    vc.stop_listening()
             except Exception:
                 pass
+        session.listening_voice_client = None
         session.user_pcm_buffers.clear()
         session.user_last_packet_time.clear()
         logger.info(f"Stopped voice listening in '{voice_channel.name}'")
 
+    async def _human_presence_auto_listener_loop(self):
+        """
+        Periodically verifies all voice channels:
+        Automatically starts listening in any VC with human users present,
+        and stops listening when humans leave.
+        """
+        while self.is_running:
+            try:
+                for client in self.orchestrator.clients.values():
+                    if not client.is_ready():
+                        continue
+                    for guild in client.guilds:
+                        for vc in guild.voice_channels:
+                            human_users = [m for m in vc.members if not m.bot]
+                            session = self.get_session(vc.id)
+
+                            if human_users and not session.is_listening:
+                                self.start_listening_in_channel(vc)
+                            elif not human_users and session.is_listening:
+                                self.stop_listening_in_channel(vc)
+            except Exception as exc:
+                logger.debug(f"Auto-listener tick error: {exc}")
+
+            await asyncio.sleep(12.0)
+
+    def handle_voice_state_update(
+        self,
+        member: discord.Member,
+        before: discord.VoiceState,
+        after: discord.VoiceState,
+    ):
+        """Called on Discord voice_state_update to immediately attach/detach listeners."""
+        if member.bot:
+            return
+
+        if after.channel:
+            self.start_listening_in_channel(after.channel)
+
+        if before.channel and before.channel != after.channel:
+            humans_left = [m for m in before.channel.members if not m.bot]
+            if not humans_left:
+                self.stop_listening_in_channel(before.channel)
+
     async def _vad_silence_watcher_loop(self):
         """
         High-frequency Voice Activity Detection (VAD) loop:
-        Checks if a human user has finished speaking (>= 0.75 seconds of silence after packets).
+        Checks if a human user has finished speaking (>= 0.65 seconds of silence after packets).
         When an utterance is complete, immediately triggers Speech Recognition and Gemini reply.
         """
         while self.is_running:
             try:
                 now = time.time()
                 for ch_id, session in list(self.sessions.items()):
-                    if not session.is_listening or session.is_speaking:
+                    if not session.is_listening:
+                        continue
+
+                    # If bot is currently speaking, clear buffers to avoid echo
+                    if session.is_speaking or session.audio_lock.locked():
+                        session.user_pcm_buffers.clear()
+                        session.user_last_packet_time.clear()
                         continue
 
                     for uid, last_time in list(session.user_last_packet_time.items()):
-                        # Silence threshold: 0.75 seconds of silence concludes utterance
-                        if now - last_time >= 0.75:
+                        # Silence threshold: 0.65 seconds of silence concludes utterance
+                        if now - last_time >= 0.65:
                             chunks = session.user_pcm_buffers.pop(uid, [])
                             session.user_last_packet_time.pop(uid, None)
 
@@ -615,7 +926,7 @@ class VoiceService:
             except Exception as exc:
                 logger.debug(f"VAD watcher tick error: {exc}")
 
-            await asyncio.sleep(0.12)  # 120ms polling interval for sub-second responsiveness
+            await asyncio.sleep(0.10)  # 100ms polling interval for sub-second responsiveness
 
     async def _process_completed_user_speech(
         self,
@@ -633,7 +944,7 @@ class VoiceService:
             if not mono_16k or len(mono_16k) < 3200:
                 return
 
-            # 2. Fast Speech Recognition (Google Speech endpoint with Indian English & Tamil support)
+            # 2. Fast Speech Recognition
             audio_data = sr.AudioData(mono_16k, 16000, 2)
             transcript = await self._recognize_speech(audio_data)
 
@@ -650,8 +961,9 @@ class VoiceService:
             if not isinstance(channel_obj, discord.VoiceChannel):
                 return
 
-            member = channel_obj.guild.get_member(user_id)
-            user_display_name = member.display_name if member else "User"
+            cached_user = session.user_objects.get(user_id)
+            member = channel_obj.guild.get_member(user_id) or cached_user
+            user_display_name = getattr(member, "display_name", None) or getattr(member, "name", "User")
 
             logger.info(
                 f"🎙️ [USER HEARD] {user_display_name} in '{channel_obj.name}': \"{transcript}\""
@@ -661,11 +973,12 @@ class VoiceService:
             target_bot_key = self._detect_addressed_bot(transcript, channel_obj)
 
             # 4. Prompt Gemini AI with Character Persona & Conversational Context
-            prompt = build_voice_reply_prompt(
-                character_key=target_bot_key,
-                user_name=user_display_name,
-                user_speech=transcript,
-                channel_name=channel_obj.name,
+            prompt = (
+                f"You are {target_bot_key.upper()} in a Discord voice channel.\n"
+                f"A team member named {user_display_name} just spoke on the mic and said: \"{transcript}\".\n"
+                f"Reply back to them directly in authentic Tanglish (Tamil + English) as your character persona.\n"
+                f"Keep it under 15 words, punchy, conversational, and direct so it can be spoken in 2 seconds.\n"
+                f"Strictly output only your spoken sentence, no markdown, no quotes, no bot prefixes."
             )
 
             try:
@@ -695,37 +1008,23 @@ class VoiceService:
         2. Fallback 1: en-US (standard English).
         3. Fallback 2: ta-IN (Tamil phonetics).
         """
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
 
         def _recognize_sync():
-            # Try Indian English / Tanglish first
-            try:
-                return self.recognizer.recognize_google(audio_data, language="en-IN")
-            except sr.UnknownValueError:
-                pass
-            except Exception as exc:
-                logger.debug(f"STT en-IN error: {exc}")
-
-            # Try en-US
-            try:
-                return self.recognizer.recognize_google(audio_data, language="en-US")
-            except sr.UnknownValueError:
-                pass
-            except Exception:
-                pass
-
-            # Try ta-IN
-            try:
-                return self.recognizer.recognize_google(audio_data, language="ta-IN")
-            except Exception:
-                pass
-
+            for lang in ("en-IN", "en-US", "ta-IN"):
+                try:
+                    return self.recognizer.recognize_google(audio_data, language=lang)
+                except sr.UnknownValueError:
+                    continue
+                except Exception as exc:
+                    logger.debug(f"STT {lang} failed: {exc}")
+                    continue
             return None
 
         try:
-            return await loop.run_in_executor(None, _recognize_sync)
+            return await asyncio.wait_for(loop.run_in_executor(None, _recognize_sync), timeout=3.5)
         except Exception as exc:
-            logger.warning(f"Speech recognition execution failed: {exc}")
+            logger.debug(f"Speech recognition timed out or failed: {exc}")
             return None
 
     def _detect_addressed_bot(
@@ -769,15 +1068,8 @@ class VoiceService:
                 return bot_key
 
         # If no bot explicitly named: pick an awake bot present in the channel
-        present_bots: List[str] = []
-        for k, client in self.orchestrator.clients.items():
-            if client.user:
-                m = voice_channel.guild.get_member(client.user.id)
-                if m and m.voice and m.voice.channel and m.voice.channel.id == voice_channel.id:
-                    present_bots.append(k)
-
+        present_bots: List[str] = self._get_bots_in_voice_channel(voice_channel)
         if present_bots:
-            import random
             return random.choice(present_bots)
 
         # Default fallback: Team Vasan Lead
@@ -830,12 +1122,16 @@ class VoiceService:
             self._cleanup_task.cancel()
         if self._vad_task and not self._vad_task.done():
             self._vad_task.cancel()
+        if self._autonomous_conversation_task and not self._autonomous_conversation_task.done():
+            self._autonomous_conversation_task.cancel()
+        if self._auto_listener_task and not self._auto_listener_task.done():
+            self._auto_listener_task.cancel()
 
         for s in self.sessions.values():
             s.is_listening = False
-            if s.voice_client and s.voice_client.is_connected():
+            if s.listening_voice_client and s.listening_voice_client.is_connected():
                 try:
-                    asyncio.create_task(s.voice_client.disconnect(force=True))
+                    asyncio.create_task(s.listening_voice_client.disconnect(force=True))
                 except Exception:
                     pass
 
