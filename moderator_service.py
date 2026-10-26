@@ -14,6 +14,13 @@ import random
 from typing import Any, Dict, List, Optional, Tuple
 import discord
 
+try:
+    import discord.ext.voice_recv as voice_recv
+    HAVE_VOICE_RECV = True
+except ImportError:
+    voice_recv = None
+    HAVE_VOICE_RECV = False
+
 logger = logging.getLogger("VaelkryDevLabs.Moderator")
 
 # Target CEO Voice Cabin Definitions
@@ -493,15 +500,40 @@ class ModeratorService:
         # 3. Connection & Movement Logic
         is_in_voice = bool(bot_member and bot_member.voice and bot_member.voice.channel)
         voice_client = discord.utils.get(client.voice_clients, guild=guild)
+        connect_cls = voice_recv.VoiceRecvClient if (HAVE_VOICE_RECV and voice_recv) else discord.VoiceClient
+
+        # If already connected as standard VoiceClient, safely disconnect to recreate with VoiceRecvClient
+        if voice_client and HAVE_VOICE_RECV and voice_recv and not isinstance(voice_client, voice_recv.VoiceRecvClient):
+            try:
+                await voice_client.disconnect(force=True)
+            except Exception:
+                pass
+            voice_client = None
 
         try:
-            if is_in_voice or (voice_client and voice_client.is_connected()):
-                # Already active in voice: move via guild.change_voice_state
+            if voice_client and voice_client.is_connected():
+                if voice_client.channel.id != client_target_vc.id:
+                    await voice_client.move_to(client_target_vc)
                 await guild.change_voice_state(
                     channel=client_target_vc,
                     self_mute=target_mute,
                     self_deaf=target_deaf,
                 )
+            elif is_in_voice and not voice_client:
+                # In Discord voice channel but missing VoiceClient instance: connect with VoiceRecvClient
+                try:
+                    await client_target_vc.connect(
+                        cls=connect_cls,
+                        self_mute=target_mute,
+                        self_deaf=target_deaf,
+                        reconnect=True,
+                    )
+                except discord.ClientException:
+                    await guild.change_voice_state(
+                        channel=client_target_vc,
+                        self_mute=target_mute,
+                        self_deaf=target_deaf,
+                    )
             else:
                 # Bot is not in voice yet: trigger initial connection using client instance
                 if voice_client:
@@ -511,6 +543,7 @@ class ModeratorService:
                         pass
                 try:
                     await client_target_vc.connect(
+                        cls=connect_cls,
                         self_mute=target_mute,
                         self_deaf=target_deaf,
                         reconnect=True,

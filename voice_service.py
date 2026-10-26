@@ -173,7 +173,7 @@ class VoiceChannelSession:
     Maintains per-voice-channel runtime state:
     - Audio Lock: Prevents overlapping speech; ensures orderly turn-taking.
     - Active speaker tracking.
-    - Listening state and incoming user audio buffers.
+    - Listening state, graceful degradation, and incoming user audio buffers.
     """
 
     def __init__(self, channel_id: int):
@@ -183,7 +183,10 @@ class VoiceChannelSession:
         self.current_speaker: Optional[str] = None
         self.last_speech_finished_at: float = 0.0
         self.is_listening = False
+        self.output_only_mode: bool = False
+        self.warned_not_voice_recv: bool = False
         self.listening_voice_client: Optional[discord.VoiceClient] = None
+        self.listener_worker_task: Optional[asyncio.Task] = None
         self.user_pcm_buffers: Dict[int, List[bytes]] = {}
         self.user_last_packet_time: Dict[int, float] = {}
         self.user_objects: Dict[int, discord.User] = {}
@@ -371,15 +374,27 @@ class VoiceService:
         existing_vc = discord.utils.get(target_client.voice_clients, guild=guild)
 
         if existing_vc and existing_vc.is_connected():
-            if existing_vc.channel.id != target_vc.id:
-                logger.info(f"Moving {target_client.user.name} from '{existing_vc.channel.name}' to '{target_vc.name}'")
-                await existing_vc.move_to(target_vc)
-            # Ensure not self-muted or self-deafened so audio plays and avatar green ring lights up
-            try:
-                await guild.change_voice_state(channel=target_vc, self_mute=False, self_deaf=False)
-            except Exception:
-                pass
-            return existing_vc
+            # If already connected as standard VoiceClient, safely disconnect to recreate with VoiceRecvClient
+            if HAVE_VOICE_RECV and voice_recv and not isinstance(existing_vc, voice_recv.VoiceRecvClient):
+                logger.info(
+                    f"Existing voice_client for {target_client.user.name} is standard VoiceClient. "
+                    f"Reconnecting with VoiceRecvClient so voice listening (BasicSink) can attach properly..."
+                )
+                try:
+                    await existing_vc.disconnect(force=True)
+                except Exception:
+                    pass
+                existing_vc = None
+            else:
+                if existing_vc.channel.id != target_vc.id:
+                    logger.info(f"Moving {target_client.user.name} from '{existing_vc.channel.name}' to '{target_vc.name}'")
+                    await existing_vc.move_to(target_vc)
+                # Ensure not self-muted or self-deafened so audio plays and avatar green ring lights up
+                try:
+                    await guild.change_voice_state(channel=target_vc, self_mute=False, self_deaf=False)
+                except Exception:
+                    pass
+                return existing_vc
 
         # If existing_vc exists but disconnected, force disconnect before reconnecting
         if existing_vc:
@@ -390,7 +405,7 @@ class VoiceService:
 
         # Connect fresh with VoiceRecvClient for bidirectional audio
         try:
-            logger.info(f"Connecting {target_client.user.name} to VC '{target_vc.name}'...")
+            logger.info(f"Connecting {target_client.user.name} to VC '{target_vc.name}' with VoiceRecvClient...")
             vc = await target_vc.connect(
                 cls=connect_cls,
                 reconnect=True,
@@ -924,24 +939,92 @@ class VoiceService:
     # 4. LIVE MIC RESPONSIVE LISTENING & SUB-2-SECOND VOICE REPLY
     # =====================================================================
 
-    def start_listening_in_channel(self, voice_channel: discord.VoiceChannel) -> bool:
+    async def _voice_listener_worker(self, voice_channel: discord.VoiceChannel):
         """
-        Begins continuous real-time audio reception in the voice channel.
-        Attaches BasicSink to capture human speech chunks while ignoring bots.
+        Dedicated background worker for voice listening in a voice channel:
+        1. Checks if isinstance(vc, voice_recv.VoiceRecvClient).
+        2. If not:
+           - Logs the warning ONCE per channel session instead of spamming every second.
+           - Attempt an async reconnect with cls=voice_recv.VoiceRecvClient.
+           - If reconnect fails, degrades gracefully to output-only mode (speaking works via FFmpegPCMAudio even without voice_recv).
+        3. If VoiceRecvClient:
+           - Attaches voice_recv.BasicSink to stream incoming human speech chunks while ignoring bots.
         """
-        if not HAVE_VOICE_RECV:
-            logger.warning("discord-ext-voice-recv is not installed; voice receiving disabled.")
-            return False
-
         session = self.get_session(voice_channel.id)
-        if session.is_listening:
-            return True
 
-        async def _attach_sink():
+        if not HAVE_VOICE_RECV or not voice_recv:
+            session.output_only_mode = True
+            if not session.warned_not_voice_recv:
+                logger.warning(
+                    f"discord-ext-voice-recv not installed; degrading '{voice_channel.name}' to output-only mode."
+                )
+                session.warned_not_voice_recv = True
+            return
+
+        try:
             vc = await self.get_or_connect_voice_client(voice_channel)
-            if not vc or not isinstance(vc, voice_recv.VoiceRecvClient):
-                logger.warning(f"Voice client in {voice_channel.name} is not a VoiceRecvClient.")
+            if not vc:
+                if not session.warned_not_voice_recv:
+                    logger.warning(
+                        f"Voice client unavailable in '{voice_channel.name}'; degrading gracefully to output-only mode."
+                    )
+                    session.warned_not_voice_recv = True
+                session.output_only_mode = True
+                session.is_listening = False
                 return
+
+            # Check if isinstance(vc, voice_recv.VoiceRecvClient)
+            if not isinstance(vc, voice_recv.VoiceRecvClient):
+                # Log warning ONCE per channel session instead of spamming every second
+                if not session.warned_not_voice_recv:
+                    logger.warning(
+                        f"Voice client in '{voice_channel.name}' is not a VoiceRecvClient ({type(vc).__name__}). "
+                        f"Attempting async reconnect with cls=voice_recv.VoiceRecvClient..."
+                    )
+                    session.warned_not_voice_recv = True
+
+                # Attempt an async reconnect with cls=voice_recv.VoiceRecvClient
+                try:
+                    logger.info(f"Reconnecting voice client in '{voice_channel.name}' with VoiceRecvClient...")
+                    if vc.is_connected():
+                        await vc.disconnect(force=True)
+                    await asyncio.sleep(0.5)
+
+                    target_client = vc.client if hasattr(vc, "client") else None
+                    if not target_client:
+                        target_client = (
+                            self.orchestrator.clients.get("ttf_vasan")
+                            or next(iter(self.orchestrator.clients.values()), None)
+                        )
+                    guild = target_client.get_guild(voice_channel.guild.id) or voice_channel.guild
+                    target_vc = guild.get_channel(voice_channel.id) or voice_channel
+
+                    vc = await target_vc.connect(
+                        cls=voice_recv.VoiceRecvClient,
+                        reconnect=True,
+                        timeout=15.0,
+                        self_mute=False,
+                        self_deaf=False,
+                    )
+                except Exception as reconnect_err:
+                    logger.warning(
+                        f"Reconnecting '{voice_channel.name}' with VoiceRecvClient failed: {reconnect_err}"
+                    )
+                    vc = None
+
+                # If reconnection fails, degrade gracefully to output-only mode
+                if not vc or not isinstance(vc, voice_recv.VoiceRecvClient):
+                    session.output_only_mode = True
+                    session.is_listening = False
+                    logger.info(
+                        f"Degraded voice service in '{voice_channel.name}' gracefully to output-only mode "
+                        f"(speaking works via FFmpegPCMAudio even without voice_recv)."
+                    )
+                    return
+
+            # Successfully verified as VoiceRecvClient!
+            session.warned_not_voice_recv = False
+            session.output_only_mode = False
 
             def on_voice_packet(user: Optional[discord.User], data: Any):
                 # Strictly ignore bot audio packets to avoid feedback loops
@@ -961,21 +1044,61 @@ class VoiceService:
                 session.user_last_packet_time[uid] = time.time()
 
             try:
+                if hasattr(vc, "is_listening") and vc.is_listening():
+                    vc.stop_listening()
+
                 sink = voice_recv.BasicSink(on_voice_packet)
                 vc.listen(sink)
                 session.is_listening = True
                 session.listening_voice_client = vc
-                logger.info(f"🎙️ Real-time voice listening active in '{voice_channel.name}'!")
+                logger.info(f"🎙️ Real-time voice listening active in '{voice_channel.name}' via VoiceRecvClient!")
             except Exception as exc:
-                logger.error(f"Failed to start voice listening in {voice_channel.name}: {exc}")
+                logger.error(f"Failed to attach voice sink in '{voice_channel.name}': {exc}")
+                session.output_only_mode = True
+                session.is_listening = False
 
-        asyncio.create_task(_attach_sink())
+        except Exception as exc:
+            logger.error(f"Exception in _voice_listener_worker for '{voice_channel.name}': {exc}")
+            session.output_only_mode = True
+            session.is_listening = False
+
+    def start_listening_in_channel(self, voice_channel: discord.VoiceChannel) -> bool:
+        """
+        Begins continuous real-time audio reception in the voice channel.
+        Attaches BasicSink to capture human speech chunks while ignoring bots.
+        """
+        if not HAVE_VOICE_RECV or not voice_recv:
+            session = self.get_session(voice_channel.id)
+            session.output_only_mode = True
+            return False
+
+        session = self.get_session(voice_channel.id)
+        if session.is_listening:
+            return True
+
+        if session.output_only_mode:
+            # Degraded gracefully; do not spam worker or warning logs
+            return False
+
+        if session.listener_worker_task and not session.listener_worker_task.done():
+            return True
+
+        session.listener_worker_task = asyncio.create_task(
+            self._voice_listener_worker(voice_channel)
+        )
         return True
 
     def stop_listening_in_channel(self, voice_channel: discord.VoiceChannel):
-        """Stops active voice listening in the specified voice channel."""
+        """Stops active voice listening in the specified voice channel and resets session flags."""
         session = self.get_session(voice_channel.id)
         session.is_listening = False
+        session.output_only_mode = False
+        session.warned_not_voice_recv = False
+
+        if session.listener_worker_task and not session.listener_worker_task.done():
+            session.listener_worker_task.cancel()
+        session.listener_worker_task = None
+
         vc = session.listening_voice_client
         if vc and hasattr(vc, "is_listening"):
             try:
@@ -1004,9 +1127,9 @@ class VoiceService:
                             human_users = [m for m in vc.members if not m.bot]
                             session = self.get_session(vc.id)
 
-                            if human_users and not session.is_listening:
+                            if human_users and not session.is_listening and not session.output_only_mode:
                                 self.start_listening_in_channel(vc)
-                            elif not human_users and session.is_listening:
+                            elif not human_users and (session.is_listening or session.output_only_mode):
                                 self.stop_listening_in_channel(vc)
             except Exception as exc:
                 logger.debug(f"Auto-listener tick error: {exc}")
@@ -1024,7 +1147,9 @@ class VoiceService:
             return
 
         if after.channel:
-            self.start_listening_in_channel(after.channel)
+            session = self.get_session(after.channel.id)
+            if not session.output_only_mode:
+                self.start_listening_in_channel(after.channel)
 
         if before.channel and before.channel != after.channel:
             humans_left = [m for m in before.channel.members if not m.bot]

@@ -1396,42 +1396,37 @@ class CompanyScheduler:
             target_deaf = False
 
         # 3. Voice connection and mute/deaf state update
-        is_in_voice = bool(bot_member and bot_member.voice and bot_member.voice.channel)
-        voice_client = discord.utils.get(client.voice_clients, guild=guild)
+        bot_guild = client.get_guild(guild.id) or guild
+        bot_member = bot_guild.get_member(client.user.id) if client.user else None
+        voice_client = discord.utils.get(client.voice_clients, guild=bot_guild)
+        connect_cls = voice_recv.VoiceRecvClient if (HAVE_VOICE_RECV and voice_recv) else discord.VoiceClient
+
+        # If a voice_client is already connected as standard VoiceClient, safely disconnect to recreate with VoiceRecvClient
+        if voice_client and HAVE_VOICE_RECV and voice_recv and not isinstance(voice_client, voice_recv.VoiceRecvClient):
+            try:
+                await voice_client.disconnect(force=True)
+            except Exception:
+                pass
+            voice_client = None
 
         try:
-            if is_in_voice:
-                if bot_member.voice.channel.id != target_vc.id:
-                    if voice_client and voice_client.is_connected():
-                        await voice_client.move_to(target_vc)
-                    else:
-                        await guild.change_voice_state(
-                            channel=target_vc,
-                            self_mute=target_mute,
-                            self_deaf=target_deaf,
-                        )
-                else:
-                    await guild.change_voice_state(
-                        channel=target_vc,
-                        self_mute=target_mute,
-                        self_deaf=target_deaf,
-                    )
-            elif voice_client and voice_client.is_connected():
+            if voice_client and voice_client.is_connected():
                 if voice_client.channel.id != target_vc.id:
                     await voice_client.move_to(target_vc)
-                else:
-                    await guild.change_voice_state(
+                try:
+                    await bot_guild.change_voice_state(
                         channel=target_vc,
                         self_mute=target_mute,
                         self_deaf=target_deaf,
                     )
+                except Exception:
+                    pass
             else:
                 if voice_client:
                     try:
                         await voice_client.disconnect(force=True)
                     except Exception:
                         pass
-                connect_cls = voice_recv.VoiceRecvClient if (HAVE_VOICE_RECV and voice_recv) else discord.VoiceClient
                 await target_vc.connect(
                     cls=connect_cls,
                     self_mute=target_mute,
@@ -1531,22 +1526,36 @@ class CompanyScheduler:
 
             bot_guild = client.get_guild(guild.id) or guild
             bot_member = bot_guild.get_member(client.user.id) if client.user else None
-            voice_client = discord.utils.get(client.voice_clients, guild=guild)
+            voice_client = discord.utils.get(client.voice_clients, guild=bot_guild)
+            connect_cls = voice_recv.VoiceRecvClient if (HAVE_VOICE_RECV and voice_recv) else discord.VoiceClient
+
+            # If a voice_client is already connected as standard VoiceClient, safely disconnect to recreate with VoiceRecvClient
+            if voice_client and HAVE_VOICE_RECV and voice_recv and not isinstance(voice_client, voice_recv.VoiceRecvClient):
+                try:
+                    await voice_client.disconnect(force=True)
+                except Exception:
+                    pass
+                voice_client = None
 
             try:
                 if voice_client and voice_client.is_connected():
                     if voice_client.channel.id != actual_target_vc.id:
                         await voice_client.move_to(actual_target_vc)
-                elif bot_member and bot_member.voice and bot_member.voice.channel:
-                    if bot_member.voice.channel.id != actual_target_vc.id:
-                        await guild.change_voice_state(
+                    try:
+                        await bot_guild.change_voice_state(
                             channel=actual_target_vc,
                             self_mute=False,
                             self_deaf=False,
                         )
+                    except Exception:
+                        pass
                 else:
-                    # Connect directly to target VC
-                    connect_cls = voice_recv.VoiceRecvClient if (HAVE_VOICE_RECV and voice_recv) else discord.VoiceClient
+                    if voice_client:
+                        try:
+                            await voice_client.disconnect(force=True)
+                        except Exception:
+                            pass
+                    # Connect directly to target VC with VoiceRecvClient
                     try:
                         await actual_target_vc.connect(
                             cls=connect_cls,
@@ -1555,8 +1564,14 @@ class CompanyScheduler:
                             reconnect=True,
                             timeout=10.0,
                         )
+                    except discord.ClientException:
+                        await bot_guild.change_voice_state(
+                            channel=actual_target_vc,
+                            self_mute=False,
+                            self_deaf=False,
+                        )
                     except Exception:
-                        await guild.change_voice_state(
+                        await bot_guild.change_voice_state(
                             channel=actual_target_vc,
                             self_mute=False,
                             self_deaf=False,
