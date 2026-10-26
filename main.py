@@ -949,11 +949,19 @@ class VaelkryBotClient(discord.Client):
                 target_vc=dest_vc,
             )
 
+            # Ensure voice listener is actively listening so TTF Vasan and team can hear speech and execute tasks
+            if hasattr(self.orchestrator, "voice_service") and self.orchestrator.voice_service:
+                try:
+                    self.orchestrator.voice_service.start_listening_in_channel(resolved_vc)
+                except Exception as l_err:
+                    logger.warning(f"Failed to auto-start voice listening after slash wakeup: {l_err}")
+
             embed = discord.Embed(
                 title="⚡ Master VC Wakeup & Override Activated",
                 description=(
                     f"**Successfully gathered {count}/22 bots into `{resolved_vc.name}`!**\n\n"
                     f"• **Voice State:** Strictly set to `mute=False, deafen=False` (undeafened & unmuted).\n"
+                    f"• **TTF Vasan & Squad:** Actively present in voice channel, listening and ready for tasks.\n"
                     f"• **Sleep Override:** `ACTIVE` (scheduler will preserve bots awake and active in this VC).\n"
                     f"• **Ready for Voice:** Speak to any bot using `/voice_speak` or chat via `/voice_listen`!"
                 ),
@@ -961,6 +969,19 @@ class VaelkryBotClient(discord.Client):
             )
             embed.set_footer(text="Vaelkry Dev Labs Master Voice Override • All 22 Bots Online")
             await interaction.followup.send(embed=embed)
+
+        @self.tree.command(
+            name="wakevc",
+            description="Master VC Wakeup (Alias): Wakes all bots, moves to target VC, unmutes & undeafens them",
+        )
+        @app_commands.describe(
+            target_channel="Voice channel to gather all bots in (defaults to your current VC or Tech Cafe)",
+        )
+        async def wakevc_slash(
+            interaction: discord.Interaction,
+            target_channel: Optional[discord.VoiceChannel] = None,
+        ):
+            await wake_all_vc_slash(interaction, target_channel=target_channel)
 
     async def on_ready(self):
         logger.info(
@@ -1067,7 +1088,9 @@ class VaelkryBotClient(discord.Client):
                 or any(t in cat_name for t in ("team vaasan", "team vasan", "team vijay", "team messi", "team dhoni"))
             )
 
-            if not is_sleep and (is_tech_cafe or is_working_vc):
+            is_override = getattr(self.orchestrator.scheduler_service, "voice_override_active", False)
+
+            if is_override or (not is_sleep and (is_tech_cafe or is_working_vc)):
                 if after.self_mute or after.self_deaf:
                     try:
                         if hasattr(self, "ws") and self.ws:
@@ -1833,6 +1856,13 @@ class AgentOrchestrator:
                 guild=message.guild,
                 target_vc=target_vc,
             )
+
+            # Ensure voice listener is actively listening so TTF Vasan and team can hear speech and execute tasks
+            if hasattr(self, "voice_service") and self.voice_service:
+                try:
+                    self.voice_service.start_listening_in_channel(resolved_vc)
+                except Exception as l_err:
+                    logger.warning(f"Failed to auto-start voice listening after !wakevc: {l_err}")
 
             embed = discord.Embed(
                 title="⚡ Master VC Wakeup & Override Activated",

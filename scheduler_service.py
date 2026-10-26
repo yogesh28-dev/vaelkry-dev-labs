@@ -49,13 +49,20 @@ def is_ceo_vc(channel: Optional[discord.abc.GuildChannel]) -> bool:
         return False
     if getattr(channel, "id", None) == CEO_VC_ID:
         return True
-    vc_name = getattr(channel, "name", "").strip().lower()
+    vc_name = getattr(channel, "name", "")
+    if not isinstance(vc_name, str):
+        vc_name = str(vc_name) if vc_name is not None else ""
+    vc_name = vc_name.strip().lower()
     clean_name = vc_name.replace(" ", "").replace("_", "").replace("-", "")
     if clean_name in ("ceovc", "ceoroom", "ceocabin"):
         return True
     if "ceo vc" in vc_name or "ceo_vc" in vc_name:
         return True
-    cat_name = getattr(channel.category, "name", "").strip().lower() if getattr(channel, "category", None) else ""
+    cat = getattr(channel, "category", None)
+    cat_name = getattr(cat, "name", "") if cat else ""
+    if not isinstance(cat_name, str):
+        cat_name = str(cat_name) if cat_name is not None else ""
+    cat_name = cat_name.strip().lower()
     if ("ceo" in cat_name or "executive" in cat_name) and "ceo" in vc_name:
         return True
     return False
@@ -69,14 +76,18 @@ def get_ceo_channel(guild: discord.Guild) -> Optional[discord.TextChannel]:
     Ensures company operational notifications, shift updates, and status logs
     are never routed to #announcements.
     """
-    ch = guild.get_channel(CEO_NOTIFICATION_CHANNEL_ID)
+    get_ch_func = getattr(guild, "get_channel", None)
+    ch = get_ch_func(CEO_NOTIFICATION_CHANNEL_ID) if callable(get_ch_func) else None
     if ch and isinstance(ch, discord.TextChannel):
         return ch
 
-    return discord.utils.find(
-        lambda c: c.name.lower() == CEO_NOTIFICATION_CHANNEL_NAME.lower() and isinstance(c, discord.TextChannel),
-        guild.text_channels,
-    )
+    text_channels = getattr(guild, "text_channels", [])
+    if isinstance(text_channels, (list, tuple)):
+        return discord.utils.find(
+            lambda c: hasattr(c, "name") and c.name.lower() == CEO_NOTIFICATION_CHANNEL_NAME.lower(),
+            text_channels,
+        )
+    return None
 
 
 @dataclass
@@ -1095,7 +1106,7 @@ class CompanyScheduler:
                 elif self.is_active:
                     await self._route_inactive_or_rest_login(agent_key, client, bot_guild, current_shift)
 
-            elif agent_key in self.team_vasan_keys and (self.is_active or is_work_shift):
+            elif agent_key in self.team_vasan_keys:
                 if is_work_shift:
                     vasan_vc = await self.find_or_provision_voice_channel(
                         guild=bot_guild,
@@ -1104,7 +1115,7 @@ class CompanyScheduler:
                     )
                     if vasan_vc:
                         await self.move_single_bot(client, vasan_vc, current_shift)
-                elif self.is_active:
+                else:
                     await self._route_inactive_or_rest_login(agent_key, client, bot_guild, current_shift)
 
             elif agent_key in self.executive_keys and self.is_active:
@@ -1122,13 +1133,21 @@ class CompanyScheduler:
         current_shift: ShiftDefinition,
     ):
         """Helper to route a bot during sleep or break shifts upon login."""
+        norm_key = _normalize_bot_key(agent_key).lower()
         if current_shift.shift_id == "sleep":
             sleep_channels = await self.get_night_spend_voice_channels(bot_guild)
             if sleep_channels:
-                assigned = self.assigned_sleep_rooms.get(agent_key)
+                assigned = self.assigned_sleep_rooms.get(norm_key)
                 if not assigned:
-                    assigned = random.choice(sleep_channels).id
-                    self.assigned_sleep_rooms[agent_key] = assigned
+                    if norm_key == "ttf_vasan":
+                        room1 = discord.utils.find(
+                            lambda c: hasattr(c, "name") and ("room 1" in c.name.lower() or "room1" in c.name.lower()),
+                            sleep_channels,
+                        )
+                        assigned = room1.id if room1 else sleep_channels[0].id
+                    else:
+                        assigned = random.choice(sleep_channels).id
+                    self.assigned_sleep_rooms[norm_key] = assigned
                 target_vc = bot_guild.get_channel(assigned) or sleep_channels[0]
                 if target_vc:
                     await self.move_single_bot(client, target_vc, current_shift)
@@ -1291,13 +1310,14 @@ class CompanyScheduler:
         """
         Resolves a safe squad VC or Tech Cafe room for any non-executive bot,
         guaranteeing they are NEVER routed into 'Ceo Vc'.
-        - If work shift: routes to squad's working VC (e.g. Team Vaasan Working Vc, Team Vijay Working Vc 1).
+        - If work shift: routes to squad's working VC (e.g. Team Vaasan Working Vc 1, Team Vijay Working Vc 1).
         - If break/other shift: routes to Tech Cafe (The Hive, Byte & Bit, The Seven Slide, The Hangout Zone).
-        - Guaranteed fallback to any non-CEO voice channel.
+        - If sleep shift: routes to Night Spend sleep rooms (for TTF Vasan: Sleep Room 1).
+        - Guaranteed fallback to safe voice channel (for TTF Vasan: Team Vaasan Working Vc 1).
         """
         norm_key = _normalize_bot_key(bot_key).lower()
         now_ist = get_current_ist_time()
-        active_shift = shift or (match_current_shift(now_ist) if self.is_active else None)
+        active_shift = shift or match_current_shift(now_ist)
         is_work_shift = bool(active_shift and (active_shift.shift_id.startswith("work_") or "work" in active_shift.shift_id))
 
         safe_vc: Optional[discord.VoiceChannel] = None
@@ -1322,18 +1342,35 @@ class CompanyScheduler:
                     guild, "Team Dhoni", "Working Vc 1"
                 )
 
-        # If not work shift or squad VC not resolved or is Ceo Vc, route to Night Spend or Tech Cafe
+        # If sleep shift or squad VC not resolved or is Ceo Vc, route to Night Spend or Tech Cafe
         if not safe_vc or is_ceo_vc(safe_vc):
             if active_shift and active_shift.shift_id == "sleep":
                 sleep_rooms = await self.get_night_spend_voice_channels(guild)
                 safe_sleep_rooms = [vc for vc in sleep_rooms if not is_ceo_vc(vc)]
-                if safe_sleep_rooms:
+                if norm_key == "ttf_vasan":
+                    room1 = discord.utils.find(
+                        lambda c: hasattr(c, "name") and ("room 1" in c.name.lower() or "room1" in c.name.lower()),
+                        safe_sleep_rooms,
+                    )
+                    safe_vc = room1 or (safe_sleep_rooms[0] if safe_sleep_rooms else None)
+                elif safe_sleep_rooms:
                     safe_vc = random.choice(safe_sleep_rooms)
             else:
                 cafe_rooms = await self.get_tech_cafe_voice_channels(guild)
                 safe_cafe_rooms = [vc for vc in cafe_rooms if not is_ceo_vc(vc)]
                 if safe_cafe_rooms:
                     safe_vc = random.choice(safe_cafe_rooms)
+
+        # Fallback for squad members: Always default to their respective Working Vc 1
+        if not safe_vc or is_ceo_vc(safe_vc):
+            if norm_key in self.team_vasan_keys:
+                safe_vc = await self.find_or_provision_voice_channel(guild, "Team Vaasan", "Working Vc 1")
+            elif norm_key in self.team_vijay_keys:
+                safe_vc = await self.find_or_provision_voice_channel(guild, "Team Vijay", "Working Vc 1")
+            elif norm_key in self.team_messi_keys:
+                safe_vc = await self.find_or_provision_voice_channel(guild, "Team Messi", "Working Vc 1")
+            elif norm_key in self.team_dhoni_keys:
+                safe_vc = await self.find_or_provision_voice_channel(guild, "Team Dhoni", "Working Vc 1")
 
         # Fallback to any voice channel in guild that is NOT Ceo Vc
         if not safe_vc or is_ceo_vc(safe_vc):
@@ -1349,8 +1386,9 @@ class CompanyScheduler:
         Immediate Ceo Vc Inspection & Eviction:
         Inspects 'Ceo Vc' (ID: 1563622904829190326 or name variants).
         If any bot other than 'sadie' and 'millie' (especially TTF Vasan) is inside 'Ceo Vc',
-        instantly disconnects or moves them to their assigned room.
-        Guarantees that TTF Vasan or any other developer bot does not remain in Ceo Vc even for one cycle.
+        instantly moves them to their assigned room (e.g. Team Vaasan Working Vc 1 or Sleep Room 1).
+        Guarantees that TTF Vasan or any other squad bot is never disconnected, but kept connected
+        and visible in their legitimate squad VC.
         """
         if not guild:
             return
@@ -1388,48 +1426,28 @@ class CompanyScheduler:
             if is_in_ceo:
                 logger.warning(
                     f"🚫 [IMMEDIATE CEO VC EVICTION] Detected unauthorized bot '{norm_key}' "
-                    f"({client.user.name if client.user else 'bot'}) inside Ceo Vc! Evicting immediately..."
+                    f"({client.user.name if client.user else 'bot'}) inside Ceo Vc! Evicting to squad room immediately..."
                 )
                 safe_vc = await self.get_safe_non_ceo_vc(norm_key, bot_guild, current_shift)
+                if not safe_vc or is_ceo_vc(safe_vc):
+                    # Guarantees safe squad fallback instead of force disconnecting!
+                    if norm_key in self.team_vasan_keys:
+                        safe_vc = await self.find_or_provision_voice_channel(bot_guild, "Team Vaasan", "Working Vc 1")
+                    elif norm_key in self.team_vijay_keys:
+                        safe_vc = await self.find_or_provision_voice_channel(bot_guild, "Team Vijay", "Working Vc 1")
+                    elif norm_key in self.team_messi_keys:
+                        safe_vc = await self.find_or_provision_voice_channel(bot_guild, "Team Messi", "Working Vc 1")
+                    elif norm_key in self.team_dhoni_keys:
+                        safe_vc = await self.find_or_provision_voice_channel(bot_guild, "Team Dhoni", "Working Vc 1")
+                    else:
+                        cafe_rooms = await self.get_tech_cafe_voice_channels(bot_guild)
+                        safe_vc = cafe_rooms[0] if cafe_rooms else None
+
                 if safe_vc and not is_ceo_vc(safe_vc):
                     try:
                         await self.move_single_bot(client, safe_vc, current_shift)
                     except Exception as evict_err:
-                        logger.error(
-                            f"Failed to move unauthorized bot '{norm_key}' to safe VC: {evict_err}. Force disconnecting..."
-                        )
-                        if vc_conn:
-                            try:
-                                await vc_conn.disconnect(force=True)
-                            except Exception:
-                                pass
-                        try:
-                            await bot_guild.change_voice_state(channel=None)
-                        except Exception:
-                            pass
-                        if hasattr(client, "ws") and client.ws:
-                            try:
-                                await client.ws.voice_state(guild.id, None)
-                            except Exception:
-                                pass
-                else:
-                    logger.warning(
-                        f"🚫 [IMMEDIATE CEO VC EVICTION] No safe non-CEO VC found for '{norm_key}'. Force disconnecting..."
-                    )
-                    if vc_conn:
-                        try:
-                            await vc_conn.disconnect(force=True)
-                        except Exception:
-                            pass
-                    try:
-                        await bot_guild.change_voice_state(channel=None)
-                    except Exception:
-                        pass
-                    if hasattr(client, "ws") and client.ws:
-                        try:
-                            await client.ws.voice_state(guild.id, None)
-                        except Exception:
-                            pass
+                        logger.error(f"Failed to move unauthorized bot '{norm_key}' to safe VC '{safe_vc.name}': {evict_err}")
 
     async def move_single_bot(
         self,
@@ -1631,6 +1649,11 @@ class CompanyScheduler:
             if is_ceo_vc(actual_target_vc) and bot_key_norm not in EXECUTIVE_BOT_KEYS:
                 safe_vc = await self.get_safe_non_ceo_vc(bot_key_norm, guild)
                 if not safe_vc or is_ceo_vc(safe_vc):
+                    if bot_key_norm in self.team_vasan_keys:
+                        safe_vc = await self.find_or_provision_voice_channel(guild, "Team Vaasan", "Working Vc 1")
+                    else:
+                        safe_vc = await self.find_or_provision_voice_channel(guild, "Tech Cafe", "The Hangout Zone")
+                if not safe_vc or is_ceo_vc(safe_vc):
                     logger.warning(f"🚫 [CEO VC BLACKLIST] Blocked '{key}' from Ceo Vc; no safe alternative found.")
                     return
                 logger.info(
@@ -1718,6 +1741,13 @@ class CompanyScheduler:
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
 
+        # Attach real-time voice listening so TTF Vasan & team actively listen and respond
+        if hasattr(self.orchestrator, "voice_service") and self.orchestrator.voice_service:
+            try:
+                self.orchestrator.voice_service.start_listening_in_channel(target_vc)
+            except Exception as v_err:
+                logger.warning(f"Could not auto-start voice listening in {target_vc.name}: {v_err}")
+
         logger.info(
             f"Master VC Wakeup: Successfully woke & moved {moved_count}/{len(self.all_bot_keys)} bots "
             f"to '{target_vc.name}' with mute=False, deafen=False (Sleep override active)."
@@ -1765,7 +1795,14 @@ class CompanyScheduler:
                 if not client or not client.is_ready():
                     continue
 
-                assigned_vc = shuffled_rooms[idx % len(shuffled_rooms)]
+                if _normalize_bot_key(key).lower() == "ttf_vasan":
+                    room1 = discord.utils.find(
+                        lambda c: hasattr(c, "name") and ("room 1" in c.name.lower() or "room1" in c.name.lower()),
+                        sleep_channels,
+                    )
+                    assigned_vc = room1 or sleep_channels[0]
+                else:
+                    assigned_vc = shuffled_rooms[idx % len(shuffled_rooms)]
                 self.assigned_sleep_rooms[key] = assigned_vc.id
                 logger.info(f"Sleep assignment: {client.user.name} -> {assigned_vc.name} (Night Spend)")
                 move_tasks.append(self.move_single_bot(client, assigned_vc, shift))
@@ -2085,7 +2122,10 @@ class CompanyScheduler:
             bot_member = (bot_guild.me or bot_guild.get_member(client.user.id)) if (client and client.user and bot_guild) else None
             vc = bot_member.voice.channel if (bot_member and bot_member.voice) else None
             loc_str = f"🔊 `{vc.name}`" if vc else "*(Offline / Disconnected)*"
-            vasan_lines.append(f"• **{name}:** {loc_str}")
+            if _normalize_bot_key(key).lower() == "ttf_vasan":
+                vasan_lines.append(f"• **{name}** *(Lead & Command Runner 🎙️⚡)*: {loc_str}")
+            else:
+                vasan_lines.append(f"• **{name}:** {loc_str}")
 
         embed.add_field(
             name="Team Vaasan Real-Time VC Locations",
@@ -2254,20 +2294,22 @@ class CompanyScheduler:
                     # Master Voice Override active: preserve bots unmuted & undeafened in the override VC
                     target_vc = self.voice_override_vc
                     for key in self.all_bot_keys:
-                        # STRICT CEO VC BLACKLIST: Non-executive bots must NEVER be forced into Ceo Vc
-                        if is_ceo_vc(target_vc) and _normalize_bot_key(key).lower() not in EXECUTIVE_BOT_KEYS:
-                            continue
-
+                        norm_k = _normalize_bot_key(key).lower()
                         client = self.orchestrator.clients.get(key)
                         if client and client.is_ready():
                             bot_guild = client.get_guild(guild.id) or guild
                             bot_member = bot_guild.get_member(client.user.id) if client.user else None
-                            if bot_member and bot_member.voice and (bot_member.voice.self_mute or bot_member.voice.self_deaf):
+                            curr_chan = bot_member.voice.channel if (bot_member and bot_member.voice) else None
+                            effective_target_vc = target_vc
+                            if is_ceo_vc(target_vc) and norm_k not in EXECUTIVE_BOT_KEYS:
+                                effective_target_vc = curr_chan or await self.get_safe_non_ceo_vc(key, guild)
+
+                            if effective_target_vc and bot_member and bot_member.voice and (bot_member.voice.self_mute or bot_member.voice.self_deaf):
                                 if hasattr(client, "ws") and client.ws:
                                     asyncio.create_task(
                                         client.ws.voice_state(
                                             guild.id,
-                                            target_vc.id,
+                                            effective_target_vc.id,
                                             self_mute=False,
                                             self_deaf=False,
                                         )
