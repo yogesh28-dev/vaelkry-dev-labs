@@ -6,4 +6,4 @@ davey>=0.1.0
 tzdata>=2024.1
 edge-tts>=7.0.0
 SpeechRecognition>=3.10.0
-discord-ext-voice-recv
+discord-ext-voice-recv==0.5.2a170
