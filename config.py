@@ -78,8 +78,12 @@ class SystemConfig:
         return {k: v for k, v in self.agents.items() if v.team == "team_elon"}
 
     @property
+    def team_tony_agents(self) -> Dict[str, AgentConfig]:
+        return {k: v for k, v in self.agents.items() if v.team in ("team_tony", "team_stark")}
+
+    @property
     def team_stark_agents(self) -> Dict[str, AgentConfig]:
-        return {k: v for k, v in self.agents.items() if v.team == "team_stark"}
+        return self.team_tony_agents
 
 
 # Corporate Engineering Squads Catalog
@@ -111,16 +115,18 @@ SQUADS: Dict[str, dict] = {
     "team_elon": {
         "name": "Team Elon",
         "lead": "elon",
-        "members": ["elon", "altman", "karpathy", "zuck", "lex"],
-        "domain": "Autonomous AI Systems, Deep Automation & Next-Gen Tech",
+        "members": ["elon", "mrbeast", "steve_jobs", "bill_gates", "kevin_mitnick"],
+        "domain": "Tech Titans & Mavericks (Autonomous AI Systems, Viral Infrastructure & Cyber Engineering)",
     },
-    "team_stark": {
-        "name": "Team Stark",
-        "lead": "stark",
-        "members": ["stark", "jarvis", "friday", "rhodey", "vision"],
-        "domain": "Cybersecurity, Reverse Engineering & Native Desktop Internals",
+    "team_tony": {
+        "name": "Team Tony",
+        "lead": "tony",
+        "members": ["tony", "tom_cruise", "brad_pitt", "johnny_depp", "walter_white"],
+        "domain": "Hollywood & Cult Legends (Win32 Systems Internals, High-Stakes Operations & Heisenberg Architecture)",
     },
 }
+# Backward compatibility alias
+SQUADS["team_stark"] = SQUADS["team_tony"]
 
 # Bot Token Environment Variable Catalog
 BOT_TOKENS: Dict[str, str] = {
@@ -151,25 +157,26 @@ BOT_TOKENS: Dict[str, str] = {
     "rohit": os.getenv("BOT_TOKEN_ROHIT", "").strip(),
     "jadeja": os.getenv("BOT_TOKEN_JADEJA", "").strip(),
     "hardik": os.getenv("BOT_TOKEN_HARDIK", "").strip(),
-    # Team Elon
+    # Team Elon (Tech Titans & Mavericks)
     "elon": os.getenv("BOT_TOKEN_ELON", "").strip(),
-    "altman": os.getenv("BOT_TOKEN_ALTMAN", "").strip(),
-    "karpathy": os.getenv("BOT_TOKEN_KARPATHY", "").strip(),
-    "zuck": os.getenv("BOT_TOKEN_ZUCK", "").strip(),
-    "lex": os.getenv("BOT_TOKEN_LEX", "").strip(),
-    # Team Stark
-    "stark": os.getenv("BOT_TOKEN_STARK", "").strip(),
-    "jarvis": os.getenv("BOT_TOKEN_JARVIS", "").strip(),
-    "friday": os.getenv("BOT_TOKEN_FRIDAY", "").strip(),
-    "rhodey": os.getenv("BOT_TOKEN_RHODEY", "").strip(),
-    "vision": os.getenv("BOT_TOKEN_VISION", "").strip(),
+    "mrbeast": os.getenv("BOT_TOKEN_MRBEAST", "").strip(),
+    "steve_jobs": (os.getenv("BOT_TOKEN_STEVE_JOBS", "") or os.getenv("BOT_TOKEN_STEVEJOBS", "")).strip(),
+    "bill_gates": (os.getenv("BOT_TOKEN_BILL_GATES", "") or os.getenv("BOT_TOKEN_BILLGATES", "")).strip(),
+    "kevin_mitnick": (os.getenv("BOT_TOKEN_KEVIN_MITNICK", "") or os.getenv("BOT_TOKEN_KEVINMITNICK", "")).strip(),
+    # Team Tony (Hollywood & Cult Legends, formerly Team Stark)
+    "tony": (os.getenv("BOT_TOKEN_TONY", "") or os.getenv("BOT_TOKEN_STARK", "")).strip(),
+    "tom_cruise": (os.getenv("BOT_TOKEN_TOM_CRUISE", "") or os.getenv("BOT_TOKEN_TOMCRUISE", "")).strip(),
+    "brad_pitt": (os.getenv("BOT_TOKEN_BRAD_PITT", "") or os.getenv("BOT_TOKEN_BRADPITT", "")).strip(),
+    "johnny_depp": (os.getenv("BOT_TOKEN_JOHNNY_DEPP", "") or os.getenv("BOT_TOKEN_JOHNNYDEPP", "")).strip(),
+    "walter_white": (os.getenv("BOT_TOKEN_WALTER_WHITE", "") or os.getenv("BOT_TOKEN_WALTERWHITE", "")).strip(),
+    "stark": (os.getenv("BOT_TOKEN_TONY", "") or os.getenv("BOT_TOKEN_STARK", "")).strip(),
 }
 
 
 def load_config() -> SystemConfig:
     """
     Validates and loads all configured bot credentials and server settings.
-    Supports Team Vaasan, Team Vijay, Team Messi, Team Dhoni, and Executive Suite.
+    Supports Team Vaasan, Team Vijay, Team Messi, Team Dhoni, Team Elon, Team Tony, and Executive Suite.
     """
     missing_vars: List[str] = []
 
@@ -221,23 +228,24 @@ def load_config() -> SystemConfig:
         ("hardik", "Hardik", "Swagger All-Rounder & Production Hotfix Specialist", "developer", "team_dhoni", "BOT_TOKEN_HARDIK", []),
     ]
 
-    # Team Elon Developer Agents (5) - Autonomous AI Systems & Next-Gen Tech
+    # Team Elon Developer Agents (5) - Tech Titans & Mavericks
     elon_definitions = [
-        ("elon", "Elon", "Team Lead & Techno-King (Multi-Agent Swarms & Autonomous AI)", "developer", "team_elon", "BOT_TOKEN_ELON", []),
-        ("altman", "Altman", "Chief AI Architect & Latent Reasoning Specialist", "developer", "team_elon", "BOT_TOKEN_ALTMAN", []),
-        ("karpathy", "Karpathy", "Neural Weights & Local GGUF Systems Lead", "developer", "team_elon", "BOT_TOKEN_KARPATHY", []),
-        ("zuck", "Zuck", "Open Weights & Synthetic Data Flywheel Lead", "developer", "team_elon", "BOT_TOKEN_ZUCK", []),
-        ("lex", "Lex", "Autonomous AI Sentinel & Ethical Agent Auditor", "developer", "team_elon", "BOT_TOKEN_LEX", []),
+        ("elon", "Elon Musk", "Team Lead & Techno-King (Multi-Agent Swarms & Autonomous AI)", "developer", "team_elon", "BOT_TOKEN_ELON", []),
+        ("mrbeast", "MrBeast", "Viral Distribution & Mass Scale Maestro", "developer", "team_elon", "BOT_TOKEN_MRBEAST", []),
+        ("steve_jobs", "Steve Jobs", "Chief Product Designer & Perfectionist Visionary", "developer", "team_elon", "BOT_TOKEN_STEVE_JOBS", []),
+        ("bill_gates", "Bill Gates", "Global Systems Architect & Foundations Lead", "developer", "team_elon", "BOT_TOKEN_BILL_GATES", []),
+        ("kevin_mitnick", "Kevin Mitnick", "Master Hacker & Cyber Penetration Specialist", "developer", "team_elon", "BOT_TOKEN_KEVIN_MITNICK", []),
     ]
 
-    # Team Stark Developer Agents (5) - Cybersecurity & Native Desktop Internals
-    stark_definitions = [
-        ("stark", "Stark", "Team Lead & Systems Internals Master (Reverse Eng & Win32)", "developer", "team_stark", "BOT_TOKEN_STARK", []),
-        ("jarvis", "Jarvis", "Kernel Telemetry & Protocol Specialist", "developer", "team_stark", "BOT_TOKEN_JARVIS", []),
-        ("friday", "Friday", "Reverse Engineering & Binary Decompiler Lead", "developer", "team_stark", "BOT_TOKEN_FRIDAY", []),
-        ("rhodey", "Rhodey", "War Machine & Zero-Trust Defense Sentinel", "developer", "team_stark", "BOT_TOKEN_RHODEY", []),
-        ("vision", "Vision", "Quantum Cryptography & Memory Architecture Lead", "developer", "team_stark", "BOT_TOKEN_VISION", []),
+    # Team Tony Developer Agents (5) - Hollywood & Cult Legends (formerly Team Stark)
+    tony_definitions = [
+        ("tony", "Tony Stark", "Team Lead & Systems Internals Master (Reverse Eng & Win32)", "developer", "team_tony", "BOT_TOKEN_TONY", []),
+        ("tom_cruise", "Tom Cruise", "High-Risk Mission Specialist & Maverick Operations Lead", "developer", "team_tony", "BOT_TOKEN_TOM_CRUISE", []),
+        ("brad_pitt", "Brad Pitt", "Chaos Engineering & Rogue Operations Lead", "developer", "team_tony", "BOT_TOKEN_BRAD_PITT", []),
+        ("johnny_depp", "Johnny Depp", "Eccentric Creative & Outlaw Specialist", "developer", "team_tony", "BOT_TOKEN_JOHNNY_DEPP", []),
+        ("walter_white", "Walter White", "Chemical Purity & Zero-Defect Code Architect", "developer", "team_tony", "BOT_TOKEN_WALTER_WHITE", []),
     ]
+    stark_definitions = tony_definitions
 
     # Executive Moderator Agents (2) - Core Required
     mod_definitions = [
@@ -264,13 +272,13 @@ def load_config() -> SystemConfig:
                 next_tags=next_tags,
             )
 
-    # Check and load optional squads (Team Vijay, Team Messi, Team Dhoni, Team Elon, Team Stark)
+    # Check and load optional squads (Team Vijay, Team Messi, Team Dhoni, Team Elon, Team Tony)
     optional_squads = [
         ("Team Vijay", vijay_definitions),
         ("Team Messi", messi_definitions),
         ("Team Dhoni", dhoni_definitions),
         ("Team Elon", elon_definitions),
-        ("Team Stark", stark_definitions),
+        ("Team Tony", tony_definitions),
     ]
 
     import logging

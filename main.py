@@ -989,7 +989,7 @@ class VaelkryBotClient(discord.Client):
             description="Triggers Sadie & Millie autonomous executive directive delegation to a squad (or all squads)",
         )
         @app_commands.describe(
-            squad="Target squad: team_vasan, team_vijay, team_messi, team_dhoni, team_elon, team_stark, or 'all'",
+            squad="Target squad: team_vasan, team_vijay, team_messi, team_dhoni, team_elon, team_tony, or 'all'",
         )
         async def executive_dispatch_slash(
             interaction: discord.Interaction,
@@ -1018,7 +1018,7 @@ class VaelkryBotClient(discord.Client):
                         f"✅ **Daily delegations successfully dispatched to {count}/6 engineering squads!**\n\n"
                         "• **Directives Issued:** Business strategy, pricing targets ($ ARR), and sprint priorities (Sadie Sink, CEO).\n"
                         "• **Technical Specs:** Architecture guidelines, >= 90% test coverage, and PR deadlines (Millie Bobby Brown, COO).\n"
-                        "• **Channels Tagged:** #working-chat across Team Vaasan, Team Vijay, Team Messi, Team Dhoni, Team Elon, Team Stark.\n"
+                        "• **Channels Tagged:** #working-chat across Team Vaasan, Team Vijay, Team Messi, Team Dhoni, Team Elon, Team Tony.\n"
                         "• **Status:** Squad leads and devs actively acknowledging and estimating delivery in their respective channels."
                     ),
                     color=discord.Color.gold(),
@@ -1147,7 +1147,7 @@ class VaelkryBotClient(discord.Client):
             )
             is_working_vc = (
                 "working" in ch_name
-                or any(t in cat_name for t in ("team vaasan", "team vasan", "team vijay", "team messi", "team dhoni", "team elon", "team stark"))
+                or any(t in cat_name for t in ("team vaasan", "team vasan", "team vijay", "team messi", "team dhoni", "team elon", "team tony", "team stark"))
             )
 
             is_override = getattr(self.orchestrator.scheduler_service, "voice_override_active", False)

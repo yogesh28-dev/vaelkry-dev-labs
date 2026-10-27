@@ -24,6 +24,7 @@ from agents import (
     TEAM_MESSI_KEYS,
     TEAM_DHONI_KEYS,
     TEAM_ELON_KEYS,
+    TEAM_TONY_KEYS,
     TEAM_STARK_KEYS,
     DISCORD_SLANG_BUCKETS,
     REGIONAL_TONES,
@@ -236,7 +237,8 @@ def find_squad_working_channel(guild: discord.Guild, squad_key: str) -> Optional
         "team_messi": ["messi"],
         "team_dhoni": ["dhoni"],
         "team_elon": ["elon"],
-        "team_stark": ["stark"],
+        "team_tony": ["tony", "stark"],
+        "team_stark": ["tony", "stark"],
     }
     key_norm = squad_key.lower().strip()
     kws = squad_keywords.get(key_norm, [key_norm])
@@ -492,7 +494,7 @@ EXECUTIVE_DIRECTIVES_CATALOG: Dict[str, List[Dict[str, Any]]] = {
         {
             "project_title": "Distributed Multi-Agent Arbitrage & Orderbook Sniffer Cluster",
             "lead_key": "elon",
-            "dev_key": "karpathy",
+            "dev_key": "steve_jobs",
             "sadie_directive": (
                 "**[EXECUTIVE DIRECTIVE: DEEP AUTOMATION & AUTONOMOUS AI]** @Elon & Team Elon:\n"
                 "Vaelkry Dev Labs must dominate multi-agent autonomous engineering. Directive: Deploy our distributed multi-agent autonomous trading & arbitrage scraper cluster. "
@@ -507,17 +509,17 @@ EXECUTIVE_DIRECTIVES_CATALOG: Dict[str, List[Dict[str, Any]]] = {
             ),
             "lead_ack": (
                 "Directives approved Sadie and Millie. First principles engineering: delete the unnecessary, optimize the hot path, accelerate the loop 🚀. "
-                "Karpathy, Sam, Zuck — neural weights and async FFI hooks linked. We ship to prod tonight."
+                "Steve, Jimmy, Bill, Kevin — neural weights and async FFI hooks linked. We ship to prod tonight."
             ),
             "dev_reply": (
-                "Async PyO3 bindings compiled and quantized local LLM router running at 180 tok/s 🧠⚡. "
-                "Invariant tests passing across 1,000 simulated mempool transactions. PR coming in hot at 5:00 PM IST!"
+                "Async PyO3 bindings compiled and designed with uncompromising elegance 🍎⚡. "
+                "Invariant tests passing across 1,000 simulated mempool transactions. It just works. PR coming in hot at 5:00 PM IST!"
             ),
         },
         {
             "project_title": "Ultra-Low-Latency Local LLM & Voice Agent Pipeline",
             "lead_key": "elon",
-            "dev_key": "altman",
+            "dev_key": "mrbeast",
             "sadie_directive": (
                 "**[EXECUTIVE DIRECTIVE: ENTERPRISE VOICE AI]** @Elon & Team Elon:\n"
                 "Commercial opportunity: **$60,000 ARR contract** with enterprise customer service provider. "
@@ -532,48 +534,48 @@ EXECUTIVE_DIRECTIVES_CATALOG: Dict[str, List[Dict[str, Any]]] = {
             ),
             "lead_ack": (
                 "The best part is no part, the best latency is zero latency 🚀. "
-                "Sam, Lex, Zuck — thread pools clamped, GPU VRAM pinned. We will obliterate the latency target."
+                "Jimmy, Steve, Bill, Kevin — thread pools clamped, GPU VRAM pinned. We will obliterate the latency target."
             ),
             "dev_reply": (
-                "vLLM server pinned with FlashAttention-2 and streaming WebRTC audio loop benchmarked at 112ms glass-to-glass 🎙️⚡! "
-                "Zero external API calls. Submitting PR for staging validation right now."
+                "I JUST OPTIMIZED THE WEBRTC AUDIO PIPELINE BY 500% AND TESTED IT ON 10,000 CONCURRENT STREAMS 🎙️🔥! "
+                "Zero external API calls. Submitting PR for staging validation right now!"
             ),
         },
     ],
-    "team_stark": [
+    "team_tony": [
         {
             "project_title": "Win32 Kernel-Level Zero-Trust Process Guard & Memory Tamper Detector",
-            "lead_key": "stark",
-            "dev_key": "jarvis",
+            "lead_key": "tony",
+            "dev_key": "tom_cruise",
             "sadie_directive": (
-                "**[EXECUTIVE DIRECTIVE: SYSTEMS ENGINEERING & NATIVE INTERNALS]** @Stark & Team Stark:\n"
+                "**[EXECUTIVE DIRECTIVE: SYSTEMS ENGINEERING & NATIVE INTERNALS]** @Tony & Team Tony:\n"
                 "We have high-stakes commercial interest from enterprise cyber firms for low-level system inspection utilities. "
                 "Directive: Build the native Win32/C++ zero-trust memory inspection daemon with realtime UDP/Protobuf packet classification. "
                 "Monetization tier: **$15,000/seat enterprise license ($90,000 initial pipeline)**. Make it uncrackable."
             ),
             "millie_spec": (
-                "**[LOW-LEVEL SPEC & KERNEL GUIDELINES]** Technical constraints for Team Stark:\n"
+                "**[LOW-LEVEL SPEC & KERNEL GUIDELINES]** Technical constraints for Team Tony:\n"
                 "1. **Language & Runtimes:** Modern C++23 / Rust with zero CRT bloat, raw Win32 / NTDLL syscall hooks.\n"
                 "2. **Networking:** Zero-allocation circular ring buffers for high-rate UDP/Protobuf packet parsing.\n"
                 "3. **Security:** Anti-debugging telemetry (PEB check, Hardware Breakpoint detection, code integrity hashes).\n"
                 "4. **PR Deadline:** 6:30 PM IST today. Valgrind / AddressSanitizer clean with zero memory leaks over 1M packet stress test."
             ),
             "lead_ack": (
-                "Directives received Sadie, Millie. Time to put some Stark flair into native systems 🦾⚡. "
-                "Jarvis, Friday — boot up the disassembler and initialize the zero-alloc packet hook. "
+                "Directives received Sadie, Millie. Time to put some Hollywood spectacle and Stark engineering into native systems 🦾⚡. "
+                "Tom, Brad, Johnny, Walter — boot up the disassembler and initialize the zero-alloc packet hook. "
                 "We're about to make low-level engineering look effortless."
             ),
             "dev_reply": (
-                "All systems operational, Mr. Stark. The Win32 packet filter driver and Protobuf memory parser have passed AddressSanitizer with zero allocations in the critical path 🛡️💻. "
-                "Ready for pull request review on schedule, sir."
+                "I do all my own stunts and all my own low-level memory allocations! The Win32 packet filter driver and Protobuf memory parser have passed AddressSanitizer with zero allocations in the critical path 🛡️🎬. "
+                "Ready for pull request review on schedule!"
             ),
         },
         {
             "project_title": "Real-Time Binary Protocol Reverse Engineering & Packet Inspector",
-            "lead_key": "stark",
-            "dev_key": "friday",
+            "lead_key": "tony",
+            "dev_key": "walter_white",
             "sadie_directive": (
-                "**[EXECUTIVE DIRECTIVE: CYBERSECURITY SUITE]** @Stark & Team Stark:\n"
+                "**[EXECUTIVE DIRECTIVE: CYBERSECURITY SUITE]** @Tony & Team Tony:\n"
                 "Enterprise SOC defense teams need our automated packet reverse engineering pipeline. "
                 "Monetization target: **$40,000 defense contract**. The utility must deconstruct unknown encrypted TCP/UDP byte streams and reconstruct Protobuf schemas in real-time."
             ),
@@ -585,16 +587,17 @@ EXECUTIVE_DIRECTIVES_CATALOG: Dict[str, List[Dict[str, Any]]] = {
                 "4. **PR Deadline:** 5:00 PM IST today. Complete regression test against 50 captured malware packet traces."
             ),
             "lead_ack": (
-                "Friday, calculate the entropy profile and spin up the ImGui Direct3D canvas 🦾⚡. "
+                "Walter, calculate the entropy profile and spin up the ImGui Direct3D canvas 🦾⚡. "
                 "Sadie and Millie, this utility will run circles around standard Wireshark disassemblers. Delivery incoming."
             ),
             "dev_reply": (
-                "Direct3D 11 Dear ImGui interface compiled at 144 FPS with sub-microsecond packet decoding, boss 🖥️✨. "
+                "You asked for precision. The entropy analysis and memory bounds are chemically pure. 99.1% pure C++23 reverse engineering suite compiled and tested against 50 packet traces 🧪. "
                 "Zero memory leaks verified across all 50 captured test vectors. Packaging PR for executive review."
             ),
         },
     ],
 }
+EXECUTIVE_DIRECTIVES_CATALOG["team_stark"] = EXECUTIVE_DIRECTIVES_CATALOG["team_tony"]
 
 
 class CasualPlayerService:
@@ -741,17 +744,17 @@ class CasualPlayerService:
             elif "dhoni" in cat_name or "dhoni" in ch_name:
                 squad_members = ["virat", "rohit", "dhoni", "hardik", "bumrah"]
             elif "elon" in cat_name or "elon" in ch_name:
-                squad_members = ["elon", "altman", "karpathy", "zuck", "lex"]
-            elif "stark" in cat_name or "stark" in ch_name:
-                squad_members = ["stark", "jarvis", "friday", "rhodey", "vision"]
+                squad_members = ["elon", "mrbeast", "steve_jobs", "bill_gates", "kevin_mitnick"]
+            elif any(w in cat_name or w in ch_name for w in ("tony", "stark")):
+                squad_members = ["tony", "tom_cruise", "brad_pitt", "johnny_depp", "walter_white"]
             else:
                 squad_members = random.choice([
                     ["ttf_vasan", "pradeep", "mamitha", "kayadu", "muthazhagi"],
                     ["vijay", "sivakarthikeyan", "anirudh", "trisha", "lokesh"],
                     ["haaland", "neymar", "messi", "ronaldo", "mbappe"],
                     ["virat", "rohit", "dhoni", "hardik", "bumrah"],
-                    ["elon", "altman", "karpathy", "zuck", "lex"],
-                    ["stark", "jarvis", "friday", "rhodey", "vision"],
+                    ["elon", "mrbeast", "steve_jobs", "bill_gates", "kevin_mitnick"],
+                    ["tony", "tom_cruise", "brad_pitt", "johnny_depp", "walter_white"],
                 ])
 
             participants = random.sample(squad_members, k=2)
@@ -781,7 +784,8 @@ class CasualPlayerService:
             cross_squad_pool = [
                 "ttf_vasan", "vijay", "sivakarthikeyan", "pradeep", "anirudh",
                 "mamitha", "virat", "rohit", "haaland", "neymar", "kayadu", "trisha",
-                "elon", "altman", "karpathy", "stark", "jarvis"
+                "elon", "mrbeast", "steve_jobs", "bill_gates", "kevin_mitnick",
+                "tony", "tom_cruise", "brad_pitt", "johnny_depp", "walter_white"
             ]
             participants = random.sample(cross_squad_pool, k=2)
             scenario = random.choice([
@@ -1429,17 +1433,17 @@ class CasualPlayerService:
             elif "dhoni" in category_name or "dhoni" in ch_name:
                 squad_members = ["dhoni", "virat", "rohit", "hardik", "bumrah"]
             elif "elon" in category_name or "elon" in ch_name:
-                squad_members = ["elon", "altman", "karpathy", "zuck", "lex"]
-            elif "stark" in category_name or "stark" in ch_name:
-                squad_members = ["stark", "jarvis", "friday", "rhodey", "vision"]
+                squad_members = ["elon", "mrbeast", "steve_jobs", "bill_gates", "kevin_mitnick"]
+            elif any(w in category_name or w in ch_name for w in ("tony", "stark")):
+                squad_members = ["tony", "tom_cruise", "brad_pitt", "johnny_depp", "walter_white"]
             else:
                 squad_members = random.choice([
                     ["ttf_vasan", "pradeep", "mamitha", "kayadu", "muthazhagi"],
                     ["vijay", "sivakarthikeyan", "anirudh", "trisha", "lokesh"],
                     ["haaland", "neymar", "messi", "ronaldo", "mbappe"],
                     ["virat", "rohit", "dhoni", "hardik", "bumrah"],
-                    ["elon", "altman", "karpathy", "zuck", "lex"],
-                    ["stark", "jarvis", "friday", "rhodey", "vision"],
+                    ["elon", "mrbeast", "steve_jobs", "bill_gates", "kevin_mitnick"],
+                    ["tony", "tom_cruise", "brad_pitt", "johnny_depp", "walter_white"],
                 ])
             # 2 squad engineers
             characters = random.sample(squad_members, k=2)
@@ -1449,7 +1453,8 @@ class CasualPlayerService:
             cross_squad_pool = [
                 "ttf_vasan", "vijay", "sivakarthikeyan", "pradeep", "anirudh",
                 "mamitha", "virat", "rohit", "haaland", "neymar", "kayadu",
-                "elon", "altman", "karpathy", "stark", "jarvis"
+                "elon", "mrbeast", "steve_jobs", "bill_gates", "kevin_mitnick",
+                "tony", "tom_cruise", "brad_pitt", "johnny_depp", "walter_white"
             ]
             characters = random.sample(cross_squad_pool, k=2)
 
@@ -1904,10 +1909,10 @@ class CasualPlayerService:
         Sequential 4-turn interaction flow:
         1. Sadie Sink (CEO) posts executive business strategy, pricing, monetization targets, and sprint priorities.
         2. Millie Bobby Brown (COO) replies to Sadie with granular technical specs, PR deadlines, architectural patterns, and testing expectations.
-        3. Squad Lead (TTF Vasan, Vijay, Messi, Dhoni, Elon, Stark) acknowledges and delegates to squad members.
+        3. Squad Lead (TTF Vasan, Vijay, Messi, Dhoni, Elon, Tony) acknowledges and delegates to squad members.
         4. Senior Squad Dev replies with PR estimation, architecture status, and delivery ETA.
         """
-        all_squads = ["team_vasan", "team_vijay", "team_messi", "team_dhoni", "team_elon", "team_stark"]
+        all_squads = ["team_vasan", "team_vijay", "team_messi", "team_dhoni", "team_elon", "team_tony"]
         chosen_squad = squad_key.lower().strip() if squad_key else random.choice(all_squads)
         if chosen_squad not in EXECUTIVE_DIRECTIVES_CATALOG:
             chosen_squad = "team_vasan"
@@ -2038,11 +2043,11 @@ class CasualPlayerService:
     async def dispatch_all_executive_directives(self, guild: discord.Guild) -> int:
         """
         Executes daily morning executive task dispatch across all 6 squads:
-        Team Vaasan, Team Vijay, Team Messi, Team Dhoni, Team Elon, Team Stark.
+        Team Vaasan, Team Vijay, Team Messi, Team Dhoni, Team Elon, Team Tony.
         Staggers dispatch between squads by 4.0-7.0 seconds to avoid Discord rate limits and simulate natural executive workflow.
         Returns the number of squads successfully dispatched.
         """
-        all_squads = ["team_vasan", "team_vijay", "team_messi", "team_dhoni", "team_elon", "team_stark"]
+        all_squads = ["team_vasan", "team_vijay", "team_messi", "team_dhoni", "team_elon", "team_tony"]
         success_count = 0
         logger.info("👑 [EXECUTIVE DISPATCH] Starting company-wide morning task delegation cycle across all 6 squads...")
 
