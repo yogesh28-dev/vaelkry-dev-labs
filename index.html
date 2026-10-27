@@ -7,13 +7,13 @@
     <title>Yogesh Dev Labs (YDL) - 3D Master Campus Map</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg-dark: #070913;
-            --surface: rgba(13, 17, 27, 0.82);
-            --surface-card: rgba(19, 26, 42, 0.88);
-            --border-glass: rgba(56, 189, 248, 0.25);
+            --bg-dark: #060913;
+            --surface: rgba(13, 17, 27, 0.85);
+            --surface-card: rgba(19, 26, 42, 0.90);
+            --border-glass: rgba(56, 189, 248, 0.28);
             --accent-cyan: #38bdf8;
             --accent-gold: #f59e0b;
             --accent-green: #10b981;
@@ -52,7 +52,7 @@
         /* Top HUD Bar */
         #top-hud {
             position: absolute;
-            top: 20px;
+            top: 18px;
             left: 20px;
             right: 20px;
             display: flex;
@@ -64,24 +64,24 @@
 
         .glass-panel {
             background: var(--surface);
-            backdrop-filter: blur(14px);
-            -webkit-backdrop-filter: blur(14px);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
             border: 1px solid var(--border-glass);
             border-radius: 14px;
-            box-shadow: 0 12px 35px rgba(0, 0, 0, 0.65), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+            box-shadow: 0 16px 40px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.1);
             pointer-events: auto;
         }
 
         #branding-card {
             padding: 16px 24px;
-            min-width: 320px;
+            min-width: 340px;
         }
 
         #branding-card h1 {
-            font-size: 19px;
+            font-size: 20px;
             font-weight: 800;
-            letter-spacing: 0.8px;
-            background: linear-gradient(135deg, #38bdf8 0%, #818cf8 50%, #c084fc 100%);
+            letter-spacing: 0.6px;
+            background: linear-gradient(135deg, #38bdf8 0%, #818cf8 50%, #f43f5e 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             display: flex;
@@ -167,14 +167,14 @@
             color: var(--text-primary);
             border-color: rgba(56, 189, 248, 0.5);
             transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(56, 189, 248, 0.2);
+            box-shadow: 0 4px 14px rgba(56, 189, 248, 0.25);
         }
 
         .nav-btn.active {
-            background: linear-gradient(135deg, rgba(56, 189, 248, 0.35), rgba(129, 140, 248, 0.35));
+            background: linear-gradient(135deg, rgba(56, 189, 248, 0.4), rgba(129, 140, 248, 0.4));
             border-color: #38bdf8;
             color: #ffffff;
-            box-shadow: 0 0 15px rgba(56, 189, 248, 0.35);
+            box-shadow: 0 0 16px rgba(56, 189, 248, 0.4);
         }
 
         /* Bottom HUD: Live Bot Activity & Legend */
@@ -192,11 +192,11 @@
         }
 
         #legend-card {
-            padding: 14px 18px;
+            padding: 14px 20px;
             display: flex;
             flex-wrap: wrap;
-            gap: 14px;
-            max-width: 650px;
+            gap: 16px;
+            max-width: 720px;
         }
 
         .legend-category {
@@ -227,9 +227,9 @@
             font-size: 11px;
             color: var(--text-secondary);
             background: rgba(255, 255, 255, 0.04);
-            padding: 4px 8px;
+            padding: 4px 9px;
             border-radius: 6px;
-            border: 1px solid rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.06);
         }
 
         .color-dot {
@@ -241,8 +241,8 @@
         /* Active Bot Roster Drawer */
         #bot-roster {
             padding: 12px 18px;
-            max-height: 200px;
-            width: 380px;
+            max-height: 220px;
+            width: 390px;
             overflow-y: auto;
         }
 
@@ -299,22 +299,6 @@
         #bot-roster::-webkit-scrollbar { width: 5px; }
         #bot-roster::-webkit-scrollbar-track { background: rgba(0,0,0,0.2); }
         #bot-roster::-webkit-scrollbar-thumb { background: rgba(56, 189, 248, 0.3); border-radius: 3px; }
-
-        /* Tooltip */
-        #tooltip {
-            position: absolute;
-            display: none;
-            background: rgba(15, 23, 42, 0.95);
-            backdrop-filter: blur(8px);
-            border: 1px solid var(--accent-cyan);
-            border-radius: 8px;
-            padding: 8px 12px;
-            color: #fff;
-            font-size: 11px;
-            pointer-events: none;
-            z-index: 100;
-            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.7);
-        }
     </style>
     <!-- Three.js CDN & Controls -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -330,7 +314,7 @@
             <div class="status-row">
                 <span><span id="ws-indicator" class="pulse-beacon"></span> <span id="ws-status">Connecting to Bridge...</span></span>
                 <span>•</span>
-                <span id="bot-count-stat">0 Active Bots</span>
+                <span id="bot-count-stat">32 Configured Bots</span>
             </div>
         </div>
 
@@ -382,17 +366,12 @@
 
         <!-- Live Bot Activity Roster -->
         <div id="bot-roster" class="glass-panel">
-            <h3><span>🤖 Active Bot Agents</span> <span id="roster-count">0</span></h3>
+            <h3><span>🤖 Campus Bot Swarm</span> <span id="roster-count">32</span></h3>
             <div id="bot-list-container" class="bot-list">
-                <div style="font-size:11px; color:#64748b; padding:8px 0; text-align:center;">
-                    Connecting to Discord Voice State Bridge...
-                </div>
+                <!-- Dynamically populated -->
             </div>
         </div>
     </div>
-
-    <!-- 3D Tooltip -->
-    <div id="tooltip"></div>
 
     <div id="canvas-container"></div>
 
@@ -401,14 +380,14 @@
         const container = document.getElementById('canvas-container');
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0x060913);
-        scene.fog = new THREE.FogExp2(0x060913, 0.0018);
+        scene.fog = new THREE.FogExp2(0x060913, 0.0016);
 
         const aspect = window.innerWidth / window.innerHeight;
-        const d = 95; // Wide camera view frustum
-        const camera = new THREE.OrthographicCamera(-d * aspect, d * aspect, d, -d, 1, 2000);
+        const d = 98; // Camera frustum width
+        const camera = new THREE.OrthographicCamera(-d * aspect, d * aspect, d, -d, 1, 2500);
 
-        // Position camera in classic isometric perspective
-        camera.position.set(120, 130, 130);
+        // Classic isometric angle
+        camera.position.set(130, 140, 140);
         camera.lookAt(0, 0, 0);
 
         const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' });
@@ -422,49 +401,48 @@
         controls.enableDamping = true;
         controls.dampingFactor = 0.06;
         controls.maxPolarAngle = Math.PI / 2.15;
-        controls.minDistance = 30;
-        controls.maxDistance = 500;
+        controls.minDistance = 25;
+        controls.maxDistance = 600;
         controls.target.set(0, 0, 0);
 
         // ==================== 2. LIGHTING & ENVIRONMENT ====================
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.65);
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.70);
         scene.add(ambientLight);
 
-        // Main Sun Light (Warm daylight)
-        const sun = new THREE.DirectionalLight(0xfff6e5, 0.95);
-        sun.position.set(120, 180, 90);
+        // Main Sun Light (Warm daylight with crisp shadows)
+        const sun = new THREE.DirectionalLight(0xfff7ed, 1.0);
+        sun.position.set(130, 190, 95);
         sun.castShadow = true;
         sun.shadow.mapSize.width = 4096;
         sun.shadow.mapSize.height = 4096;
         sun.shadow.camera.near = 10;
-        sun.shadow.camera.far = 450;
-        sun.shadow.camera.left = -160;
-        sun.shadow.camera.right = 160;
-        sun.shadow.camera.top = 160;
-        sun.shadow.camera.bottom = -160;
-        sun.shadow.bias = -0.0005;
+        sun.shadow.camera.far = 500;
+        sun.shadow.camera.left = -170;
+        sun.shadow.camera.right = 170;
+        sun.shadow.camera.top = 170;
+        sun.shadow.camera.bottom = -170;
+        sun.shadow.bias = -0.0004;
         scene.add(sun);
 
-        // Subtle Blue Rim Light
-        const rimLight = new THREE.DirectionalLight(0x38bdf8, 0.35);
-        rimLight.position.set(-100, 60, -80);
-        scene.add(rimLight);
+        // Soft Cyan Secondary Fill Light
+        const fillLight = new THREE.DirectionalLight(0x38bdf8, 0.4);
+        fillLight.position.set(-110, 80, -90);
+        scene.add(fillLight);
 
-        // ==================== 3. GROUND BASE & SECTORS ====================
-        // Grand Campus Base (270 x 250 units)
-        const groundGeo = new THREE.PlaneGeometry(280, 260);
+        // ==================== 3. GROUND BASE & ROADS ====================
+        const groundGeo = new THREE.PlaneGeometry(290, 270);
         const groundMat = new THREE.MeshLambertMaterial({ color: 0x0f172a });
         const ground = new THREE.Mesh(groundGeo, groundMat);
         ground.rotation.x = -Math.PI / 2;
         ground.receiveShadow = true;
         scene.add(ground);
 
-        // Subtle Grid Helper
-        const grid = new THREE.GridHelper(280, 56, 0x1e293b, 0x1e293b);
+        // Tech Grid Pattern
+        const grid = new THREE.GridHelper(290, 58, 0x1e293b, 0x1e293b);
         grid.position.y = 0.05;
         scene.add(grid);
 
-        // Sector Perimeter Glow Roads
+        // Perimeter Roads & Walkways
         function createRoad(x, z, w, d) {
             const geo = new THREE.PlaneGeometry(w, d);
             const mat = new THREE.MeshLambertMaterial({ color: 0x1e293b });
@@ -474,69 +452,57 @@
             road.receiveShadow = true;
             scene.add(road);
         }
-        createRoad(0, -56, 260, 4); // Top road
-        createRoad(0, -3, 260, 4);  // Mid road
-        createRoad(0, 36, 260, 4);   // Sports road
-        createRoad(0, 0, 4, 240);    // Central north-south spine road
+        createRoad(0, -56, 270, 4.5); // Top sector divider
+        createRoad(0, -2, 270, 4.5);  // Mid work divider
+        createRoad(0, 36, 270, 4.5);  // Sports arena divider
+        createRoad(0, 0, 4.5, 250);   // Grand central avenue
 
-        // ==================== 4. PROCEDURAL TEXTURES GENERATORS ====================
+        // ==================== 4. PROCEDURAL TEXTURE GENERATORS ====================
         function createRunwayCanvas() {
             const canvas = document.createElement('canvas');
-            canvas.width = 256;
-            canvas.height = 512;
+            canvas.width = 256; canvas.height = 512;
             const ctx = canvas.getContext('2d');
-            // Asphalt
             ctx.fillStyle = '#1e293b';
             ctx.fillRect(0, 0, 256, 512);
-            // Border lines
             ctx.strokeStyle = '#ffffff';
             ctx.lineWidth = 6;
             ctx.strokeRect(10, 10, 236, 492);
-            // Dashed centerline
-            ctx.setLineDash([24, 16]);
+            ctx.setLineDash([26, 16]);
             ctx.beginPath();
-            ctx.moveTo(128, 40);
-            ctx.lineTo(128, 472);
+            ctx.moveTo(128, 40); ctx.lineTo(128, 472);
             ctx.stroke();
-            // Threshold stripes
             ctx.setLineDash([]);
             ctx.fillStyle = '#ffffff';
             for (let i = 0; i < 6; i++) {
-                ctx.fillRect(35 + i * 32, 20, 18, 45);
-                ctx.fillRect(35 + i * 32, 447, 18, 45);
+                ctx.fillRect(35 + i * 32, 20, 18, 48);
+                ctx.fillRect(35 + i * 32, 444, 18, 48);
             }
-            // Runway Number
-            ctx.font = 'bold 36px monospace';
+            ctx.font = 'bold 38px monospace';
             ctx.fillStyle = '#fbbf24';
             ctx.textAlign = 'center';
-            ctx.fillText('09', 128, 95);
-            ctx.fillText('27', 128, 430);
+            ctx.fillText('09', 128, 98);
+            ctx.fillText('27', 128, 426);
             return new THREE.CanvasTexture(canvas);
         }
 
         function createHelipadCanvas() {
             const canvas = document.createElement('canvas');
-            canvas.width = 256;
-            canvas.height = 256;
+            canvas.width = 256; canvas.height = 256;
             const ctx = canvas.getContext('2d');
-            // Concrete base
             ctx.fillStyle = '#334155';
             ctx.fillRect(0, 0, 256, 256);
-            // Yellow outer circle
             ctx.strokeStyle = '#f59e0b';
             ctx.lineWidth = 10;
             ctx.beginPath();
-            ctx.arc(128, 128, 95, 0, Math.PI * 2);
+            ctx.arc(128, 128, 96, 0, Math.PI * 2);
             ctx.stroke();
-            // Inner white ring
             ctx.strokeStyle = '#ffffff';
             ctx.lineWidth = 4;
             ctx.beginPath();
-            ctx.arc(128, 128, 75, 0, Math.PI * 2);
+            ctx.arc(128, 128, 76, 0, Math.PI * 2);
             ctx.stroke();
-            // Bold 'H'
             ctx.fillStyle = '#ffffff';
-            ctx.font = 'bold 110px sans-serif';
+            ctx.font = 'bold 112px sans-serif';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.fillText('H', 128, 128);
@@ -545,76 +511,61 @@
 
         function createTurfCanvas() {
             const canvas = document.createElement('canvas');
-            canvas.width = 512;
-            canvas.height = 360;
+            canvas.width = 512; canvas.height = 360;
             const ctx = canvas.getContext('2d');
-            // Mowed grass stripes
             for (let i = 0; i < 16; i++) {
                 ctx.fillStyle = (i % 2 === 0) ? '#15803d' : '#16a34a';
                 ctx.fillRect(i * 32, 0, 32, 360);
             }
-            // White pitch lines
             ctx.strokeStyle = '#ffffff';
             ctx.lineWidth = 4;
             ctx.strokeRect(20, 20, 472, 320);
-            // Center line & circle
             ctx.beginPath();
-            ctx.moveTo(256, 20);
-            ctx.lineTo(256, 340);
+            ctx.moveTo(256, 20); ctx.lineTo(256, 340);
             ctx.stroke();
             ctx.beginPath();
-            ctx.arc(256, 180, 50, 0, Math.PI * 2);
+            ctx.arc(256, 180, 52, 0, Math.PI * 2);
             ctx.stroke();
-            // Penalty boxes
-            ctx.strokeRect(20, 90, 70, 180);
-            ctx.strokeRect(422, 90, 70, 180);
+            ctx.strokeRect(20, 90, 72, 180);
+            ctx.strokeRect(420, 90, 72, 180);
             return new THREE.CanvasTexture(canvas);
         }
 
         function createCricketCanvas() {
             const canvas = document.createElement('canvas');
-            canvas.width = 512;
-            canvas.height = 512;
+            canvas.width = 512; canvas.height = 512;
             const ctx = canvas.getContext('2d');
-            // Outer grass
             ctx.fillStyle = '#166534';
             ctx.fillRect(0, 0, 512, 512);
-            // Circular outfield rings
-            for (let r = 240; r > 60; r -= 24) {
-                ctx.fillStyle = (r % 48 === 0) ? '#15803d' : '#16a34a';
+            for (let r = 240; r > 50; r -= 26) {
+                ctx.fillStyle = (r % 52 === 0) ? '#15803d' : '#16a34a';
                 ctx.beginPath();
                 ctx.arc(256, 256, r, 0, Math.PI * 2);
                 ctx.fill();
             }
-            // Boundary rope circle
             ctx.strokeStyle = '#ffffff';
             ctx.lineWidth = 4;
             ctx.beginPath();
             ctx.arc(256, 256, 230, 0, Math.PI * 2);
             ctx.stroke();
-            // Pitch strip (clay rectangle)
             ctx.fillStyle = '#d97706';
             ctx.fillRect(236, 150, 40, 212);
             ctx.strokeStyle = '#ffffff';
             ctx.lineWidth = 2;
             ctx.strokeRect(236, 150, 40, 212);
-            // Creases
             ctx.beginPath();
-            ctx.moveTo(226, 175); ctx.lineTo(286, 175);
-            ctx.moveTo(226, 337); ctx.lineTo(286, 337);
+            ctx.moveTo(224, 175); ctx.lineTo(288, 175);
+            ctx.moveTo(224, 337); ctx.lineTo(288, 337);
             ctx.stroke();
             return new THREE.CanvasTexture(canvas);
         }
 
         function createTrackCanvas() {
             const canvas = document.createElement('canvas');
-            canvas.width = 512;
-            canvas.height = 360;
+            canvas.width = 512; canvas.height = 360;
             const ctx = canvas.getContext('2d');
-            // Terracotta red tartan rubber
             ctx.fillStyle = '#b91c1c';
             ctx.fillRect(0, 0, 512, 360);
-            // 4 lane dividers
             ctx.strokeStyle = '#ffffff';
             ctx.lineWidth = 3;
             for (let l = 1; l <= 4; l++) {
@@ -626,10 +577,9 @@
 
         function createVolleyballCanvas() {
             const canvas = document.createElement('canvas');
-            canvas.width = 256;
-            canvas.height = 180;
+            canvas.width = 256; canvas.height = 180;
             const ctx = canvas.getContext('2d');
-            ctx.fillStyle = '#fde047'; // Sand
+            ctx.fillStyle = '#fde047';
             ctx.fillRect(0, 0, 256, 180);
             ctx.strokeStyle = '#0284c7';
             ctx.lineWidth = 4;
@@ -642,10 +592,9 @@
 
         function createBadmintonCanvas() {
             const canvas = document.createElement('canvas');
-            canvas.width = 256;
-            canvas.height = 180;
+            canvas.width = 256; canvas.height = 180;
             const ctx = canvas.getContext('2d');
-            ctx.fillStyle = '#059669'; // Green court
+            ctx.fillStyle = '#059669';
             ctx.fillRect(0, 0, 256, 180);
             ctx.strokeStyle = '#ffffff';
             ctx.lineWidth = 3;
@@ -659,18 +608,15 @@
 
         function createPoolCanvas() {
             const canvas = document.createElement('canvas');
-            canvas.width = 256;
-            canvas.height = 180;
+            canvas.width = 256; canvas.height = 180;
             const ctx = canvas.getContext('2d');
             ctx.fillStyle = '#0284c7';
             ctx.fillRect(0, 0, 256, 180);
-            // Lane lines
             ctx.strokeStyle = '#ffffff';
             ctx.lineWidth = 2;
             for (let i = 1; i < 5; i++) {
                 ctx.beginPath();
-                ctx.moveTo(20, i * 36);
-                ctx.lineTo(236, i * 36);
+                ctx.moveTo(20, i * 36); ctx.lineTo(236, i * 36);
                 ctx.stroke();
             }
             return new THREE.CanvasTexture(canvas);
@@ -679,41 +625,40 @@
         // ==================== 5. MASTER CAMPUS ZONES DEFINITION ====================
         const zones = {
             // --- TOP SECTOR (Aviation & Luxury) ---
-            "PRIVATE_JET_RUNWAY": { x: -80, z: -76, w: 26, d: 74, h: 1.2, color: 0x334155, name: "Private Jet Runway", customTex: createRunwayCanvas() },
-            "HELIPADS": { x: -44, z: -76, w: 28, d: 24, h: 1.8, color: 0x475569, name: "Helipads H1 & H2", customTex: createHelipadCanvas() },
-            "CEO_SUITE": { x: 0, z: -76, w: 38, d: 26, h: 6.5, color: 0xec4899, name: "CEO Luxury Penthouse", isBuilding: true, glowColor: 0xf43f5e },
-            "RESIDENTIAL_APARTMENTS": { x: 58, z: -76, w: 56, d: 26, h: 9.0, color: 0x6366f1, name: "4-Tier Residential Towers", isBuilding: true, glowColor: 0x818cf8 },
+            "PRIVATE_JET_RUNWAY": { x: -80, z: -76, w: 26, d: 74, h: 1.2, color: 0x334155, name: "PRIVATE JET RUNWAY", subtitle: "AVIATION SECTOR", icon: "✈️", customTex: createRunwayCanvas() },
+            "HELIPADS": { x: -44, z: -76, w: 28, d: 24, h: 1.8, color: 0x475569, name: "HELIPADS H1 & H2", subtitle: "EXECUTIVE AIRPORT", icon: "🚁", customTex: createHelipadCanvas() },
+            "CEO_SUITE": { x: 0, z: -76, w: 38, d: 26, h: 6.5, color: 0xec4899, name: "CEO LUXURY PENTHOUSE", subtitle: "EXECUTIVE COMMAND", icon: "👑", isBuilding: true, glowColor: 0xf43f5e },
+            "RESIDENTIAL_APARTMENTS": { x: 58, z: -76, w: 56, d: 26, h: 9.0, color: 0x6366f1, name: "RESIDENTIAL APARTMENTS", subtitle: "4-TIER LUXURY TOWERS", icon: "🏢", isBuilding: true, glowColor: 0x818cf8 },
 
             // --- MIDDLE WORK PODS (Row 1: Active Squads) ---
-            "TEAM_VASAN": { x: -54, z: -40, w: 28, d: 18, h: 4.2, color: 0x06b6d4, name: "Team Vasan (Rapid Web3)", isPod: true, glowColor: 0x22d3ee },
-            "TEAM_VIJAY": { x: -18, z: -40, w: 28, d: 18, h: 4.2, color: 0xf59e0b, name: "Team Vijay (Media & Swagger)", isPod: true, glowColor: 0xfbbf24 },
-            "TEAM_MESSI": { x: 18, z: -40, w: 28, d: 18, h: 4.2, color: 0x38bdf8, name: "Team Messi (Algorithms)", isPod: true, glowColor: 0x7dd3fc },
-            "TEAM_DHONI": { x: 54, z: -40, w: 28, d: 18, h: 4.2, color: 0xeab308, name: "Team Dhoni (Incident Ops)", isPod: true, glowColor: 0xfacc15 },
+            "TEAM_VASAN": { x: -54, z: -40, w: 28, d: 18, h: 4.2, color: 0x06b6d4, name: "TEAM VASAN", subtitle: "RAPID WEB3 & HYBRID APPS", icon: "🏍️", isPod: true, glowColor: 0x22d3ee },
+            "TEAM_VIJAY": { x: -18, z: -40, w: 28, d: 18, h: 4.2, color: 0xf59e0b, name: "TEAM VIJAY", subtitle: "MEDIA & CINEMATIC LAB", icon: "👑", isPod: true, glowColor: 0xfbbf24 },
+            "TEAM_MESSI": { x: 18, z: -40, w: 28, d: 18, h: 4.2, color: 0x38bdf8, name: "TEAM MESSI", subtitle: "ALGORITHMS & HIGH-SPEED", icon: "⚽", isPod: true, glowColor: 0x7dd3fc },
+            "TEAM_DHONI": { x: 54, z: -40, w: 28, d: 18, h: 4.2, color: 0xeab308, name: "TEAM DHONI", subtitle: "CLUTCH INCIDENT OPS", icon: "🚁", isPod: true, glowColor: 0xfacc15 },
 
             // --- MIDDLE WORK PODS (Row 2: Future Teams) ---
-            "FUTURE_POD_1": { x: -54, z: -18, w: 28, d: 18, h: 4.2, color: 0xa855f7, name: "Team Elon (Autonomous AI)", isPod: true, glowColor: 0xc084fc },
-            "FUTURE_POD_2": { x: -18, z: -18, w: 28, d: 18, h: 4.2, color: 0xef4444, name: "Team Tony (Win32 Internals)", isPod: true, glowColor: 0xf87171 },
-            "FUTURE_POD_3": { x: 18, z: -18, w: 28, d: 18, h: 4.2, color: 0x10b981, name: "Reserved Pod 3 (Quantum)", isPod: true, glowColor: 0x34d399 },
-            "FUTURE_POD_4": { x: 54, z: -18, w: 28, d: 18, h: 4.2, color: 0x64748b, name: "Reserved Pod 4 (Cyber Vault)", isPod: true, glowColor: 0x94a3b8 },
+            "FUTURE_POD_1": { x: -54, z: -18, w: 28, d: 18, h: 4.2, color: 0xa855f7, name: "TEAM ELON", subtitle: "AUTONOMOUS AI SWARMS", icon: "🚀", isPod: true, glowColor: 0xc084fc },
+            "FUTURE_POD_2": { x: -18, z: -18, w: 28, d: 18, h: 4.2, color: 0xef4444, name: "TEAM TONY", subtitle: "SYSTEMS & ARC REACTOR", icon: "🦾", isPod: true, glowColor: 0xf87171 },
+            "FUTURE_POD_3": { x: 18, z: -18, w: 28, d: 18, h: 4.2, color: 0x10b981, name: "QUANTUM LAB", subtitle: "RESERVED FUTURE POD 3", icon: "🔬", isPod: true, glowColor: 0x34d399 },
+            "FUTURE_POD_4": { x: 54, z: -18, w: 28, d: 18, h: 4.2, color: 0x64748b, name: "CYBER VAULT", subtitle: "RESERVED FUTURE POD 4", icon: "🛡️", isPod: true, glowColor: 0x94a3b8 },
 
             // --- RECREATION CORE ---
-            "MEGA_GYM": { x: -62, z: 14, w: 32, d: 24, h: 5.5, color: 0x10b981, name: "Mega Gym & Fitness", isBuilding: true, glowColor: 0x34d399 },
-            "FOOD_COURT": { x: -22, z: 14, w: 34, d: 24, h: 4.8, color: 0xf97316, name: "Food Court & Pantry", isBuilding: true, glowColor: 0xfb923c },
-            "ARCADE_ZONE": { x: 22, z: 14, w: 30, d: 24, h: 4.5, color: 0x8b5cf6, name: "Arcade & Gaming Lounge", isBuilding: true, glowColor: 0xa78bfa },
-            "SLEEP_PODS": { x: 58, z: 14, w: 30, d: 24, h: 4.0, color: 0x4338ca, name: "Sleep & Nap Pods", isBuilding: true, glowColor: 0x6366f1 },
-            "SWIMMING_POOL": { x: 96, z: 14, w: 32, d: 22, h: 1.8, color: 0x0284c7, name: "Resort Swimming Pool", customTex: createPoolCanvas() },
-            "CENTRAL_FOUNTAIN": { x: 0, z: 8, w: 24, d: 24, h: 2.2, color: 0x06b6d4, name: "Central Fountain Plaza" },
+            "MEGA_GYM": { x: -62, z: 14, w: 32, d: 24, h: 5.5, color: 0x10b981, name: "MEGA GYM", subtitle: "FITNESS & WEIGHTS", icon: "💪", isBuilding: true, glowColor: 0x34d399 },
+            "FOOD_COURT": { x: -22, z: 14, w: 34, d: 24, h: 4.8, color: 0xf97316, name: "FOOD COURT", subtitle: "CAFETERIA & CHAI PANTRY", icon: "☕", isBuilding: true, glowColor: 0xfb923c },
+            "ARCADE_ZONE": { x: 22, z: 14, w: 30, d: 24, h: 4.5, color: 0x8b5cf6, name: "ARCADE ZONE", subtitle: "RETRO LOUNGE & VR", icon: "🕹️", isBuilding: true, glowColor: 0xa78bfa },
+            "SLEEP_PODS": { x: 58, z: 14, w: 30, d: 24, h: 4.0, color: 0x4338ca, name: "SLEEP PODS", subtitle: "NAP CAPSULES & DORMS", icon: "🌙", isBuilding: true, glowColor: 0x6366f1 },
+            "SWIMMING_POOL": { x: 96, z: 14, w: 32, d: 22, h: 1.8, color: 0x0284c7, name: "SWIMMING POOL", subtitle: "RESORT LAP POOL", icon: "🏊", customTex: createPoolCanvas() },
+            "CENTRAL_FOUNTAIN": { x: 0, z: 8, w: 24, d: 24, h: 2.2, color: 0x06b6d4, name: "CENTRAL FOUNTAIN", subtitle: "CAMPUS PLAZA", icon: "⛲" },
 
             // --- BOTTOM SPORTS ARENA ---
-            "SPORTS_TURF": { x: -62, z: 66, w: 42, d: 32, h: 1.5, color: 0x15803d, name: "Football Arena Turf", customTex: createTurfCanvas() },
-            "CRICKET_GROUND": { x: -8, z: 66, w: 48, d: 48, h: 1.5, color: 0x166534, name: "Cricket Stadium Oval", customTex: createCricketCanvas() },
-            "RUNNING_TRACK": { x: 46, z: 66, w: 44, d: 32, h: 1.5, color: 0xb91c1c, name: "Olympic Running Track", customTex: createTrackCanvas() },
-            "SAND_VOLLEYBALL": { x: 92, z: 52, w: 26, d: 18, h: 1.2, color: 0xfde047, name: "Sand Volleyball Court", customTex: createVolleyballCanvas() },
-            "BADMINTON_COURT": { x: 92, z: 74, w: 26, d: 18, h: 1.2, color: 0x059669, name: "Badminton Court", customTex: createBadmintonCanvas() },
-            "TUG_OF_WAR": { x: 92, z: 96, w: 26, d: 14, h: 1.0, color: 0x78350f, name: "Tug-of-War Mud Pit" }
+            "SPORTS_TURF": { x: -62, z: 66, w: 42, d: 32, h: 1.5, color: 0x15803d, name: "FOOTBALL TURF", subtitle: "REGULATION ARENA", icon: "⚽", customTex: createTurfCanvas() },
+            "CRICKET_GROUND": { x: -8, z: 66, w: 48, d: 48, h: 1.5, color: 0x166534, name: "CRICKET STADIUM", subtitle: "OVAL & TURF PITCH", icon: "🏏", customTex: createCricketCanvas() },
+            "RUNNING_TRACK": { x: 46, z: 66, w: 44, d: 32, h: 1.5, color: 0xb91c1c, name: "OLYMPIC TRACK", subtitle: "4-LANE TARTAN RUBBER", icon: "🏃", customTex: createTrackCanvas() },
+            "SAND_VOLLEYBALL": { x: 92, z: 52, w: 26, d: 18, h: 1.2, color: 0xfde047, name: "SAND VOLLEYBALL", subtitle: "BEACH SAND COURT", icon: "🏐", customTex: createVolleyballCanvas() },
+            "BADMINTON_COURT": { x: 92, z: 74, w: 26, d: 18, h: 1.2, color: 0x059669, name: "BADMINTON COURT", subtitle: "REGULATION SINGLES/DOUBLES", icon: "🏸", customTex: createBadmintonCanvas() },
+            "TUG_OF_WAR": { x: 92, z: 96, w: 26, d: 14, h: 1.0, color: 0x78350f, name: "TUG-OF-WAR PIT", subtitle: "CONTEST MUD TRENCH", icon: "🪢" }
         };
 
-        // Zone Aliases to seamlessly support all broadcaster keys from main.py
         const zoneAliases = {
             "TECH_CAFE": "FOOD_COURT",
             "CAFETERIA": "FOOD_COURT",
@@ -743,7 +688,173 @@
             "PLAZA": "CENTRAL_FOUNTAIN"
         };
 
-        // ==================== 6. BUILD 3D ARCHITECTURAL MODELS ====================
+        // ==================== 6. SLEEK 3D ROOM BILLBOARD HEADERS ====================
+        function createRoomHeaderSprite(zone) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 512;
+            canvas.height = 140;
+            const ctx = canvas.getContext('2d');
+
+            // Dark Glass Pill
+            ctx.fillStyle = 'rgba(10, 15, 29, 0.88)';
+            roundRect(ctx, 8, 8, 496, 124, 24);
+            ctx.fill();
+
+            // Accent Glow Border
+            let bColor = zone.glowColor ? `#${zone.glowColor.toString(16).padStart(6, '0')}` : '#38bdf8';
+            ctx.strokeStyle = bColor;
+            ctx.lineWidth = 5;
+            roundRect(ctx, 8, 8, 496, 124, 24);
+            ctx.stroke();
+
+            // Icon / Emoji
+            ctx.font = '36px sans-serif';
+            ctx.textAlign = 'left';
+            ctx.fillText(zone.icon || '📍', 26, 68);
+
+            // Title
+            ctx.fillStyle = '#ffffff';
+            ctx.font = '800 36px Outfit, sans-serif';
+            ctx.fillText(zone.name, 78, 64);
+
+            // Subtitle
+            ctx.fillStyle = bColor;
+            ctx.font = '700 18px JetBrains Mono, monospace';
+            ctx.fillText((zone.subtitle || 'YDL MASTER CAMPUS').toUpperCase(), 78, 100);
+
+            const tex = new THREE.CanvasTexture(canvas);
+            const spriteMat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false });
+            const sprite = new THREE.Sprite(spriteMat);
+            sprite.scale.set(11.0, 3.0, 1);
+            return sprite;
+        }
+
+        // ==================== 7. VOXEL PROPS GENERATOR ====================
+        function createVoxelTree(px, py, pz) {
+            const tree = new THREE.Group();
+            // Brown trunk
+            const trunkGeo = new THREE.BoxGeometry(0.8, 2.2, 0.8);
+            const trunkMat = new THREE.MeshLambertMaterial({ color: 0x78350f });
+            const trunk = new THREE.Mesh(trunkGeo, trunkMat);
+            trunk.position.y = 1.1;
+            tree.add(trunk);
+
+            // 3-tier voxel leaves
+            const leafMat1 = new THREE.MeshLambertMaterial({ color: 0x15803d });
+            const leafMat2 = new THREE.MeshLambertMaterial({ color: 0x16a34a });
+            const l1 = new THREE.Mesh(new THREE.BoxGeometry(3.2, 1.2, 3.2), leafMat1);
+            l1.position.y = 2.4;
+            l1.castShadow = true;
+            tree.add(l1);
+
+            const l2 = new THREE.Mesh(new THREE.BoxGeometry(2.4, 1.2, 2.4), leafMat2);
+            l2.position.y = 3.4;
+            l2.castShadow = true;
+            tree.add(l2);
+
+            const l3 = new THREE.Mesh(new THREE.BoxGeometry(1.4, 1.0, 1.4), leafMat1);
+            l3.position.y = 4.3;
+            l3.castShadow = true;
+            tree.add(l3);
+
+            tree.position.set(px, py, pz);
+            return tree;
+        }
+
+        function createGardenLamp(px, py, pz) {
+            const lamp = new THREE.Group();
+            const postGeo = new THREE.CylinderGeometry(0.08, 0.12, 3.2, 8);
+            const postMat = new THREE.MeshLambertMaterial({ color: 0x334155 });
+            const post = new THREE.Mesh(postGeo, postMat);
+            post.position.y = 1.6;
+            lamp.add(post);
+
+            // Glowing Lantern Cube
+            const lightGeo = new THREE.BoxGeometry(0.5, 0.5, 0.5);
+            const lightMat = new THREE.MeshBasicMaterial({ color: 0xfef08a });
+            const lightCube = new THREE.Mesh(lightGeo, lightMat);
+            lightCube.position.y = 3.2;
+            lamp.add(lightCube);
+
+            lamp.position.set(px, py, pz);
+            return lamp;
+        }
+
+        function createArcadeCabinet(colorHex, gameName, px, pz) {
+            const cab = new THREE.Group();
+            const bodyGeo = new THREE.BoxGeometry(1.4, 3.0, 1.2);
+            const bodyMat = new THREE.MeshLambertMaterial({ color: colorHex });
+            const body = new THREE.Mesh(bodyGeo, bodyMat);
+            body.position.y = 1.5;
+            body.castShadow = true;
+            cab.add(body);
+
+            // Slanted Screen
+            const screenGeo = new THREE.BoxGeometry(1.0, 0.9, 0.1);
+            const screenMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8 });
+            const screen = new THREE.Mesh(screenGeo, screenMat);
+            screen.position.set(0, 1.9, 0.58);
+            cab.add(screen);
+
+            // Glowing Marquee
+            const marqGeo = new THREE.BoxGeometry(1.2, 0.4, 0.2);
+            const marqMat = new THREE.MeshBasicMaterial({ color: 0xfef08a });
+            const marq = new THREE.Mesh(marqGeo, marqMat);
+            marq.position.set(0, 2.7, 0.55);
+            cab.add(marq);
+
+            cab.position.set(px, 0, pz);
+            return cab;
+        }
+
+        function createTreadmill(px, pz) {
+            const tm = new THREE.Group();
+            // Deck
+            const deck = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.3, 2.4), new THREE.MeshLambertMaterial({ color: 0x1e293b }));
+            deck.position.y = 0.15;
+            tm.add(deck);
+
+            // Posts & Console
+            const post = new THREE.Mesh(new THREE.BoxGeometry(0.1, 1.6, 0.1), new THREE.MeshLambertMaterial({ color: 0x64748b }));
+            post.position.set(-0.55, 0.9, -0.9);
+            tm.add(post);
+            const postR = post.clone();
+            postR.position.x = 0.55;
+            tm.add(postR);
+
+            const consoleScreen = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.4, 0.1), new THREE.MeshBasicMaterial({ color: 0x38bdf8 }));
+            consoleScreen.position.set(0, 1.7, -0.9);
+            tm.add(consoleScreen);
+
+            tm.position.set(px, 0, pz);
+            return tm;
+        }
+
+        function createCafeParasol(colorHex, px, pz) {
+            const parasol = new THREE.Group();
+            // Center pole
+            const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 3.2, 8), new THREE.MeshLambertMaterial({ color: 0x475569 }));
+            pole.position.y = 1.6;
+            parasol.add(pole);
+
+            // Fabric Canopy
+            const canopyGeo = new THREE.ConeGeometry(2.6, 1.0, 8);
+            const canopyMat = new THREE.MeshLambertMaterial({ color: colorHex });
+            const canopy = new THREE.Mesh(canopyGeo, canopyMat);
+            canopy.position.y = 3.2;
+            canopy.castShadow = true;
+            parasol.add(canopy);
+
+            // Round Café Table underneath
+            const tableTop = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.1, 0.1, 12), new THREE.MeshLambertMaterial({ color: 0xf8fafc }));
+            tableTop.position.y = 1.0;
+            parasol.add(tableTop);
+
+            parasol.position.set(px, 0, pz);
+            return parasol;
+        }
+
+        // ==================== 8. ASSEMBLE 3D BUILDINGS & MODELS ====================
         const zoneMeshes = {};
         const animatedObjects = [];
 
@@ -754,9 +865,7 @@
             // Base Floor Platform
             const baseGeo = new THREE.BoxGeometry(z.w, z.h, z.d);
             let baseMat;
-
             if (z.customTex) {
-                // Apply texture to the top face
                 const sideMat = new THREE.MeshLambertMaterial({ color: 0x1e293b });
                 const topMat = new THREE.MeshLambertMaterial({ map: z.customTex });
                 baseMat = [sideMat, sideMat, topMat, sideMat, sideMat, sideMat];
@@ -774,23 +883,28 @@
             baseMesh.castShadow = true;
             group.add(baseMesh);
 
-            // Glowing Edge Lines
+            // Glowing Contour Borders
             const edges = new THREE.EdgesGeometry(baseGeo);
             const lineMat = new THREE.LineBasicMaterial({
-                color: z.glowColor || z.color || 0xffffff,
+                color: z.glowColor || z.color || 0x38bdf8,
                 linewidth: 2,
                 transparent: true,
-                opacity: 0.8
+                opacity: 0.85
             });
             const line = new THREE.LineSegments(edges, lineMat);
             line.position.copy(baseMesh.position);
             group.add(line);
 
-            // Architectural Details by Zone Type
+            // 1. Sleek 3D Room Header Billboard
+            const headerSprite = createRoomHeaderSprite(z);
+            const headerY = z.h + (z.isPod ? 5.8 : (z.isBuilding ? (z.h > 7 ? 4.5 : 3.5) : 3.2));
+            headerSprite.position.set(0, headerY, 0);
+            group.add(headerSprite);
+
+            // Architectural Details for Pods
             if (z.isPod) {
-                // Glass Pavilion Walls
-                const wallH = 3.5;
-                const glassGeo = new THREE.BoxGeometry(z.w - 1, wallH, z.d - 1);
+                const wallH = 3.6;
+                const glassGeo = new THREE.BoxGeometry(z.w - 1.2, wallH, z.d - 1.2);
                 const glassMat = new THREE.MeshPhysicalMaterial({
                     color: z.glowColor || 0x38bdf8,
                     transparent: true,
@@ -811,109 +925,181 @@
                 roof.castShadow = true;
                 group.add(roof);
 
-                // Glowing Neon Brand Strip
+                // Neon Sign Strip
                 const neonGeo = new THREE.BoxGeometry(z.w + 1, 0.2, 0.3);
                 const neonMat = new THREE.MeshBasicMaterial({ color: z.glowColor || z.color });
                 const neon = new THREE.Mesh(neonGeo, neonMat);
-                neon.position.set(0, z.h + wallH + 0.2, z.d / 2 + 0.4);
+                neon.position.set(0, z.h + wallH + 0.2, z.d / 2 + 0.3);
                 group.add(neon);
             }
 
-            // Distinctive Props per Zone
+            // 2. Specific Voxel Props & Models
             if (key === "PRIVATE_JET_RUNWAY") {
-                // Low-poly Executive Jet
+                // Detailed 3D Executive Private Jet
                 const jetGroup = new THREE.Group();
-                const fuselage = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 0.9, 14, 8), new THREE.MeshLambertMaterial({ color: 0xf8fafc }));
+                // Fuselage
+                const fuselage = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 1.0, 16, 12), new THREE.MeshLambertMaterial({ color: 0xf8fafc }));
                 fuselage.rotation.x = Math.PI / 2;
                 jetGroup.add(fuselage);
-                const wings = new THREE.Mesh(new THREE.BoxGeometry(16, 0.2, 3.8), new THREE.MeshLambertMaterial({ color: 0xe2e8f0 }));
-                wings.position.set(0, 0, 1);
-                jetGroup.add(wings);
-                const tail = new THREE.Mesh(new THREE.BoxGeometry(0.3, 3, 2), new THREE.MeshLambertMaterial({ color: 0x38bdf8 }));
-                tail.position.set(0, 1.8, -5);
-                jetGroup.add(tail);
-                jetGroup.position.set(0, z.h + 1.2, -12);
+                // Nose cone
+                const nose = new THREE.Mesh(new THREE.ConeGeometry(0.9, 2.8, 12), new THREE.MeshLambertMaterial({ color: 0xe2e8f0 }));
+                nose.rotation.x = -Math.PI / 2;
+                nose.position.z = 9.4;
+                jetGroup.add(nose);
+                // Cockpit Windshield (tinted glass)
+                const wind = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.5, 1.8), new THREE.MeshBasicMaterial({ color: 0x0284c7 }));
+                wind.position.set(0, 0.6, 7.2);
+                jetGroup.add(wind);
+                // Swept Wings with Winglets
+                const wingL = new THREE.Mesh(new THREE.BoxGeometry(8, 0.18, 3.2), new THREE.MeshLambertMaterial({ color: 0xf8fafc }));
+                wingL.position.set(-4.5, -0.1, 0.5);
+                wingL.rotation.y = 0.2;
+                jetGroup.add(wingL);
+                const wingR = wingL.clone();
+                wingR.position.x = 4.5;
+                wingR.rotation.y = -0.2;
+                jetGroup.add(wingR);
+                // Dual Tail Engines
+                const engineGeo = new THREE.CylinderGeometry(0.4, 0.4, 3.2, 8);
+                const engineMat = new THREE.MeshLambertMaterial({ color: 0x334155 });
+                const engL = new THREE.Mesh(engineGeo, engineMat);
+                engL.rotation.x = Math.PI / 2;
+                engL.position.set(-1.4, 0.5, -4.5);
+                jetGroup.add(engL);
+                const engR = engL.clone();
+                engR.position.x = 1.4;
+                jetGroup.add(engR);
+                // T-Tail
+                const vertTail = new THREE.Mesh(new THREE.BoxGeometry(0.2, 3.2, 2.4), new THREE.MeshLambertMaterial({ color: 0x0284c7 }));
+                vertTail.position.set(0, 1.8, -6.8);
+                jetGroup.add(vertTail);
+                const horizTail = new THREE.Mesh(new THREE.BoxGeometry(5.2, 0.15, 1.4), new THREE.MeshLambertMaterial({ color: 0xf8fafc }));
+                horizTail.position.set(0, 3.3, -7.0);
+                jetGroup.add(horizTail);
+
+                jetGroup.position.set(0, z.h + 1.2, -14);
                 jetGroup.castShadow = true;
                 group.add(jetGroup);
             }
 
             if (key === "HELIPADS") {
-                // Executive Helicopter
+                // Executive Helicopter with Animated Rotor
                 const heliGroup = new THREE.Group();
-                const body = new THREE.Mesh(new THREE.BoxGeometry(2.4, 2.0, 5.0), new THREE.MeshLambertMaterial({ color: 0x0f172a }));
-                heliGroup.add(body);
-                // Rotor
-                const rotor = new THREE.Mesh(new THREE.BoxGeometry(10, 0.1, 0.8), new THREE.MeshBasicMaterial({ color: 0x94a3b8 }));
-                rotor.position.y = 1.4;
-                heliGroup.add(rotor);
-                animatedObjects.push({ obj: rotor, rotSpeed: 0.18 });
-                heliGroup.position.set(0, z.h + 1.4, 0);
+                const heliBody = new THREE.Mesh(new THREE.BoxGeometry(2.4, 2.2, 5.5), new THREE.MeshLambertMaterial({ color: 0x0f172a }));
+                heliBody.position.y = 1.6;
+                heliGroup.add(heliBody);
+                // Cockpit Glass
+                const heliGlass = new THREE.Mesh(new THREE.BoxGeometry(2.2, 1.4, 1.8), new THREE.MeshBasicMaterial({ color: 0x38bdf8 }));
+                heliGlass.position.set(0, 1.8, 2.0);
+                heliGroup.add(heliGlass);
+                // Skids
+                const skidGeo = new THREE.CylinderGeometry(0.08, 0.08, 5.0, 6);
+                const skidMat = new THREE.MeshLambertMaterial({ color: 0x64748b });
+                const skidL = new THREE.Mesh(skidGeo, skidMat);
+                skidL.rotation.x = Math.PI / 2;
+                skidL.position.set(-1.1, 0.4, 0);
+                heliGroup.add(skidL);
+                const skidR = skidL.clone();
+                skidR.position.x = 1.1;
+                heliGroup.add(skidR);
+                // Tail Boom
+                const boom = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.35, 4.8, 6), new THREE.MeshLambertMaterial({ color: 0x0f172a }));
+                boom.rotation.x = Math.PI / 2;
+                boom.position.set(0, 2.0, -4.5);
+                heliGroup.add(boom);
+                // Main Spinning Rotor
+                const rotorGroup = new THREE.Group();
+                const rotorBlade = new THREE.Mesh(new THREE.BoxGeometry(11, 0.08, 0.9), new THREE.MeshBasicMaterial({ color: 0x94a3b8 }));
+                rotorGroup.add(rotorBlade);
+                rotorGroup.position.set(0, 2.8, 0.2);
+                heliGroup.add(rotorGroup);
+                animatedObjects.push({ obj: rotorGroup, rotSpeed: 0.25 });
+
+                heliGroup.position.set(0, z.h, 0);
                 group.add(heliGroup);
             }
 
+            if (key === "MEGA_GYM") {
+                // Treadmills Row inside Gym
+                for (let tm = -3; tm <= 3; tm += 2.5) {
+                    group.add(createTreadmill(tm, 2.5));
+                }
+            }
+
+            if (key === "FOOD_COURT") {
+                // Outdoor Café Parasols & Dining Patio
+                group.add(createCafeParasol(0xf97316, -6, 3));
+                group.add(createCafeParasol(0xfbbf24, 6, 3));
+                group.add(createCafeParasol(0xef4444, 0, -4));
+            }
+
+            if (key === "ARCADE_ZONE") {
+                // Row of Retro Arcade Cabinets
+                group.add(createArcadeCabinet(0xec4899, 'PACMAN', -7, 0));
+                group.add(createArcadeCabinet(0x3b82f6, 'STREET', -2.5, 0));
+                group.add(createArcadeCabinet(0x10b981, 'INVADER', 2.5, 0));
+                group.add(createArcadeCabinet(0xf59e0b, 'RACE', 7, 0));
+            }
+
             if (key === "SPORTS_TURF") {
-                // 3D Goalposts
+                // 3D Regulation Goalposts
                 function createGoalpost(zPos) {
-                    const postMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
-                    const postGroup = new THREE.Group();
-                    const crossbar = new THREE.Mesh(new THREE.BoxGeometry(10, 0.3, 0.3), postMat);
-                    crossbar.position.y = 3.2;
-                    postGroup.add(crossbar);
-                    const leftPost = new THREE.Mesh(new THREE.BoxGeometry(0.3, 3.2, 0.3), postMat);
-                    leftPost.position.set(-5, 1.6, 0);
-                    postGroup.add(leftPost);
-                    const rightPost = new THREE.Mesh(new THREE.BoxGeometry(0.3, 3.2, 0.3), postMat);
-                    rightPost.position.set(5, 1.6, 0);
-                    postGroup.add(rightPost);
-                    postGroup.position.set(0, z.h, zPos);
-                    return postGroup;
+                    const gp = new THREE.Group();
+                    const pMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+                    const bar = new THREE.Mesh(new THREE.BoxGeometry(10, 0.3, 0.3), pMat);
+                    bar.position.y = 3.2;
+                    gp.add(bar);
+                    const lPost = new THREE.Mesh(new THREE.BoxGeometry(0.3, 3.2, 0.3), pMat);
+                    lPost.position.set(-5, 1.6, 0);
+                    gp.add(lPost);
+                    const rPost = lPost.clone();
+                    rPost.position.x = 5;
+                    gp.add(rPost);
+                    gp.position.set(0, z.h, zPos);
+                    return gp;
                 }
                 group.add(createGoalpost(-z.d / 2 + 1.5));
                 group.add(createGoalpost(z.d / 2 - 1.5));
             }
 
             if (key === "CRICKET_GROUND") {
-                // 3D Wickets
+                // 3D Stumps & Wickets
                 function createWickets(zPos) {
-                    const wGroup = new THREE.Group();
-                    const stMat = new THREE.MeshLambertMaterial({ color: 0xfef08a });
+                    const wg = new THREE.Group();
+                    const wMat = new THREE.MeshLambertMaterial({ color: 0xfef08a });
                     for (let s = -1; s <= 1; s++) {
-                        const stump = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 1.4, 6), stMat);
-                        stump.position.set(s * 0.35, 0.7, 0);
-                        wGroup.add(stump);
+                        const st = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 1.4, 6), wMat);
+                        st.position.set(s * 0.35, 0.7, 0);
+                        wg.add(st);
                     }
-                    const bail = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.06, 0.06), stMat);
+                    const bail = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.06, 0.06), wMat);
                     bail.position.y = 1.42;
-                    wGroup.add(bail);
-                    wGroup.position.set(0, z.h, zPos);
-                    return wGroup;
+                    wg.add(bail);
+                    wg.position.set(0, z.h, zPos);
+                    return wg;
                 }
                 group.add(createWickets(-6));
                 group.add(createWickets(6));
             }
 
             if (key === "SAND_VOLLEYBALL" || key === "BADMINTON_COURT") {
-                // 3D Volleyball / Badminton Net
                 const netH = (key === "SAND_VOLLEYBALL") ? 3.0 : 2.0;
-                const netGeo = new THREE.PlaneGeometry(z.w * 0.85, 1.2);
-                const netMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.65, side: THREE.DoubleSide, wireframe: true });
-                const netMesh = new THREE.Mesh(netGeo, netMat);
+                const netMesh = new THREE.Mesh(
+                    new THREE.PlaneGeometry(z.w * 0.85, 1.2),
+                    new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.7, side: THREE.DoubleSide, wireframe: true })
+                );
                 netMesh.position.set(0, z.h + netH - 0.6, 0);
                 group.add(netMesh);
             }
 
             if (key === "TUG_OF_WAR") {
-                // Thick 3D contest rope
-                const ropeGeo = new THREE.CylinderGeometry(0.18, 0.18, z.w * 0.8, 8);
-                const ropeMat = new THREE.MeshLambertMaterial({ color: 0xd97706 });
-                const rope = new THREE.Mesh(ropeGeo, ropeMat);
+                const rope = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, z.w * 0.8, 8), new THREE.MeshLambertMaterial({ color: 0xd97706 }));
                 rope.rotation.z = Math.PI / 2;
                 rope.position.set(0, z.h + 0.35, 0);
                 group.add(rope);
             }
 
             if (key === "CENTRAL_FOUNTAIN") {
-                // Multi-tier fountain basin
                 const basin1 = new THREE.Mesh(new THREE.CylinderGeometry(9, 10, 1.5, 24), new THREE.MeshLambertMaterial({ color: 0x334155 }));
                 basin1.position.y = z.h + 0.75;
                 group.add(basin1);
@@ -923,7 +1109,7 @@
                 group.add(basin2);
 
                 // Water Spray Particles
-                const partCount = 140;
+                const partCount = 160;
                 const partGeo = new THREE.BufferGeometry();
                 const pos = new Float32Array(partCount * 3);
                 for (let p = 0; p < partCount * 3; p += 3) {
@@ -932,91 +1118,136 @@
                     pos[p + 2] = (Math.random() - 0.5) * 6;
                 }
                 partGeo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-                const partMat = new THREE.PointsMaterial({ color: 0x38bdf8, size: 0.45, transparent: true, opacity: 0.85 });
+                const partMat = new THREE.PointsMaterial({ color: 0x38bdf8, size: 0.48, transparent: true, opacity: 0.9 });
                 const spray = new THREE.Points(partGeo, partMat);
                 group.add(spray);
                 animatedObjects.push({ obj: spray, isFountain: true });
-            }
-
-            // Tree Landscaping in Corner Margins
-            if (["RESIDENTIAL_APARTMENTS", "RUNNING_TRACK", "MEGA_GYM", "CEO_SUITE"].includes(key)) {
-                function createTree(px, pz) {
-                    const treeGroup = new THREE.Group();
-                    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.35, 2.0, 6), new THREE.MeshLambertMaterial({ color: 0x78350f }));
-                    trunk.position.y = 1.0;
-                    treeGroup.add(trunk);
-                    const foliage = new THREE.Mesh(new THREE.DodecahedronGeometry(1.6), new THREE.MeshLambertMaterial({ color: 0x15803d }));
-                    foliage.position.y = 2.8;
-                    foliage.castShadow = true;
-                    treeGroup.add(foliage);
-                    treeGroup.position.set(px, z.h, pz);
-                    return treeGroup;
-                }
-                group.add(createTree(z.w / 2 - 2, z.d / 2 - 2));
-                group.add(createTree(-z.w / 2 + 2, -z.d / 2 + 2));
             }
 
             scene.add(group);
             zoneMeshes[key] = group;
         });
 
-        // ==================== 7. BOT AVATARS & 3D BILLBOARD SPRITES ====================
+        // ==================== 9. TREES, LAMPS & LANDSCAPING AVENUES ====================
+        // Plant trees and garden lamps along the grand roads and parks
+        const foliageCoords = [
+            [-100, -56], [-60, -56], [25, -56], [70, -56], [110, -56],
+            [-100, -2], [-50, -2], [50, -2], [100, -2],
+            [-90, 36], [-40, 36], [35, 36], [75, 36], [115, 36],
+            [-22, -2], [-22, 18], [22, -2], [22, 18]
+        ];
+
+        foliageCoords.forEach(([x, z]) => {
+            scene.add(createVoxelTree(x, 0, z));
+            scene.add(createGardenLamp(x + 3, 0, z + 2));
+        });
+
+        // ==================== 10. DEFAULT CONFIGURED BOTS (AUTO-SPAWN ROSTER) ====================
+        const DEFAULT_CONFIGURED_BOTS = [
+            // Team Vasan (Home: TEAM_VASAN)
+            { name: "TTF Vasan", squad: "Team Vaasan", homeZone: "TEAM_VASAN", action: "WORKING" },
+            { name: "Pradeep", squad: "Team Vaasan", homeZone: "TEAM_VASAN", action: "WORKING" },
+            { name: "Mamitha", squad: "Team Vaasan", homeZone: "TEAM_VASAN", action: "WORKING" },
+            { name: "Kayadu", squad: "Team Vaasan", homeZone: "TEAM_VASAN", action: "WORKING" },
+            { name: "Muthazhagi", squad: "Team Vaasan", homeZone: "TEAM_VASAN", action: "WORKING" },
+
+            // Team Vijay (Home: TEAM_VIJAY)
+            { name: "Vijay", squad: "Team Vijay", homeZone: "TEAM_VIJAY", action: "WORKING" },
+            { name: "Sivakarthikeyan", squad: "Team Vijay", homeZone: "TEAM_VIJAY", action: "WORKING" },
+            { name: "Anirudh", squad: "Team Vijay", homeZone: "TEAM_VIJAY", action: "WORKING" },
+            { name: "Trisha", squad: "Team Vijay", homeZone: "TEAM_VIJAY", action: "WORKING" },
+            { name: "Lokesh", squad: "Team Vijay", homeZone: "TEAM_VIJAY", action: "WORKING" },
+
+            // Executive Suite (Home: CEO_SUITE)
+            { name: "SadieSink", squad: "Executive Suite", homeZone: "CEO_SUITE", action: "WORKING" },
+            { name: "MillieBobbyBrown", squad: "Executive Suite", homeZone: "CEO_SUITE", action: "WORKING" },
+
+            // Team Messi (Home: TEAM_MESSI)
+            { name: "Messi", squad: "Team Messi", homeZone: "TEAM_MESSI", action: "WORKING" },
+            { name: "Ronaldo", squad: "Team Messi", homeZone: "TEAM_MESSI", action: "WORKING" },
+            { name: "Neymar", squad: "Team Messi", homeZone: "TEAM_MESSI", action: "WORKING" },
+            { name: "Haaland", squad: "Team Messi", homeZone: "TEAM_MESSI", action: "WORKING" },
+            { name: "Mbappe", squad: "Team Messi", homeZone: "TEAM_MESSI", action: "WORKING" },
+
+            // Team Dhoni (Home: TEAM_DHONI)
+            { name: "Dhoni", squad: "Team Dhoni", homeZone: "TEAM_DHONI", action: "WORKING" },
+            { name: "Virat", squad: "Team Dhoni", homeZone: "TEAM_DHONI", action: "WORKING" },
+            { name: "Rohit", squad: "Team Dhoni", homeZone: "TEAM_DHONI", action: "WORKING" },
+            { name: "Jadeja", squad: "Team Dhoni", homeZone: "TEAM_DHONI", action: "WORKING" },
+            { name: "Hardik", squad: "Team Dhoni", homeZone: "TEAM_DHONI", action: "WORKING" },
+
+            // Team Elon (Home: FUTURE_POD_1)
+            { name: "Elon Musk", squad: "Team Elon", homeZone: "FUTURE_POD_1", action: "WORKING" },
+            { name: "MrBeast", squad: "Team Elon", homeZone: "FUTURE_POD_1", action: "WORKING" },
+            { name: "Steve Jobs", squad: "Team Elon", homeZone: "FUTURE_POD_1", action: "WORKING" },
+            { name: "Bill Gates", squad: "Team Elon", homeZone: "FUTURE_POD_1", action: "WORKING" },
+            { name: "Kevin Mitnick", squad: "Team Elon", homeZone: "FUTURE_POD_1", action: "WORKING" },
+
+            // Team Tony (Home: FUTURE_POD_2)
+            { name: "Tony Stark", squad: "Team Tony", homeZone: "FUTURE_POD_2", action: "WORKING" },
+            { name: "Tom Cruise", squad: "Team Tony", homeZone: "FUTURE_POD_2", action: "WORKING" },
+            { name: "Brad Pitt", squad: "Team Tony", homeZone: "FUTURE_POD_2", action: "WORKING" },
+            { name: "Johnny Depp", squad: "Team Tony", homeZone: "FUTURE_POD_2", action: "WORKING" },
+            { name: "Walter White", squad: "Team Tony", homeZone: "FUTURE_POD_2", action: "WORKING" }
+        ];
+
+        // ==================== 11. BOT AVATARS & 3D BILLBOARD SPRITES ====================
         const botAvatars = {};
-        const activeBotsList = [];
 
         function createNameTagSprite(botName, squadName, action) {
             const canvas = document.createElement('canvas');
-            canvas.width = 384;
-            canvas.height = 128;
+            canvas.width = 400;
+            canvas.height = 130;
             const ctx = canvas.getContext('2d');
 
             // Glass background badge
-            ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
-            roundRect(ctx, 10, 10, 364, 108, 20);
+            ctx.fillStyle = 'rgba(15, 23, 42, 0.90)';
+            roundRect(ctx, 8, 8, 384, 114, 20);
             ctx.fill();
 
             // Border color by squad
             let borderColor = '#38bdf8';
-            if (squadName.toLowerCase().includes('vijay')) borderColor = '#f59e0b';
-            if (squadName.toLowerCase().includes('messi')) borderColor = '#38bdf8';
-            if (squadName.toLowerCase().includes('dhoni')) borderColor = '#eab308';
-            if (squadName.toLowerCase().includes('elon')) borderColor = '#a855f7';
-            if (squadName.toLowerCase().includes('tony') || squadName.toLowerCase().includes('stark')) borderColor = '#ef4444';
-            if (squadName.toLowerCase().includes('exec') || squadName.toLowerCase().includes('ceo')) borderColor = '#ec4899';
+            const sn = (squadName || '').toLowerCase();
+            if (sn.includes('vijay')) borderColor = '#f59e0b';
+            if (sn.includes('messi')) borderColor = '#38bdf8';
+            if (sn.includes('dhoni')) borderColor = '#eab308';
+            if (sn.includes('elon')) borderColor = '#a855f7';
+            if (sn.includes('tony') || sn.includes('stark')) borderColor = '#ef4444';
+            if (sn.includes('exec') || sn.includes('ceo')) borderColor = '#ec4899';
 
             ctx.strokeStyle = borderColor;
             ctx.lineWidth = 4;
-            roundRect(ctx, 10, 10, 364, 108, 20);
+            roundRect(ctx, 8, 8, 384, 114, 20);
             ctx.stroke();
 
             // Action Indicator Dot
-            let dotColor = '#10b981'; // WORKING
+            let dotColor = '#10b981';
             if (action === 'RESTING') dotColor = '#f59e0b';
             if (action === 'SLEEPING') dotColor = '#a855f7';
             if (action === 'IDLE') dotColor = '#94a3b8';
 
             ctx.fillStyle = dotColor;
             ctx.beginPath();
-            ctx.arc(36, 44, 9, 0, Math.PI * 2);
+            ctx.arc(38, 46, 10, 0, Math.PI * 2);
             ctx.fill();
 
             // Bot Name Text
             ctx.fillStyle = '#ffffff';
-            ctx.font = 'bold 32px sans-serif';
+            ctx.font = 'bold 34px Outfit, sans-serif';
             ctx.textAlign = 'left';
-            ctx.fillText(botName.substring(0, 16), 56, 54);
+            ctx.fillText(botName.substring(0, 15), 58, 56);
 
-            // Subtitle Tag (Squad • Action)
-            ctx.fillStyle = '#94a3b8';
-            ctx.font = '600 20px monospace';
-            const sub = `${squadName.substring(0, 14)} • ${action}`;
-            ctx.fillText(sub, 36, 92);
+            // Subtitle Tag
+            ctx.fillStyle = borderColor;
+            ctx.font = '700 20px JetBrains Mono, monospace';
+            const sub = `${squadName.substring(0, 13)} • ${action}`;
+            ctx.fillText(sub, 36, 96);
 
             const tex = new THREE.CanvasTexture(canvas);
             const spriteMat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false });
             const sprite = new THREE.Sprite(spriteMat);
-            sprite.scale.set(7.5, 2.5, 1);
-            sprite.position.y = 5.4;
+            sprite.scale.set(7.8, 2.6, 1);
+            sprite.position.y = 5.6;
             return sprite;
         }
 
@@ -1034,7 +1265,7 @@
             ctx.closePath();
         }
 
-        function createBotAvatar(botName, squadName = 'Team Vaasan', action = 'WORKING') {
+        function createBotAvatar(botName, squadName = 'Team Vaasan', action = 'WORKING', spawnZoneKey = 'TEAM_VASAN') {
             const group = new THREE.Group();
 
             // Squad Theme Color
@@ -1047,8 +1278,7 @@
             if (sn.includes('tony') || sn.includes('stark')) themeColor = 0xef4444;
             if (sn.includes('exec') || sn.includes('ceo')) themeColor = 0xec4899;
 
-            // Blocky Stylized Character
-            // Legs
+            // Character Body
             const legGeo = new THREE.BoxGeometry(0.5, 1.2, 0.6);
             const legMat = new THREE.MeshLambertMaterial({ color: 0x1e293b });
             const leftLeg = new THREE.Mesh(legGeo, legMat);
@@ -1085,27 +1315,41 @@
             const nameTag = createNameTagSprite(botName, squadName, action);
             group.add(nameTag);
 
+            // Calculate Initial Position inside Target Home Pod
+            const targetZone = zones[spawnZoneKey] || zones["TEAM_VASAN"];
+            const offsetX = (Math.random() - 0.5) * (targetZone.w * 0.65);
+            const offsetZ = (Math.random() - 0.5) * (targetZone.d * 0.65);
+            const spawnX = targetZone.x + offsetX;
+            const spawnZ = targetZone.z + offsetZ;
+            const spawnY = targetZone.h || 0;
+
+            group.position.set(spawnX, spawnY, spawnZ);
             scene.add(group);
 
             const avatarData = {
                 name: botName,
                 squad: squadName,
                 action: action,
-                zone: 'CENTRAL_FOUNTAIN',
+                zone: targetZone.name,
                 group: group,
                 nameTag: nameTag,
-                targetPos: new THREE.Vector3(0, 0, 8),
-                isMoving: false
+                targetPos: new THREE.Vector3(spawnX, spawnY, spawnZ)
             };
 
             botAvatars[botName] = avatarData;
-            activeBotsList.push(avatarData);
-            updateRosterUI();
-
             return avatarData;
         }
 
-        // ==================== 8. WEBSOCKET REAL-TIME BRIDGE ====================
+        // Auto-Spawn all 32 configured corporate bots into their home pods by default
+        function autoSpawnCampusBots() {
+            DEFAULT_CONFIGURED_BOTS.forEach(b => {
+                createBotAvatar(b.name, b.squad, b.action, b.homeZone);
+            });
+            updateRosterUI();
+        }
+        autoSpawnCampusBots();
+
+        // ==================== 12. WEBSOCKET REAL-TIME BRIDGE ====================
         const wsIndicator = document.getElementById('ws-indicator');
         const wsStatusText = document.getElementById('ws-status');
         const botCountStat = document.getElementById('bot-count-stat');
@@ -1119,29 +1363,36 @@
 
             ws.onopen = () => {
                 wsIndicator.className = "pulse-beacon online";
-                wsStatusText.innerText = `Synced with YDL Discord Swarm`;
+                wsStatusText.innerText = "Synced with YDL Discord Swarm";
             };
 
             ws.onmessage = (event) => {
                 try {
                     const data = JSON.parse(event.data);
-                    const botName = data.bot;
+                    const incomingName = data.bot || "";
                     const rawZone = (data.target_zone || "CENTRAL_FOUNTAIN").toUpperCase();
                     const action = data.action || "WORKING";
                     const squad = data.squad || "Team Vaasan";
 
-                    // Resolve zone through alias table
                     const resolvedKey = zoneAliases[rawZone] || rawZone;
                     const targetZone = zones[resolvedKey] || zones["CENTRAL_FOUNTAIN"];
 
-                    let avatar = botAvatars[botName];
+                    // Match existing avatar by exact name or case-insensitive name
+                    let avatar = botAvatars[incomingName];
                     if (!avatar) {
-                        avatar = createBotAvatar(botName, squad, action);
+                        const matchKey = Object.keys(botAvatars).find(k => k.toLowerCase() === incomingName.toLowerCase());
+                        if (matchKey) {
+                            avatar = botAvatars[matchKey];
+                        }
+                    }
+
+                    if (!avatar) {
+                        avatar = createBotAvatar(incomingName, squad, action, resolvedKey);
                     } else {
-                        // Update billboard sprite if squad/action changed
+                        // Refresh billboard tag if squad or action changed
                         if (avatar.action !== action || avatar.squad !== squad) {
                             avatar.group.remove(avatar.nameTag);
-                            avatar.nameTag = createNameTagSprite(botName, squad, action);
+                            avatar.nameTag = createNameTagSprite(avatar.name, squad, action);
                             avatar.group.add(avatar.nameTag);
                         }
                     }
@@ -1150,11 +1401,9 @@
                     avatar.action = action;
                     avatar.zone = targetZone.name;
 
-                    // Calculate target position with slight random dispersion inside room
-                    const spreadW = targetZone.w * 0.65;
-                    const spreadD = targetZone.d * 0.65;
-                    const offsetX = (Math.random() - 0.5) * spreadW;
-                    const offsetZ = (Math.random() - 0.5) * spreadD;
+                    // Smooth target position inside zone
+                    const offsetX = (Math.random() - 0.5) * (targetZone.w * 0.65);
+                    const offsetZ = (Math.random() - 0.5) * (targetZone.d * 0.65);
 
                     avatar.targetPos.set(
                         targetZone.x + offsetX,
@@ -1180,19 +1429,14 @@
         }
         connectWebSocket();
 
-        // ==================== 9. UI ROSTER MANAGEMENT ====================
+        // ==================== 13. UI ROSTER MANAGEMENT ====================
         function updateRosterUI() {
             const container = document.getElementById('bot-list-container');
             const countText = document.getElementById('roster-count');
             const totalCount = Object.keys(botAvatars).length;
 
             countText.innerText = totalCount;
-            botCountStat.innerText = `${totalCount} Active Bots`;
-
-            if (totalCount === 0) {
-                container.innerHTML = '<div style="font-size:11px; color:#64748b; padding:8px 0; text-align:center;">Waiting for Discord voice transitions...</div>';
-                return;
-            }
+            botCountStat.innerText = `${totalCount} Active Campus Bots`;
 
             container.innerHTML = '';
             Object.values(botAvatars).forEach(b => {
@@ -1204,7 +1448,7 @@
                 item.innerHTML = `
                     <div>
                         <strong>${b.name}</strong>
-                        <div style="font-size:10px; color:#94a3b8;">${b.zone || 'Campus'}</div>
+                        <div style="font-size:10px; color:#94a3b8;">${b.zone || 'Campus'} • ${b.squad}</div>
                     </div>
                     <span class="bot-badge ${actClass}">${b.action}</span>
                 `;
@@ -1216,9 +1460,9 @@
             const bot = botAvatars[name];
             if (bot) {
                 smoothMoveCamera(
-                    bot.group.position.x + 35,
-                    50,
-                    bot.group.position.z + 35,
+                    bot.group.position.x + 36,
+                    52,
+                    bot.group.position.z + 36,
                     bot.group.position.x,
                     bot.group.position.y,
                     bot.group.position.z
@@ -1226,7 +1470,7 @@
             }
         }
 
-        // ==================== 10. SMOOTH CAMERA PRESET JUMP ====================
+        // ==================== 14. SMOOTH CAMERA PRESET JUMPS ====================
         let targetCamPos = camera.position.clone();
         let targetLookAt = controls.target.clone();
         let isCamTransitioning = false;
@@ -1243,10 +1487,10 @@
 
             switch (preset) {
                 case 'overview':
-                    smoothMoveCamera(120, 130, 130, 0, 0, 0);
+                    smoothMoveCamera(130, 140, 140, 0, 0, 0);
                     break;
                 case 'aviation':
-                    smoothMoveCamera(-40, 75, -25, -20, 0, -76);
+                    smoothMoveCamera(-42, 75, -24, -20, 0, -76);
                     break;
                 case 'work_pods':
                     smoothMoveCamera(30, 75, 20, 0, 0, -29);
@@ -1260,7 +1504,7 @@
             }
         }
 
-        // ==================== 11. ANIMATION & RENDER LOOP ====================
+        // ==================== 15. ANIMATION & RENDER LOOP ====================
         let clock = new THREE.Clock();
 
         function animate() {
@@ -1270,7 +1514,7 @@
 
             controls.update();
 
-            // Smooth Camera Transition Lerp
+            // Smooth Camera Interpolation
             if (isCamTransitioning) {
                 camera.position.lerp(targetCamPos, 0.06);
                 controls.target.lerp(targetLookAt, 0.06);
@@ -1279,7 +1523,7 @@
                 }
             }
 
-            // Animate Props (Helicopter rotors, fountain water spray)
+            // Animate Voxel Props (Helicopter rotor, Fountain spray)
             animatedObjects.forEach(item => {
                 if (item.rotSpeed) {
                     item.obj.rotation.y += item.rotSpeed;
@@ -1293,15 +1537,13 @@
                 }
             });
 
-            // Smooth Avatar Interpolation & Bobbing Motion
+            // Smooth Avatar Interpolation & Natural Bobbing
             Object.values(botAvatars).forEach(avatar => {
                 const dist = avatar.group.position.distanceTo(avatar.targetPos);
                 if (dist > 0.15) {
                     avatar.group.position.lerp(avatar.targetPos, 0.04);
-                    // Walk bobbing motion
                     avatar.group.position.y = avatar.targetPos.y + Math.abs(Math.sin(time * 8)) * 0.35;
                 } else {
-                    // Subtle breathing idle
                     avatar.group.position.y = avatar.targetPos.y + Math.sin(time * 2) * 0.05;
                 }
             });
@@ -1310,7 +1552,7 @@
         }
         animate();
 
-        // Responsive Resizing
+        // Window Resize Listener
         window.addEventListener('resize', () => {
             const aspect = window.innerWidth / window.innerHeight;
             camera.left = -d * aspect;
