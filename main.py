@@ -13,6 +13,7 @@ Main Entry Point orchestrating 32 concurrent Discord bot clients across 6 squads
 import asyncio
 import datetime
 import logging
+import os
 import random
 import re
 import sys
