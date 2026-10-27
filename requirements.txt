@@ -8,3 +8,4 @@ edge-tts>=7.0.0
 SpeechRecognition>=3.10.0
 imageio-ffmpeg
 discord-ext-voice-recv==0.5.2a179
+pytz
