@@ -1116,6 +1116,19 @@ class VaelkryBotClient(discord.Client):
             embed.set_footer(text="Vaelkry Dev Labs Autonomous Telemetry Suite")
             await interaction.followup.send(embed=embed)
 
+    async def setup_hook(self):
+        """Called asynchronously by discord.py during client setup."""
+        if self.agent_config.key == "ttf_vasan" and hasattr(self, "tree"):
+            try:
+                target_guild = discord.Object(id=self.orchestrator.config.guild_id)
+                self.tree.copy_global_to(guild=target_guild)
+                synced = await self.tree.sync(guild=target_guild)
+                logger.info(
+                    f"Instantly synced {len(synced)} guild slash commands for TTF Vasan to guild {target_guild.id}"
+                )
+            except Exception as exc:
+                logger.error(f"Failed to sync slash commands in setup_hook for TTF Vasan: {exc}")
+
     async def on_ready(self):
         logger.info(
             f"Agent '{self.agent_config.name}' connected as {self.user} (ID: {self.user.id})"
@@ -1124,12 +1137,11 @@ class VaelkryBotClient(discord.Client):
 
         if self.agent_config.key == "ttf_vasan" and hasattr(self, "tree"):
             try:
-                guild_obj = discord.Object(id=self.orchestrator.config.guild_id)
-                self.tree.copy_global_to(guild=guild_obj)
-                synced = await self.tree.sync(guild=guild_obj)
+                target_guild = discord.Object(id=self.orchestrator.config.guild_id)
+                self.tree.copy_global_to(guild=target_guild)
+                synced = await self.tree.sync(guild=target_guild)
                 logger.info(
-                    f"TTF Vasan slash command(s) synced to Guild {self.orchestrator.config.guild_id}: "
-                    f"{[c.name for c in synced]}"
+                    f"Instantly synced {len(synced)} guild slash commands for TTF Vasan to guild {target_guild.id}"
                 )
             except Exception as exc:
                 logger.error(f"Failed to sync slash commands for TTF Vasan: {exc}")
@@ -1287,6 +1299,19 @@ class AgentOrchestrator:
                 asyncio.create_task(sync_server_category_layout(guild_obj))
                 asyncio.create_task(ensure_enterprise_roles(guild_obj, self.clients))
                 self.start_autonomous_labs_loop(guild_obj)
+
+        # Guild-specific slash command synchronization for TTF Vasan
+        vasan_client = self.clients.get("ttf_vasan")
+        if vasan_client and hasattr(vasan_client, "tree"):
+            try:
+                target_guild = discord.Object(id=self.config.guild_id)
+                vasan_client.tree.copy_global_to(guild=target_guild)
+                synced = await vasan_client.tree.sync(guild=target_guild)
+                logger.info(
+                    f"Instantly synced {len(synced)} guild slash commands for TTF Vasan to guild {target_guild.id}"
+                )
+            except Exception as exc:
+                logger.error(f"Failed to sync guild slash commands in wait_until_all_ready for TTF Vasan: {exc}")
 
         # Dispatch startup telemetry alert to Telegram
         try:
