@@ -1271,15 +1271,57 @@ class VaelkryBotClient(discord.Client):
                     elif "dhoni" in combined:
                         target_zone = "TEAM_DHONI"
                         action = "WORKING"
-                    elif any(k in combined for k in ("gym", "workout", "fitness", "turf", "sports")):
+                    elif "elon" in combined:
+                        target_zone = "FUTURE_POD_1"
+                        action = "WORKING"
+                    elif any(k in combined for k in ("tony", "stark")):
+                        target_zone = "FUTURE_POD_2"
+                        action = "WORKING"
+                    elif any(k in combined for k in ("gym", "workout", "fitness")):
                         target_zone = "MEGA_GYM"
+                        action = "RESTING"
+                    elif any(k in combined for k in ("turf", "football", "soccer")):
+                        target_zone = "SPORTS_TURF"
+                        action = "RESTING"
+                    elif "cricket" in combined:
+                        target_zone = "CRICKET_GROUND"
+                        action = "RESTING"
+                    elif any(k in combined for k in ("pool", "swim")):
+                        target_zone = "SWIMMING_POOL"
+                        action = "RESTING"
+                    elif any(k in combined for k in ("arcade", "game", "gaming")):
+                        target_zone = "ARCADE_ZONE"
+                        action = "RESTING"
+                    elif any(k in combined for k in ("sleep", "night spend", "dorm", "night")):
+                        target_zone = "SLEEP_PODS"
+                        action = "SLEEPING"
+                    elif any(k in combined for k in ("runway", "jet", "flight", "plane")):
+                        target_zone = "PRIVATE_JET_RUNWAY"
+                        action = "WORKING"
+                    elif any(k in combined for k in ("heli", "pad")):
+                        target_zone = "HELIPADS"
+                        action = "WORKING"
+                    elif any(k in combined for k in ("apartment", "residential", "residence")):
+                        target_zone = "RESIDENTIAL_APARTMENTS"
+                        action = "RESTING"
+                    elif any(k in combined for k in ("track", "running", "park")):
+                        target_zone = "RUNNING_TRACK"
+                        action = "RESTING"
+                    elif any(k in combined for k in ("volleyball", "sand")):
+                        target_zone = "SAND_VOLLEYBALL"
+                        action = "RESTING"
+                    elif "badminton" in combined:
+                        target_zone = "BADMINTON_COURT"
+                        action = "RESTING"
+                    elif any(k in combined for k in ("tug", "war")):
+                        target_zone = "TUG_OF_WAR"
+                        action = "RESTING"
+                    elif any(k in combined for k in ("fountain", "plaza", "square")):
+                        target_zone = "CENTRAL_FOUNTAIN"
                         action = "RESTING"
                     elif any(k in combined for k in ("food", "court", "cafeteria", "pantry", "cafe", "slide", "hive", "hangout", "lounge", "byte", "seven")):
                         target_zone = "FOOD_COURT"
                         action = "RESTING"
-                    elif any(k in combined for k in ("sleep", "night spend", "dorm", "night")):
-                        target_zone = "FOOD_COURT"
-                        action = "SLEEPING"
                     else:
                         target_zone = "TEAM_VASAN"
                         action = "WORKING"
