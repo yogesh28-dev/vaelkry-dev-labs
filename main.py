@@ -2430,6 +2430,8 @@ async def main():
         logger.critical(f"Configuration error: {exc}")
         sys.exit(1)
 
+    all_configured_agents = dict(config.agents)
+
     # Privileged members intent omitted to avoid Discord PrivilegedIntentsRequired crash
     intents = discord.Intents.default()
     intents.message_content = True
@@ -2439,13 +2441,56 @@ async def main():
     orchestrator = AgentOrchestrator(config)
 
     bot_instances: List[tuple[VaelkryBotClient, str]] = []
-    # Only spawn clients for bots with valid tokens (non-empty, non-None, not starting with 'dummy_')
-    for key, agent_cfg in orchestrator.config.agents.items():
-        if not orchestrator.is_valid_token(agent_cfg.token):
+    skipped_bots: List[tuple[str, str]] = []
+    starting_bots: List[str] = []
+
+    # Full catalog of all enterprise bots
+    enterprise_bot_catalog = [
+        "ttf_vasan", "pradeep", "mamitha", "kayadu", "muthazhagi",
+        "vijay", "sivakarthikeyan", "anirudh", "trisha", "lokesh",
+        "sadie", "millie",
+        "messi", "ronaldo", "neymar", "haaland", "mbappe",
+        "dhoni", "virat", "rohit", "jadeja", "hardik",
+        "elon", "mrbeast", "steve_jobs", "bill_gates", "kevin_mitnick",
+        "tony", "tom_cruise", "brad_pitt", "johnny_depp", "walter_white",
+    ]
+    for k in config.agents.keys():
+        if k not in enterprise_bot_catalog:
+            enterprise_bot_catalog.append(k)
+
+    # 1. & 2. Ensure bot_instances only contains bots where AgentOrchestrator.is_valid_token(agent_cfg.token) returns True.
+    # If token is invalid, empty, None, or starts with 'dummy_', do NOT instantiate VaelkryBotClient and do NOT pass it to asyncio.gather.
+    for key in enterprise_bot_catalog:
+        agent_cfg = config.agents.get(key)
+        token = agent_cfg.token if agent_cfg else os.getenv(f"BOT_TOKEN_{key.upper()}", "").strip()
+        if not AgentOrchestrator.is_valid_token(token):
+            reason = "empty or None" if not token or not str(token).strip() else "starts with 'dummy_'"
+            skipped_bots.append((key, reason))
             continue
+
+        if not agent_cfg:
+            continue
+
         client = VaelkryBotClient(agent_config=agent_cfg, orchestrator=orchestrator, intents=intents)
         orchestrator.clients[key] = client
-        bot_instances.append((client, agent_cfg.token))
+        bot_instances.append((client, token))
+        starting_bots.append(key)
+
+    # 3. Print which bots are skipped and which are starting
+    if skipped_bots:
+        print("\n==================================================")
+        print(f"⚠️  [SKIPPED BOTS] ({len(skipped_bots)} bots skipped due to invalid/dummy token):")
+        for b_name, b_reason in skipped_bots:
+            print(f"   • {b_name:18} - {b_reason}")
+        print("==================================================")
+        logger.info(f"Skipped {len(skipped_bots)} bots with invalid/dummy tokens: {[b[0] for b in skipped_bots]}")
+
+    print("\n==================================================")
+    print(f"🚀 [STARTING BOTS] ({len(starting_bots)} bots with valid tokens starting):")
+    for b_name in starting_bots:
+        print(f"   • {b_name:18} - Starting client")
+    print("==================================================\n")
+    logger.info(f"Starting {len(starting_bots)} bots: {starting_bots}")
 
     if not bot_instances:
         logger.warning("No bots with valid Discord tokens available to start. Check your .env file.")
@@ -2453,9 +2498,24 @@ async def main():
 
     asyncio.create_task(orchestrator.wait_until_all_ready())
 
+    async def _safe_start_bot(b_client: VaelkryBotClient, b_token: str):
+        b_key = b_client.agent_config.key
+        try:
+            await b_client.start(b_token)
+        except discord.errors.LoginFailure as lf:
+            print(f"❌ [LOGIN FAILURE] Bot '{b_key}' token rejected by Discord: {lf}. Skipping.")
+            logger.error(f"LoginFailure for bot '{b_key}': {lf}. Removing from active bot pool.")
+            orchestrator.clients.pop(b_key, None)
+            if b_key in orchestrator.ready_events:
+                orchestrator.ready_events[b_key].set()
+        except Exception as exc:
+            logger.exception(f"Unexpected error running bot client '{b_key}': {exc}")
+            if b_key in orchestrator.ready_events:
+                orchestrator.ready_events[b_key].set()
+
     try:
         logger.info(f"Launching all {len(bot_instances)} Discord bot clients concurrently via asyncio.gather...")
-        await asyncio.gather(*(client.start(token) for client, token in bot_instances))
+        await asyncio.gather(*(_safe_start_bot(client, token) for client, token in bot_instances))
     except (asyncio.CancelledError, KeyboardInterrupt):
         logger.info("Shutdown signal received. Closing all bot connections...")
     except Exception as exc:
