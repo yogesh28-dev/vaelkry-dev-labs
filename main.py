@@ -1355,8 +1355,33 @@ class AgentOrchestrator:
     executive moderation, and the automated 24h IST shift scheduler.
     """
 
+    @staticmethod
+    def is_valid_token(token: Optional[str]) -> bool:
+        """Returns True if the bot token is non-empty, not None, and does not start with 'dummy_'."""
+        if not token:
+            return False
+        clean = str(token).strip()
+        if not clean or clean.lower().startswith("dummy_"):
+            return False
+        return True
+
     def __init__(self, config: SystemConfig):
         self.config = config
+
+        # Filter out any bot whose token is empty, None, or starts with 'dummy_'
+        raw_count = len(config.agents)
+        self.config.agents = {
+            k: v for k, v in config.agents.items()
+            if self.is_valid_token(getattr(v, "token", None))
+        }
+        self.valid_agents = self.config.agents
+        filtered_count = raw_count - len(self.config.agents)
+        if filtered_count > 0:
+            logger.info(
+                f"AgentOrchestrator: Filtered out {filtered_count} bot(s) with empty, None, or dummy tokens. "
+                f"Spawning {len(self.config.agents)} bot(s) with valid tokens: {list(self.config.agents.keys())}"
+            )
+
         self.gemini_service = GeminiService(
             api_key=config.gemini_api_key,
             candidate_models=config.gemini_models,
@@ -1375,7 +1400,7 @@ class AgentOrchestrator:
         self.bot_user_ids: Dict[int, str] = {}
         self.bot_mentions: Dict[str, str] = {}
         self.ready_events: Dict[str, asyncio.Event] = {
-            key: asyncio.Event() for key in config.agents.keys()
+            key: asyncio.Event() for key in self.config.agents.keys()
         }
         self.discussion_lock = asyncio.Lock()
         self.setup_lock = asyncio.Lock()
@@ -2414,10 +2439,17 @@ async def main():
     orchestrator = AgentOrchestrator(config)
 
     bot_instances: List[tuple[VaelkryBotClient, str]] = []
-    for key, agent_cfg in config.agents.items():
+    # Only spawn clients for bots with valid tokens (non-empty, non-None, not starting with 'dummy_')
+    for key, agent_cfg in orchestrator.config.agents.items():
+        if not orchestrator.is_valid_token(agent_cfg.token):
+            continue
         client = VaelkryBotClient(agent_config=agent_cfg, orchestrator=orchestrator, intents=intents)
         orchestrator.clients[key] = client
         bot_instances.append((client, agent_cfg.token))
+
+    if not bot_instances:
+        logger.warning("No bots with valid Discord tokens available to start. Check your .env file.")
+        return
 
     asyncio.create_task(orchestrator.wait_until_all_ready())
 
