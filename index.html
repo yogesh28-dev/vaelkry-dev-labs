@@ -376,8 +376,15 @@
     <div id="canvas-container"></div>
 
     <script>
+        // ==================== DOM ELEMENTS & UI REFERENCES ====================
+        const canvasContainer = document.getElementById('canvas-container');
+        const wsIndicator = document.getElementById('ws-indicator');
+        const wsStatusText = document.getElementById('ws-status');
+        const botCountStat = document.getElementById('bot-count-stat');
+        const rosterCount = document.getElementById('roster-count');
+        const botListContainer = document.getElementById('bot-list-container');
+
         // ==================== 1. THREE.JS ISOMETRIC SETUP ====================
-        const container = document.getElementById('canvas-container');
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0x060913);
         scene.fog = new THREE.FogExp2(0x060913, 0.0016);
@@ -395,7 +402,11 @@
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         renderer.shadowMap.enabled = true;
         renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-        container.appendChild(renderer.domElement);
+        if (canvasContainer) {
+            canvasContainer.appendChild(renderer.domElement);
+        } else {
+            document.body.appendChild(renderer.domElement);
+        }
 
         const controls = new THREE.OrbitControls(camera, renderer.domElement);
         controls.enableDamping = true;
@@ -1340,6 +1351,36 @@
             return avatarData;
         }
 
+        // ==================== 12. UI ROSTER MANAGEMENT ====================
+        function updateRosterUI() {
+            const listEl = botListContainer || document.getElementById('bot-list-container');
+            const countText = rosterCount || document.getElementById('roster-count');
+            const statText = botCountStat || document.getElementById('bot-count-stat');
+            const totalCount = Object.keys(botAvatars).length;
+
+            if (countText) countText.innerText = totalCount;
+            if (statText) statText.innerText = `${totalCount} Active Campus Bots`;
+
+            if (listEl) {
+                listEl.innerHTML = '';
+                Object.values(botAvatars).forEach(b => {
+                    const item = document.createElement('div');
+                    item.className = 'bot-item';
+                    item.onclick = () => focusBot(b.name);
+
+                    const actClass = (b.action || 'working').toLowerCase();
+                    item.innerHTML = `
+                        <div>
+                            <strong>${b.name}</strong>
+                            <div style="font-size:10px; color:#94a3b8;">${b.zone || 'Campus'} • ${b.squad}</div>
+                        </div>
+                        <span class="bot-badge ${actClass}">${b.action}</span>
+                    `;
+                    listEl.appendChild(item);
+                });
+            }
+        }
+
         // Auto-Spawn all 32 configured corporate bots into their home pods by default
         function autoSpawnCampusBots() {
             DEFAULT_CONFIGURED_BOTS.forEach(b => {
@@ -1349,21 +1390,17 @@
         }
         autoSpawnCampusBots();
 
-        // ==================== 12. WEBSOCKET REAL-TIME BRIDGE ====================
-        const wsIndicator = document.getElementById('ws-indicator');
-        const wsStatusText = document.getElementById('ws-status');
-        const botCountStat = document.getElementById('bot-count-stat');
-
+        // ==================== 13. WEBSOCKET REAL-TIME BRIDGE ====================
         function connectWebSocket() {
             const host = window.location.hostname || "127.0.0.1";
             const wsUrl = `ws://${host}:8765/ws`;
 
-            wsStatusText.innerText = `Connecting to ${wsUrl}...`;
+            if (wsStatusText) wsStatusText.innerText = `Connecting to ${wsUrl}...`;
             const ws = new WebSocket(wsUrl);
 
             ws.onopen = () => {
-                wsIndicator.className = "pulse-beacon online";
-                wsStatusText.innerText = "Synced with YDL Discord Swarm";
+                if (wsIndicator) wsIndicator.className = "pulse-beacon online";
+                if (wsStatusText) wsStatusText.innerText = "Synced with YDL Discord Swarm";
             };
 
             ws.onmessage = (event) => {
@@ -1418,8 +1455,8 @@
             };
 
             ws.onclose = () => {
-                wsIndicator.className = "pulse-beacon";
-                wsStatusText.innerText = "Bridge Disconnected. Retrying in 3s...";
+                if (wsIndicator) wsIndicator.className = "pulse-beacon";
+                if (wsStatusText) wsStatusText.innerText = "Bridge Disconnected. Retrying in 3s...";
                 setTimeout(connectWebSocket, 3000);
             };
 
@@ -1428,33 +1465,6 @@
             };
         }
         connectWebSocket();
-
-        // ==================== 13. UI ROSTER MANAGEMENT ====================
-        function updateRosterUI() {
-            const container = document.getElementById('bot-list-container');
-            const countText = document.getElementById('roster-count');
-            const totalCount = Object.keys(botAvatars).length;
-
-            countText.innerText = totalCount;
-            botCountStat.innerText = `${totalCount} Active Campus Bots`;
-
-            container.innerHTML = '';
-            Object.values(botAvatars).forEach(b => {
-                const item = document.createElement('div');
-                item.className = 'bot-item';
-                item.onclick = () => focusBot(b.name);
-
-                const actClass = (b.action || 'working').toLowerCase();
-                item.innerHTML = `
-                    <div>
-                        <strong>${b.name}</strong>
-                        <div style="font-size:10px; color:#94a3b8;">${b.zone || 'Campus'} • ${b.squad}</div>
-                    </div>
-                    <span class="bot-badge ${actClass}">${b.action}</span>
-                `;
-                container.appendChild(item);
-            });
-        }
 
         function focusBot(name) {
             const bot = botAvatars[name];
@@ -1483,7 +1493,10 @@
 
         function jumpCamera(preset) {
             document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
-            if (event && event.target) event.target.classList.add('active');
+            if (typeof window !== 'undefined' && window.event && window.event.target) {
+                const targetBtn = window.event.target.closest('.nav-btn') || window.event.target;
+                if (targetBtn && targetBtn.classList) targetBtn.classList.add('active');
+            }
 
             switch (preset) {
                 case 'overview':
@@ -1525,20 +1538,17 @@
 
             // Animate Voxel Props (Helicopter rotor, Fountain spray)
             animatedObjects.forEach(item => {
-                if (item.rotSpeed) {
+                if (item.rotSpeed && item.obj) {
                     item.obj.rotation.y += item.rotSpeed;
                 }
-                if (item.isFountain) {
-                    const pos = item.obj.geometry.attributes.position.array;
-                    for (let i = 1; i < pos.length; i += 3) {
-                        pos[i] += Math.sin(time * 4 + i) * 0.05;
-                    }
-                    item.obj.geometry.attributes.position.needsUpdate = true;
+                if (item.isFountain && item.obj) {
+                    item.obj.rotation.y += 0.012;
                 }
             });
 
             // Smooth Avatar Interpolation & Natural Bobbing
             Object.values(botAvatars).forEach(avatar => {
+                if (!avatar || !avatar.group || !avatar.targetPos) return;
                 const dist = avatar.group.position.distanceTo(avatar.targetPos);
                 if (dist > 0.15) {
                     avatar.group.position.lerp(avatar.targetPos, 0.04);
