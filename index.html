@@ -451,6 +451,14 @@
     <div id="canvas-container"></div>
 
     <script>
+        // Auto-focus window on DOMContentLoaded so player keyboard controls respond immediately
+        window.addEventListener('DOMContentLoaded', () => {
+            window.focus();
+        });
+        if (document.readyState === 'complete' || document.readyState === 'interactive') {
+            window.focus();
+        }
+
         // ==================== DOM ELEMENTS & UI REFERENCES ====================
         const canvasContainer = document.getElementById('canvas-container');
         const wsIndicator = document.getElementById('ws-indicator');
@@ -468,9 +476,9 @@
         // 45° Perspective Camera enables seamless zoom from close 3rd person to full campus overview & 1st person
         const camera = new THREE.PerspectiveCamera(45, aspect, 0.5, 3500);
 
-        // Initial camera position centered on player spawn at Central Plaza [0, 0.8, 50]
-        camera.position.set(45, 55, 95);
-        camera.lookAt(0, 2.5, 50);
+        // Initial camera position centered on player spawn on cobblestone walkway in front of fountain [0, 0.8, 68]
+        camera.position.set(45, 55, 113);
+        camera.lookAt(0, 2.5, 68);
 
         const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' });
         renderer.setSize(window.innerWidth, window.innerHeight);
@@ -491,7 +499,7 @@
         controls.minDistance = 6;               // Close 3rd-person over-shoulder view
         controls.maxDistance = 550;             // Full campus isometric overview
         controls.zoomSpeed = 1.0;
-        controls.target.set(0, 2.5, 50);
+        controls.target.set(0, 2.5, 68);
 
         // ==================== PROCEDURAL SOFT GROUND SHADOW ====================
         function createSoftShadowTexture() {
@@ -2419,13 +2427,13 @@
             const nametag = createPlayerNametag();
             group.add(nametag);
 
-            // Initial Spawn Position at Central Fountain Plaza [0, 0.8, 50]
-            group.position.set(0, 0.8, 50);
+            // Initial Spawn Position on open cobblestone walkway in front of Central Fountain [0, 0.8, 68]
+            group.position.set(0, 0.8, 68);
             scene.add(group);
 
             // Grounded Soft Shadow Disc for Player
             const shadow = createShadowMesh(3.8);
-            shadow.position.set(0, 0.04, 50);
+            shadow.position.set(0, 0.04, 68);
             scene.add(shadow);
 
             return {
@@ -2551,11 +2559,29 @@
 
         // ==================== 15. KEYBOARD INPUT & COLLISION LOGIC ====================
         const keysDown = {};
+
+        // Directly listen to keydown and keyup on window without requiring canvas click
         window.addEventListener('keydown', (e) => {
+            // Prevent default scroll behavior for Arrow keys and Space
+            if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code) ||
+                ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) {
+                e.preventDefault();
+            }
+
             keysDown[e.code] = true;
+            if (e.key) {
+                keysDown[e.key] = true;
+                keysDown[e.key.toLowerCase()] = true;
+                keysDown[e.key.toUpperCase()] = true;
+            }
 
             // Re-engage follower camera when player moves
-            if (['KeyW', 'KeyS', 'KeyA', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) {
+            const moveKeys = [
+                'KeyW', 'KeyS', 'KeyA', 'KeyD',
+                'w', 'W', 's', 'S', 'a', 'A', 'd', 'D',
+                'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'
+            ];
+            if (moveKeys.includes(e.code) || (e.key && moveKeys.includes(e.key))) {
                 if (!isFollowCamActive) {
                     isFollowCamActive = true;
                     if (camFollowBtn) {
@@ -2566,22 +2592,22 @@
             }
 
             // Hotkey 'V': Toggle First-Person / Third-Person View Mode
-            if (e.code === 'KeyV') {
+            if (e.code === 'KeyV' || (e.key && e.key.toLowerCase() === 'v')) {
                 toggleViewMode();
             }
 
             // Hotkey 'P': Toggle Follow Camera
-            if (e.code === 'KeyP') {
+            if (e.code === 'KeyP' || (e.key && e.key.toLowerCase() === 'p')) {
                 toggleCameraFollow();
             }
 
             // Hotkey 'F' or 'C': Focus Player
-            if (e.code === 'KeyF' || e.code === 'KeyC') {
+            if (['KeyF', 'KeyC'].includes(e.code) || (e.key && ['f', 'c'].includes(e.key.toLowerCase()))) {
                 focusPlayer();
             }
 
             // Hotkey 'E': Greet nearest dynamic bot
-            if (e.code === 'KeyE') {
+            if (e.code === 'KeyE' || (e.key && e.key.toLowerCase() === 'e')) {
                 if (nearestNearbyBot) {
                     triggerGreeting(nearestNearbyBot);
                 }
@@ -2590,14 +2616,25 @@
 
         window.addEventListener('keyup', (e) => {
             keysDown[e.code] = false;
+            if (e.key) {
+                keysDown[e.key] = false;
+                keysDown[e.key.toLowerCase()] = false;
+                keysDown[e.key.toUpperCase()] = false;
+            }
+        });
+
+        window.addEventListener('blur', () => {
+            for (const k in keysDown) {
+                keysDown[k] = false;
+            }
         });
 
         function checkBuildingCollision(x, z) {
             // Island perimeter borders
             if (x < -155 || x > 155 || z < -180 || z > 180) return true;
 
-            // Central fountain basin perimeter
-            if (Math.hypot(x - 0, z - 50) < 9.0) return true;
+            // Collision bounding boxes removed from Central Fountain water/basin
+            // so the player never gets trapped or stuck at spawn.
 
             // Check against building footprints
             for (const [key, b] of Object.entries(zones)) {
@@ -2625,6 +2662,62 @@
                 }
             }
             return false;
+        }
+
+        // Escape vector / penetration calculation: enables recovery if player somehow penetrates geometry
+        function getCollisionEscapeVector(x, z) {
+            let inCollision = false;
+            let escX = 0;
+            let escZ = 0;
+
+            // Island perimeter borders
+            if (x < -155) { escX += (-155 - x); inCollision = true; }
+            if (x > 155)  { escX += (155 - x);  inCollision = true; }
+            if (z < -180) { escZ += (-180 - z); inCollision = true; }
+            if (z > 180)  { escZ += (180 - z);  inCollision = true; }
+
+            // Building collisions (excluding fountain)
+            for (const [key, b] of Object.entries(zones)) {
+                if (!b.isBuilding && !b.isPod) continue;
+
+                const halfW = b.w / 2;
+                const halfD = b.d / 2;
+                const minX = b.x - halfW - 0.6;
+                const maxX = b.x + halfW + 0.6;
+                const minZ = b.z - halfD - 0.6;
+                const maxZ = b.z + halfD + 0.6;
+
+                if (x >= minX && x <= maxX && z >= minZ && z <= maxZ) {
+                    // Check open front entryway
+                    const isDoorX = Math.abs(x - b.x) < 3.2;
+                    const isFrontZ = Math.abs(z - (b.z + halfD)) < 1.4;
+                    if (isDoorX && isFrontZ) continue;
+
+                    // Inside interior floor
+                    if (x > b.x - halfW + 1.2 && x < b.x + halfW - 1.2 && z > b.z - halfD + 1.2 && z < b.z + halfD - 0.6) {
+                        continue;
+                    }
+
+                    inCollision = true;
+
+                    // Compute distance to push out across the 4 bounding box sides
+                    const pushLeft = minX - x;
+                    const pushRight = maxX - x;
+                    const pushBack = minZ - z;
+                    const pushForward = maxZ - z;
+
+                    const bestX = Math.abs(pushLeft) < Math.abs(pushRight) ? pushLeft : pushRight;
+                    const bestZ = Math.abs(pushBack) < Math.abs(pushForward) ? pushBack : pushForward;
+
+                    if (Math.abs(bestX) < Math.abs(bestZ)) {
+                        escX += bestX;
+                    } else {
+                        escZ += bestZ;
+                    }
+                }
+            }
+
+            return { inCollision, escX, escZ };
         }
 
         // ==================== 16. CAMERA CONTROLLER, VIEW MODES & PRESETS ====================
@@ -2708,6 +2801,7 @@
 
         // Pointer Drag / Mouse Free-Look Listeners
         renderer.domElement.addEventListener('pointerdown', (e) => {
+            window.focus();
             isMouseDown = true;
             prevMouseX = e.clientX;
             prevMouseY = e.clientY;
@@ -2930,15 +3024,23 @@
 
             // ==================== PLAYER INTERACTIVE MOVEMENT & ANIMATION ====================
             const dt = Math.min(delta, 0.05);
-            const isShift = keysDown['ShiftLeft'] || keysDown['ShiftRight'];
+            const isShift = keysDown['ShiftLeft'] || keysDown['ShiftRight'] || keysDown['Shift'] || keysDown['shift'];
             const curSpeed = (isShift ? 52.0 : 30.0) * dt;
 
             let moveX = 0;
             let moveZ = 0;
-            if (keysDown['KeyW'] || keysDown['ArrowUp']) moveZ -= 1;
-            if (keysDown['KeyS'] || keysDown['ArrowDown']) moveZ += 1;
-            if (keysDown['KeyA'] || keysDown['ArrowLeft']) moveX -= 1;
-            if (keysDown['KeyD'] || keysDown['ArrowRight']) moveX += 1;
+            if (keysDown['KeyW'] || keysDown['w'] || keysDown['W'] || keysDown['ArrowUp']) moveZ -= 1;
+            if (keysDown['KeyS'] || keysDown['s'] || keysDown['S'] || keysDown['ArrowDown']) moveZ += 1;
+            if (keysDown['KeyA'] || keysDown['a'] || keysDown['A'] || keysDown['ArrowLeft']) moveX -= 1;
+            if (keysDown['KeyD'] || keysDown['d'] || keysDown['D'] || keysDown['ArrowRight']) moveX += 1;
+
+            // Island boundary clamp
+            player.group.position.x = Math.max(-155, Math.min(155, player.group.position.x));
+            player.group.position.z = Math.max(-180, Math.min(180, player.group.position.z));
+
+            const curX = player.group.position.x;
+            const curZ = player.group.position.z;
+            const curColl = getCollisionEscapeVector(curX, curZ);
 
             if (moveX !== 0 || moveZ !== 0) {
                 player.isMoving = true;
@@ -2987,15 +3089,29 @@
                     player.group.rotation.y += diff * 0.22;
                 }
 
-                // Independent X and Z collision detection (smooth wall sliding)
-                const newX = player.group.position.x + dirX;
-                const newZ = player.group.position.z + dirZ;
+                // Independent X and Z collision detection with escape vector fallback
+                const newX = curX + dirX;
+                const newZ = curZ + dirZ;
 
-                if (!checkBuildingCollision(newX, player.group.position.z)) {
-                    player.group.position.x = newX;
-                }
-                if (!checkBuildingCollision(player.group.position.x, newZ)) {
-                    player.group.position.z = newZ;
+                if (curColl.inCollision) {
+                    // Safety / Recovery Mode: Player is inside a collision boundary.
+                    // Allow movement towards free space instead of being completely locked!
+                    const testX = getCollisionEscapeVector(newX, curZ);
+                    if (!testX.inCollision || Math.abs(testX.escX) <= Math.abs(curColl.escX) || (dirX * curColl.escX > 0)) {
+                        player.group.position.x = newX;
+                    }
+                    const testZ = getCollisionEscapeVector(player.group.position.x, newZ);
+                    if (!testZ.inCollision || Math.abs(testZ.escZ) <= Math.abs(curColl.escZ) || (dirZ * curColl.escZ > 0)) {
+                        player.group.position.z = newZ;
+                    }
+                } else {
+                    // Standard smooth wall sliding
+                    if (!checkBuildingCollision(newX, player.group.position.z)) {
+                        player.group.position.x = newX;
+                    }
+                    if (!checkBuildingCollision(player.group.position.x, newZ)) {
+                        player.group.position.z = newZ;
+                    }
                 }
 
                 // Leg & Arm walking swings
@@ -3019,6 +3135,21 @@
                 }
                 player.group.position.y = 0.8 + Math.sin(time * 2.5) * 0.04;
             }
+
+            // Passive escape vector nudge: if player intersects an obstacle, gently push toward free space
+            const postColl = getCollisionEscapeVector(player.group.position.x, player.group.position.z);
+            if (postColl.inCollision) {
+                const escLen = Math.hypot(postColl.escX, postColl.escZ);
+                if (escLen > 0.001) {
+                    const nudge = Math.min(escLen, 12.0 * dt);
+                    player.group.position.x += (postColl.escX / escLen) * nudge;
+                    player.group.position.z += (postColl.escZ / escLen) * nudge;
+                }
+            }
+
+            // Final island boundary clamp
+            player.group.position.x = Math.max(-155, Math.min(155, player.group.position.x));
+            player.group.position.z = Math.max(-180, Math.min(180, player.group.position.z));
 
             // Grounded Soft Shadow Disc update
             if (player.shadow) {
