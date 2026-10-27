@@ -57,6 +57,10 @@ from scheduler_service import (
     get_ceo_channel,
 )
 from voice_service import VoiceService
+from groq_service import GroqService
+from image_service import ImageService
+from telegram_service import TelegramAlertService
+from database_service import DatabaseService
 
 
 # Configure logging
@@ -78,6 +82,12 @@ class VaelkryBotClient(discord.Client):
         super().__init__(*args, **kwargs)
         self.agent_config = agent_config
         self.orchestrator = orchestrator
+
+        # Attach direct service shortcuts for bot instances
+        self.groq_service = orchestrator.groq_service
+        self.image_service = orchestrator.image_service
+        self.telegram_service = orchestrator.telegram_service
+        self.database_service = orchestrator.database_service
 
         # Attach CommandTree to TTF Vasan for corporate slash commands
         if agent_config.key == "ttf_vasan":
@@ -1010,6 +1020,102 @@ class VaelkryBotClient(discord.Client):
                         ephemeral=True,
                     )
 
+        @self.tree.command(
+            name="imagine",
+            description="Generates visual assets, UI mockups, and artwork using Pollinations AI (Flux/Turbo)",
+        )
+        @app_commands.describe(
+            prompt="Visual prompt describing the UI mockup, graphic, or scene to generate",
+            model="Pollinations model engine (flux, turbo, pollinations-large)",
+        )
+        @app_commands.choices(
+            model=[
+                app_commands.Choice(name="Flux (Default - High Quality)", value="flux"),
+                app_commands.Choice(name="Turbo (Ultra-Fast)", value="turbo"),
+                app_commands.Choice(name="Pollinations Large", value="pollinations-large"),
+            ]
+        )
+        async def imagine_slash(
+            interaction: discord.Interaction,
+            prompt: str,
+            model: Optional[app_commands.Choice[str]] = None,
+        ):
+            await interaction.response.defer(ephemeral=False)
+            model_val = model.value if model else "flux"
+            author_name = interaction.user.display_name
+            embed = self.orchestrator.image_service.create_image_embed(
+                prompt=prompt,
+                author_name=author_name,
+                squad_name="Vaelkry Creative Studio",
+                model=model_val,
+            )
+            await interaction.followup.send(embed=embed)
+
+        @self.tree.command(
+            name="speed_chat",
+            description="Ultra-fast sub-second AI inference powered by Groq Llama 3.3 70B",
+        )
+        @app_commands.describe(
+            prompt="Prompt or query for sub-second Llama 3.3 70B analysis",
+        )
+        async def speed_chat_slash(
+            interaction: discord.Interaction,
+            prompt: str,
+        ):
+            await interaction.response.defer(ephemeral=False)
+            t_start = asyncio.get_event_loop().time()
+            sys_prompt = (
+                "You are the Vaelkry Dev Labs High-Speed AI Engine. "
+                "Deliver sharp, hyper-intelligent, and technically flawless answers with zero fluff. "
+                "Format using concise technical markdown."
+            )
+            response = await self.orchestrator.groq_service.generate_response(
+                system_prompt=sys_prompt,
+                user_message=prompt,
+                model="llama-3.3-70b-versatile",
+                max_tokens=600,
+            )
+            t_elapsed = asyncio.get_event_loop().time() - t_start
+
+            if not response:
+                response = "⚡ *(Groq API unavailable or rate-limited. Falling back to core AI...)*"
+
+            embed = discord.Embed(
+                title="⚡ Vaelkry Speed Engine | Groq Llama 3.3 70B",
+                description=response,
+                color=0xF55036,
+            )
+            embed.set_author(
+                name=interaction.user.display_name,
+                icon_url=interaction.user.display_avatar.url if interaction.user.display_avatar else None,
+            )
+            embed.set_footer(
+                text=f"Model: llama-3.3-70b-versatile • Latency: {t_elapsed:.2f}s • Vaelkry Ultra-Fast AI"
+            )
+            await interaction.followup.send(embed=embed)
+
+        @self.tree.command(
+            name="telemetry_test",
+            description="Dispatches a live verification telemetry ping from Discord directly to Telegram",
+        )
+        async def telemetry_test_slash(interaction: discord.Interaction):
+            await interaction.response.defer(ephemeral=False)
+            author = interaction.user.display_name
+            ok, msg = await self.orchestrator.telegram_service.send_test_dispatch(user_name=author)
+
+            embed = discord.Embed(
+                title="🛰️ Vaelkry Dev Labs | Telegram Telemetry Bridge",
+                description=(
+                    f"**Result:** {'✅ **SUCCESS**' if ok else '⚠️ **ATTENTION NEEDED**'}\n\n"
+                    f"{msg}\n\n"
+                    f"• **Channel:** Telegram Executive Feed\n"
+                    f"• **Dispatcher:** `TelegramAlertService` (Autonomous Core)"
+                ),
+                color=discord.Color.green() if ok else discord.Color.orange(),
+            )
+            embed.set_footer(text="Vaelkry Dev Labs Autonomous Telemetry Suite")
+            await interaction.followup.send(embed=embed)
+
     async def on_ready(self):
         logger.info(
             f"Agent '{self.agent_config.name}' connected as {self.user} (ID: {self.user.id})"
@@ -1141,6 +1247,10 @@ class AgentOrchestrator:
         self.scheduler_service = CompanyScheduler(self)
         self.casual_player_service = CasualPlayerService(self)
         self.voice_service = VoiceService(self)
+        self.groq_service = GroqService()
+        self.image_service = ImageService()
+        self.telegram_service = TelegramAlertService()
+        self.database_service = DatabaseService()
         self.clients: Dict[str, VaelkryBotClient] = {}
         self.bot_user_ids: Dict[int, str] = {}
         self.bot_mentions: Dict[str, str] = {}
@@ -1169,6 +1279,7 @@ class AgentOrchestrator:
             logger.warning(f"Timeout waiting for bots: {missing}. Proceeding with available bots.")
 
         lead = self.clients.get("sadie") or self.clients.get("ttf_vasan")
+        guild_obj = None
         if lead:
             guild_obj = lead.get_guild(self.config.guild_id)
             if guild_obj:
@@ -1176,6 +1287,20 @@ class AgentOrchestrator:
                 asyncio.create_task(sync_server_category_layout(guild_obj))
                 asyncio.create_task(ensure_enterprise_roles(guild_obj, self.clients))
                 self.start_autonomous_labs_loop(guild_obj)
+
+        # Dispatch startup telemetry alert to Telegram
+        try:
+            active_squad_keys = list(SQUADS.keys())
+            asyncio.create_task(
+                self.telegram_service.send_startup_alert(
+                    bot_count=len(self.clients),
+                    active_squads=active_squad_keys,
+                    guild_name=guild_obj.name if guild_obj else "Vaelkry Dev Labs",
+                    guild_id=self.config.guild_id,
+                )
+            )
+        except Exception as t_err:
+            logger.debug(f"Could not dispatch startup Telegram alert: {t_err}")
 
     async def execute_blueprint_reset_flow(self, guild: discord.Guild, send_fn):
         if self.setup_lock.locked():
@@ -2162,6 +2287,10 @@ async def main():
         close_tasks = [client.close() for client, _ in bot_instances if not client.is_closed()]
         if close_tasks:
             await asyncio.gather(*close_tasks, return_exceptions=True)
+        try:
+            await orchestrator.telegram_service.close()
+        except Exception:
+            pass
         logger.info("All Vaelkry Dev Labs bot clients closed cleanly.")
 
 
