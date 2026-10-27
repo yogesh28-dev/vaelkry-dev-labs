@@ -1,17 +1,13 @@
 """
 Vaelkry Dev Labs - Multi-Agent Enterprise Discord System
-Main Entry Point orchestrating 7 concurrent Discord bot clients:
-- 5 Developer Agents: TTF Vasan, Pradeep Ranganathan, Mamitha, Kayadu, Muthazhagi
-- 2 Executive Moderator Agents: SadieSink, MillieBobbyBrown
-
-Features:
-1. CEO Handwritten Blueprint Server Reset & Rebuild (/reset_and_build_server)
-2. Dynamic Team Category Scaling (/teamcategory)
-3. Company Lifecycle & 24h IST Shift Routine Scheduler (/start & /stop)
-4. Event Audit Logging into #full-logs (MillieBobbyBrown)
-5. Enterprise Onboarding & Greeting into #greeting (SadieSink)
-6. Dynamic Executive Voice Escort (/follow & /unfollow)
-7. 5-Agent Tanglish AI Project Tech Sprints (!project)
+Main Entry Point orchestrating 32 concurrent Discord bot clients across 6 squads:
+- Team Vaasan (5 Devs)
+- Team Vijay (5 Devs)
+- Team Messi (5 Devs)
+- Team Dhoni (5 Devs)
+- Team Elon (5 Titans)
+- Team Tony (5 Legends)
+- Executive Suite: SadieSink (CEO), MillieBobbyBrown (COO)
 """
 
 import asyncio
@@ -144,7 +140,6 @@ class VaelkryBotClient(discord.Client):
 
             await interaction.response.defer()
             status_embed = self.orchestrator.scheduler_service.get_status_embed(interaction.guild)
-            # Route status log embed strictly to CEO channel (yogesh-chat)
             await self.orchestrator.scheduler_service.notify_ceo_channel(interaction.guild, embed=status_embed)
             ceo_ch = get_ceo_channel(interaction.guild)
             ceo_mention = ceo_ch.mention if ceo_ch else f"#{CEO_NOTIFICATION_CHANNEL_NAME}"
@@ -244,7 +239,7 @@ class VaelkryBotClient(discord.Client):
 
         @self.tree.command(
             name="provision_roles",
-            description="Provisions and synchronizes all 8 enterprise corporate roles (CEO/Admin only)",
+            description="Provisions and synchronizes all enterprise corporate roles (CEO/Admin only)",
         )
         async def provision_roles_slash(interaction: discord.Interaction):
             if not interaction.guild:
@@ -500,6 +495,8 @@ class VaelkryBotClient(discord.Client):
                 "team_vijay": ("Team Vijay", "vijay", discord.Color.gold()),
                 "team_messi": ("Team Messi", "messi", discord.Color.from_rgb(0, 168, 255)),
                 "team_dhoni": ("Team Dhoni", "dhoni", discord.Color.from_rgb(255, 204, 0)),
+                "team_elon": ("Team Elon", "elon", discord.Color.purple()),
+                "team_tony": ("Team Tony", "tony", discord.Color.red()),
             }
             team_display, lead_key, team_color = team_map.get(
                 target_team, ("Team Vaasan", "ttf_vasan", discord.Color.brand_green())
@@ -536,7 +533,6 @@ class VaelkryBotClient(discord.Client):
                 text=delegation_text,
             )
 
-            import datetime
             confirm_embed = discord.Embed(
                 title="🎯 Smart Squad Task Delegated!",
                 description=(
@@ -579,7 +575,6 @@ class VaelkryBotClient(discord.Client):
             await interaction.response.defer()
             category, channels, role = await spawn_new_squad(interaction.guild, team_name, lead_name)
             ch_list = "\n".join(f"• {c.mention} (`{c.name}`)" for c in channels)
-            import datetime
             embed = discord.Embed(
                 title=f"⚡ New Squad Spawned: {category.name}!",
                 description=(
@@ -683,7 +678,7 @@ class VaelkryBotClient(discord.Client):
                 self.orchestrator.casual_player_service.run_autonomous_zone_chatter(interaction.guild, zone=chosen_zone)
             )
 
-        # ==================== BIDIRECTIONAL REAL-TIME AI VOICE ENGINE COMMANDS ====================
+        # ==================== VOICE ENGINE COMMANDS ====================
 
         @self.tree.command(
             name="voice_speak",
@@ -717,6 +712,16 @@ class VaelkryBotClient(discord.Client):
                 app_commands.Choice(name="⚔️ Jadeja (Sharp Fielding Hunter +2Hz)", value="jadeja"),
                 app_commands.Choice(name="🕶️ Hardik (High Swagger All-Rounder +4Hz)", value="hardik"),
                 app_commands.Choice(name="🕺 Neymar (Flashy Samba Motion +3Hz)", value="neymar"),
+                app_commands.Choice(name="🚀 Elon Musk (Sharp Technologist)", value="elon"),
+                app_commands.Choice(name="🔥 MrBeast (Hyper High Energy)", value="mrbeast"),
+                app_commands.Choice(name="🍏 Steve Jobs (Laser Minimalist Vision)", value="steve_jobs"),
+                app_commands.Choice(name="💻 Bill Gates (Calculated Strategic Intel)", value="bill_gates"),
+                app_commands.Choice(name="🕵️ Kevin Mitnick (Ghost Cyber Precision)", value="kevin_mitnick"),
+                app_commands.Choice(name="🦾 Tony Stark (Genius Billionaire Swagger)", value="tony"),
+                app_commands.Choice(name="🎬 Tom Cruise (Unstoppable Adrenaline)", value="tom_cruise"),
+                app_commands.Choice(name="🕶️ Brad Pitt (Effortless Hollywood Cool)", value="brad_pitt"),
+                app_commands.Choice(name="🏴‍☠️ Johnny Depp (Charismatic Maverick Rebel)", value="johnny_depp"),
+                app_commands.Choice(name="⚗️ Walter White (Methodical Chemistry Genius)", value="walter_white"),
             ]
         )
         async def voice_speak_slash(interaction: discord.Interaction, character: str, text: str):
@@ -785,8 +790,8 @@ class VaelkryBotClient(discord.Client):
                 return
 
             vc = voice_state.channel
-            first_bot = bot_a or random.choice(["ttf_vasan", "vijay", "messi", "dhoni"])
-            second_bot = bot_b or random.choice(["pradeep", "sivakarthikeyan", "ronaldo", "virat"])
+            first_bot = bot_a or random.choice(["ttf_vasan", "vijay", "messi", "dhoni", "elon", "tony"])
+            second_bot = bot_b or random.choice(["pradeep", "sivakarthikeyan", "ronaldo", "virat", "mrbeast", "walter_white"])
             if first_bot == second_bot:
                 second_bot = "sivakarthikeyan" if first_bot != "sivakarthikeyan" else "ttf_vasan"
 
@@ -843,7 +848,7 @@ class VaelkryBotClient(discord.Client):
                     title="🎙️ Bidirectional AI Voice Engine Active",
                     description=f"✅ Listening to human speech in `{vc.name}`!\n\n"
                                 f"• Speak naturally in English, Tanglish, or Tamil.\n"
-                                f"• Say a bot's name (e.g. *\"Hey Vasan\"*, *\"Vijay bro\"*, *\"Pradeep review this\"*) to address them specifically.\n"
+                                f"• Say a bot's name to address them specifically.\n"
                                 f"• Context is forwarded to Gemini AI, and the bot will reply aloud in **under 2 seconds**!\n"
                                 f"• Run `/voice_stop` or `!vcstop` at any time to disconnect listening.",
                     color=0x9B59B6,
@@ -875,44 +880,6 @@ class VaelkryBotClient(discord.Client):
                 await interaction.response.send_message("⚠️ You are not in a voice channel.")
 
         @self.tree.command(
-            name="voice_profiles",
-            description="Displays all 22 authentic female and male neural voice presets (pitch, speed, tone)",
-        )
-        async def voice_profiles_slash(interaction: discord.Interaction):
-            embed = discord.Embed(
-                title="🎙️ Vaelkry Dev Labs - Neural Voice Catalog",
-                description="All 32 bot personas across 6 engineering squads configured with authentic Microsoft Edge-TTS / Azure neural voices, custom pitch offsets, and dynamic speed rates:",
-                color=0x3498DB,
-            )
-
-            female_lines = []
-            for k, prof in CHARACTER_VOICES.items():
-                if prof.get("gender") == "female":
-                    female_lines.append(
-                        f"• **{prof['name']}**: `{prof['voice']}` (Pitch: `{prof['pitch']}`, Rate: `{prof['rate']}`) — *{prof['tone']}*"
-                    )
-            embed.add_field(
-                name="👩 Authentic Female Bot Voices",
-                value="\n".join(female_lines),
-                inline=False,
-            )
-
-            male_lines = []
-            for k, prof in CHARACTER_VOICES.items():
-                if prof.get("gender") == "male":
-                    male_lines.append(
-                        f"• **{prof['name']}**: `{prof['voice']}` (Pitch: `{prof['pitch']}`, Rate: `{prof['rate']}`) — *{prof['tone']}*"
-                    )
-            embed.add_field(
-                name="👨 Authentic Male Bot Voices",
-                value="\n".join(male_lines),
-                inline=False,
-            )
-
-            embed.set_footer(text="Zero-bloat streaming • Sub-2s latency • Dynamic pitch/rate modulation")
-            await interaction.response.send_message(embed=embed)
-
-        @self.tree.command(
             name="wake_all_vc",
             description="Wakes all 32 bots, moves them to target VC (or Tech Cafe), undeafens/unmutes them & overrides sleep",
         )
@@ -937,7 +904,6 @@ class VaelkryBotClient(discord.Client):
 
             await interaction.response.defer()
 
-            # If user did not provide target_channel, check if user is currently in a VC
             dest_vc = target_channel
             if not dest_vc:
                 vstate = getattr(mem, "voice", None)
@@ -949,7 +915,6 @@ class VaelkryBotClient(discord.Client):
                 target_vc=dest_vc,
             )
 
-            # Ensure voice listener is actively listening so TTF Vasan and team can hear speech and execute tasks
             if hasattr(self.orchestrator, "voice_service") and self.orchestrator.voice_service:
                 try:
                     self.orchestrator.voice_service.start_listening_in_channel(resolved_vc)
@@ -959,16 +924,16 @@ class VaelkryBotClient(discord.Client):
             embed = discord.Embed(
                 title="⚡ Master VC Wakeup & Override Activated",
                 description=(
-                    f"**Successfully initiated staggered gathering of {count}/22 bots into `{resolved_vc.name}`!**\n\n"
+                    f"**Successfully initiated staggered gathering of {count}/32 bots into `{resolved_vc.name}`!**\n\n"
                     f"• **Human Jitter:** Bots filtering into voice with realistic **1s to 10s staggered delays**.\n"
                     f"• **Voice State:** Strictly set to `mute=False, deafen=False` (undeafened & unmuted).\n"
-                    f"• **TTF Vasan & Squad:** Actively present in voice channel, listening and ready for tasks.\n"
+                    f"• **Squads:** Team Vaasan, Team Vijay, Team Messi, Team Dhoni, Team Elon, Team Tony online!\n"
                     f"• **Sleep Override:** `ACTIVE` (scheduler will preserve bots awake and active in this VC).\n"
                     f"• **Ready for Voice:** Speak to any bot using `/voice_speak` or chat via `/voice_listen`!"
                 ),
                 color=0xF1C40F,
             )
-            embed.set_footer(text="Vaelkry Dev Labs Master Voice Override • All 22 Bots Online")
+            embed.set_footer(text="Vaelkry Dev Labs Master Voice Override • All 32 Bots Online")
             await interaction.followup.send(embed=embed)
 
         @self.tree.command(
@@ -1018,7 +983,7 @@ class VaelkryBotClient(discord.Client):
                         f"✅ **Daily delegations successfully dispatched to {count}/6 engineering squads!**\n\n"
                         "• **Directives Issued:** Business strategy, pricing targets ($ ARR), and sprint priorities (Sadie Sink, CEO).\n"
                         "• **Technical Specs:** Architecture guidelines, >= 90% test coverage, and PR deadlines (Millie Bobby Brown, COO).\n"
-                        "• **Channels Tagged:** #working-chat across Team Vaasan, Team Vijay, Team Messi, Team Dhoni, Team Elon, Team Tony.\n"
+                        "• **Channels Tagged:** #working-chat across all squads.\n"
                         "• **Status:** Squad leads and devs actively acknowledging and estimating delivery in their respective channels."
                     ),
                     color=discord.Color.gold(),
@@ -1051,7 +1016,6 @@ class VaelkryBotClient(discord.Client):
         )
         self.orchestrator.register_ready_bot(self.agent_config.key, self)
 
-        # Sync TTF Vasan slash commands to the target guild for instant availability
         if self.agent_config.key == "ttf_vasan" and hasattr(self, "tree"):
             try:
                 guild_obj = discord.Object(id=self.orchestrator.config.guild_id)
@@ -1064,7 +1028,6 @@ class VaelkryBotClient(discord.Client):
             except Exception as exc:
                 logger.error(f"Failed to sync slash commands for TTF Vasan: {exc}")
 
-        # Auto-join voice immediately upon login during work shifts (especially Team Vijay)
         target_guild = self.get_guild(self.orchestrator.config.guild_id)
         if not target_guild:
             try:
@@ -1080,7 +1043,6 @@ class VaelkryBotClient(discord.Client):
                     self.agent_config.key, self, target_guild
                 )
             )
-            # Ensure 24/7 autonomous background chatter loop is running
             self.orchestrator.casual_player_service.ensure_autonomous_chatting_loop()
 
     async def on_message(self, message: discord.Message):
@@ -1111,13 +1073,11 @@ class VaelkryBotClient(discord.Client):
     async def on_voice_state_update(self, member: discord.Member, before: discord.VoiceState, after: discord.VoiceState):
         if self.agent_config.key == "millie":
             await self.orchestrator.moderator_service.log_voice_update(member, before, after)
-        # Handle 24/7 instant patrol trigger, follower tracking, and sleep room mute/deaf sync
         if self.agent_config.key == "sadie":
             await self.orchestrator.moderator_service.handle_voice_state_patrol_trigger(member, before, after)
             await self.orchestrator.moderator_service.handle_follower_voice_update(member, before, after)
             await self.orchestrator.moderator_service.sync_moderator_voice_state(member, after)
 
-        # Immediate Ceo Vc Eviction: If any bot other than Sadie and Millie is inside Ceo Vc, evict instantly!
         if member.bot and after.channel:
             from scheduler_service import is_ceo_vc, EXECUTIVE_BOT_KEYS, _normalize_bot_key
             if is_ceo_vc(after.channel):
@@ -1132,11 +1092,9 @@ class VaelkryBotClient(discord.Client):
                         self.orchestrator.scheduler_service.evict_unauthorized_bots_from_ceo_vc(member.guild)
                     )
 
-        # Responsive Live Mic Listening: dynamically listen when humans enter/leave VC
         if self.agent_config.key == "ttf_vasan":
             self.orchestrator.voice_service.handle_voice_state_update(member, before, after)
 
-        # Force Undeafen & Unmute for our bots in Tech Cafe or Working VCs
         if self.user and member.id == self.user.id and after.channel:
             ch_name = after.channel.name.lower()
             cat_name = after.channel.category.name.lower() if after.channel.category else ""
@@ -1200,7 +1158,7 @@ class AgentOrchestrator:
             self.bot_mentions[agent_key] = client.user.mention
         self.ready_events[agent_key].set()
 
-    async def wait_until_all_ready(self, timeout: float = 35.0):
+    async def wait_until_all_ready(self, timeout: float = 40.0):
         logger.info(f"Waiting for all {len(self.ready_events)} bots to connect to Discord gateway...")
         tasks = [event.wait() for event in self.ready_events.values()]
         try:
@@ -1210,18 +1168,14 @@ class AgentOrchestrator:
             missing = [k for k, ev in self.ready_events.items() if not ev.is_set()]
             logger.warning(f"Timeout waiting for bots: {missing}. Proceeding with available bots.")
 
-        # Launch floor-patrol background routine for SadieSink & MillieBobbyBrown
         lead = self.clients.get("sadie") or self.clients.get("ttf_vasan")
         if lead:
             guild_obj = lead.get_guild(self.config.guild_id)
             if guild_obj:
                 self.moderator_service.start_patrol_loop(guild_obj)
-                # Automatically enforce strict category layout order and sync all enterprise roles on startup
                 asyncio.create_task(sync_server_category_layout(guild_obj))
                 asyncio.create_task(ensure_enterprise_roles(guild_obj, self.clients))
                 self.start_autonomous_labs_loop(guild_obj)
-
-    # ==================== SERVER RESET & BLUEPRINT FLOW ====================
 
     async def execute_blueprint_reset_flow(self, guild: discord.Guild, send_fn):
         if self.setup_lock.locked():
@@ -1236,13 +1190,9 @@ class AgentOrchestrator:
                     self.config.project_channel_id = launchpad.id
                     logger.info(f"Updated PROJECT_CHANNEL_ID to {launchpad.id} ({launchpad.name})")
 
-                # Re-provision enterprise corporate roles
                 await ensure_enterprise_roles(guild, self.clients)
-
                 summary_text = format_blueprint_directory(hierarchy, launchpad)
 
-                # Send completion notice strictly to CEO channel (#yogesh-chat / ID: 1563622902744481812)
-                # Keep #announcements strictly clean for official CEO manual announcements only
                 ceo_ch = get_ceo_channel(guild)
                 if ceo_ch:
                     try:
@@ -1250,7 +1200,6 @@ class AgentOrchestrator:
                     except Exception as exc:
                         logger.warning(f"Failed to post blueprint summary to CEO channel #{ceo_ch.name}: {exc}")
 
-                # Also respond to interaction
                 try:
                     await send_fn(summary_text)
                 except Exception:
@@ -1263,8 +1212,6 @@ class AgentOrchestrator:
                     await send_fn(f"⚠️ **Error resetting server structure:** `{exc}`")
                 except Exception:
                     pass
-
-    # ==================== DYNAMIC TEAM CATEGORY FLOW ====================
 
     async def execute_team_category_flow(self, guild: discord.Guild, team_name: str, send_fn):
         clean_name = team_name.strip().title()
@@ -1289,25 +1236,19 @@ class AgentOrchestrator:
             logger.exception(f"Error provisioning team category: {exc}")
             await send_fn(f"⚠️ **Error provisioning team category:** `{exc}`")
 
-    # ==================== AI-TO-AI AUTONOMOUS PROJECTS ====================
-
     async def run_autonomous_project_cycle(self, guild: discord.Guild) -> Optional[dict]:
-        """
-        AI-to-AI Autonomous Projects:
-        Triggers when no client tasks are active:
-        1. Squad members in their respective working chats brainstorm small open-source utilities or UI boilerplate ideas.
-        2. Generate modular boilerplate code drafts and post a prototype announcement into #the-launchpad.
-        """
         if self.discussion_lock.locked():
             logger.info("Client project sprint active. Skipping autonomous sprint cycle.")
             return None
 
-        team = random.choice(["team_vasan", "team_vijay", "team_messi", "team_dhoni"])
+        team = random.choice(["team_vasan", "team_vijay", "team_messi", "team_dhoni", "team_elon", "team_tony"])
         team_cat_map = {
             "team_vasan": "Team Vaasan",
             "team_vijay": "Team Vijay",
             "team_messi": "Team Messi",
             "team_dhoni": "Team Dhoni",
+            "team_elon": "Team Elon",
+            "team_tony": "Team Tony",
         }
         team_cat_name = team_cat_map.get(team, "Team Vaasan")
         team_cat = discord.utils.find(lambda c: c.name.strip().lower() == team_cat_name.lower(), guild.categories)
@@ -1321,7 +1262,6 @@ class AgentOrchestrator:
         if not working_ch:
             return None
 
-        # 1. Squad members in working chat brainstorm small open-source utilities
         brainstorm_prompt = build_autonomous_project_brainstorm_prompt(team)
         try:
             brainstorm_raw = await self.gemini_service.generate_response(
@@ -1341,7 +1281,6 @@ class AgentOrchestrator:
         except Exception as b_exc:
             logger.warning(f"Error during autonomous brainstorm dialogue: {b_exc}")
 
-        # 2. Select open-source utility idea
         project_concepts = [
             ("Vaelkry Micro-Auth", "Next.js 15, FastAPI, Redis, JWT", "Zero-config stateless authentication with automated refresh-token rotation"),
             ("Vaelkry GlassUI Kit", "Flutter 3.x, Dart, Glassmorphism", "High-performance modular glassmorphism widget library with fluid motion dynamics"),
@@ -1350,7 +1289,6 @@ class AgentOrchestrator:
         ]
         p_name, p_stack, p_desc = random.choice(project_concepts)
 
-        # 3. Generate modular boilerplate code drafts and prototype announcement
         announcement_prompt = build_autonomous_prototype_announcement_prompt(
             project_name=p_name,
             tech_stack=p_stack,
@@ -1366,7 +1304,6 @@ class AgentOrchestrator:
             logger.error(f"Failed to generate autonomous prototype: {g_exc}")
             return None
 
-        # 4. Post into #the-launchpad
         launchpad = discord.utils.find(
             lambda c: "launchpad" in c.name.lower(),
             guild.text_channels,
@@ -1394,7 +1331,6 @@ class AgentOrchestrator:
         return {"project": p_name, "team": team_cat_name, "channel": launchpad.name}
 
     def start_autonomous_labs_loop(self, guild: discord.Guild):
-        """Starts the autonomous idle project background routine."""
         if hasattr(self, "_autonomous_task") and self._autonomous_task and not self._autonomous_task.done():
             return
 
@@ -1420,12 +1356,9 @@ class AgentOrchestrator:
         if message.author.bot or message.author.id in self.bot_user_ids:
             return
 
-        # 0. Selective contextual reaction emojis (20-30% organic chance)
         if listener_client.agent_config.key == "ttf_vasan":
             asyncio.create_task(self.casual_player_service.handle_contextual_reaction(message))
 
-        # 1. Interactive Discord Player Mentions & Direct Replies
-        # Allows all dev bots (TTF Vasan, Pradeep, Mamitha, Kayadu, Muthazhagi) to casually reply
         if (
             not message.mention_everyone
             and listener_client.user
@@ -1437,14 +1370,11 @@ class AgentOrchestrator:
             await self.casual_player_service.handle_mention_reply(listener_client, message)
             return
 
-        # Ensure only TTF Vasan handles commands
         if listener_client.agent_config.key != "ttf_vasan":
             return
 
         content = message.content.strip()
 
-        # 2. Late-Night & Cafeteria User Chat / @everyone Trigger Support:
-        # When a user types in #cafeteria or pings @everyone, 1-2 random awake bots reply back naturally
         ch_name = getattr(message.channel, "name", "").lower()
         is_cafeteria = ch_name in ("cafeteria", "common-pantry", "pantry")
         is_everyone_ping = message.mention_everyone
@@ -1455,7 +1385,6 @@ class AgentOrchestrator:
             )
             return
 
-        # Prefix command: !start
         if content.startswith("!start"):
             if not message.guild:
                 return
@@ -1467,7 +1396,6 @@ class AgentOrchestrator:
             await message.channel.send(msg)
             return
 
-        # Prefix command: !stop
         if content.startswith("!stop"):
             if not message.guild:
                 return
@@ -1479,7 +1407,6 @@ class AgentOrchestrator:
             await message.channel.send(msg)
             return
 
-        # Prefix command: !status
         if content.startswith("!status"):
             if not message.guild:
                 return
@@ -1493,7 +1420,6 @@ class AgentOrchestrator:
             )
             return
 
-        # Prefix command: !reset_and_build_server
         if content.startswith("!reset_and_build_server"):
             if not message.guild:
                 return
@@ -1504,7 +1430,6 @@ class AgentOrchestrator:
             await self.execute_blueprint_reset_flow(message.guild, message.channel.send)
             return
 
-        # Prefix command: !teamcategory <team_name>
         if content.startswith("!teamcategory"):
             if not message.guild:
                 return
@@ -1519,7 +1444,6 @@ class AgentOrchestrator:
             await self.execute_team_category_flow(message.guild, parts[1].strip(), message.channel.send)
             return
 
-        # Prefix command: !follow
         if content.startswith("!follow"):
             if not message.guild:
                 return
@@ -1531,14 +1455,12 @@ class AgentOrchestrator:
             await message.channel.send(msg)
             return
 
-        # Prefix command: !unfollow
         if content.startswith("!unfollow"):
             msg = await self.moderator_service.stop_following(message.guild)
             await message.channel.send(msg)
             return
 
-        # Prefix command: !dispatch [squad_name or 'all']
-        if content.startswith("!dispatch") or content.startswith("!executivedispatch"):
+        if content.startswith(("!dispatch", "!executivedispatch")):
             if not message.guild:
                 return
             member = message.guild.get_member(message.author.id) or message.author
@@ -1562,7 +1484,6 @@ class AgentOrchestrator:
                     await message.channel.send(f"⚠️ Could not dispatch directive to `{target_squad}`. Check squad name and channel accessibility.")
             return
 
-        # Prefix command: !idcard [member]
         if content.startswith("!idcard"):
             if not message.guild:
                 return
@@ -1571,7 +1492,6 @@ class AgentOrchestrator:
             await message.channel.send(embed=id_embed)
             return
 
-        # Prefix command: !provision_roles
         if content.startswith("!provision_roles"):
             if not message.guild:
                 return
@@ -1588,7 +1508,6 @@ class AgentOrchestrator:
             )
             return
 
-        # Prefix command: !sync_layout, !synclayout
         if content.startswith(("!sync_layout", "!synclayout")):
             if not message.guild:
                 return
@@ -1609,7 +1528,6 @@ class AgentOrchestrator:
             )
             return
 
-        # Prefix commands: !coffee, !chai, !break
         if content.startswith(("!coffee", "!chai", "!break")):
             if not message.guild:
                 return
@@ -1624,7 +1542,6 @@ class AgentOrchestrator:
             )
             return
 
-        # Prefix command: !pantrydebate [topic]
         if content.startswith("!pantrydebate"):
             if not message.guild:
                 return
@@ -1642,7 +1559,6 @@ class AgentOrchestrator:
             )
             return
 
-        # Prefix command: !watercooler, !snack
         if content.startswith(("!watercooler", "!snack")):
             if not message.guild:
                 return
@@ -1650,14 +1566,12 @@ class AgentOrchestrator:
             await self.cafeteria_service.post_watercooler_snack(cafeteria_ch)
             return
 
-        # Casual Player Chat Command: !chat <character> <message>
         if content.startswith("!chat"):
             parts = content.split(maxsplit=2)
             if len(parts) < 3:
                 await message.channel.send(
                     "⚠️ Usage: `!chat <character> <message>`\n"
-                    "Characters: `messi`, `ronaldo`, `neymar`, `haaland`, `mbappe`, `dhoni`, `virat`, `rohit`, `jadeja`, `hardik`, "
-                    "`vijay`, `sivakarthikeyan`, `anirudh`, `trisha`, `lokesh`, `vasan`, `pradeep`, `mamitha`"
+                    "Characters: `elon`, `tony`, `mrbeast`, `steve_jobs`, `bill_gates`, `kevin_mitnick`, `tom_cruise`, `brad_pitt`, `johnny_depp`, `walter_white`, `messi`, `ronaldo`, `dhoni`, `virat`, `vijay`, `sivakarthikeyan`, `vasan`"
                 )
                 return
             char_key = parts[1].lower()
@@ -1672,12 +1586,13 @@ class AgentOrchestrator:
             )
             return
 
-        # Fast character shortcuts for all squads
         fast_shortcuts = (
             "!v ", "!sk ", "!ani ", "!trisha ", "!loki ",
             "!messi ", "!cr7 ", "!ronaldo ", "!neymar ", "!haaland ", "!mbappe ",
             "!dhoni ", "!msd ", "!virat ", "!vk ", "!rohit ", "!hitman ", "!jaddu ", "!jadeja ", "!hardik ",
-            "!vasan ", "!pradeep ", "!mamitha ", "!kayadu ", "!muthu "
+            "!vasan ", "!pradeep ", "!mamitha ", "!kayadu ", "!muthu ",
+            "!elon ", "!mrbeast ", "!jobs ", "!gates ", "!mitnick ",
+            "!tony ", "!cruise ", "!pitt ", "!depp ", "!walt "
         )
         if content.startswith(fast_shortcuts):
             prefix, msg_text = content.split(maxsplit=1)
@@ -1707,6 +1622,16 @@ class AgentOrchestrator:
                 "!mamitha": "mamitha",
                 "!kayadu": "kayadu",
                 "!muthu": "muthazhagi",
+                "!elon": "elon",
+                "!mrbeast": "mrbeast",
+                "!jobs": "steve_jobs",
+                "!gates": "bill_gates",
+                "!mitnick": "kevin_mitnick",
+                "!tony": "tony",
+                "!cruise": "tom_cruise",
+                "!pitt": "brad_pitt",
+                "!depp": "johnny_depp",
+                "!walt": "walter_white",
             }
             char_key = char_map.get(prefix.lower(), "vijay")
             asyncio.create_task(
@@ -1719,7 +1644,6 @@ class AgentOrchestrator:
             )
             return
 
-        # Casual Player Roast Command: !roast [character] <target>
         if content.startswith("!roast"):
             parts = content.split(maxsplit=2)
             if len(parts) < 2:
@@ -1744,7 +1668,6 @@ class AgentOrchestrator:
             )
             return
 
-        # Mini Banter Command: !banter [topic]
         if content.startswith("!banter"):
             topic = content[len("!banter"):].strip() or "tabs vs spaces and deploy logic"
             await message.channel.send(f"⚔️ **Community Banter initiated on: '{topic}'**")
@@ -1756,7 +1679,6 @@ class AgentOrchestrator:
             )
             return
 
-        # Squad Clash Command: !clash [topic]
         if content.startswith(("!clash", "!teamclash")):
             topic_str = content.split(maxsplit=1)[1].strip() if len(content.split(maxsplit=1)) > 1 else "299 speed vs clean logic and deploy war"
             await message.channel.send(f"⚔️ **TEAM VASAN VS TEAM VIJAY ROAST CLASH ON: '{topic_str}'!** 🔥")
@@ -1768,7 +1690,6 @@ class AgentOrchestrator:
             )
             return
 
-        # Late-Night Banter Command: !nightchatter, !night_chatter
         if content.startswith(("!nightchatter", "!night_chatter")):
             if not message.guild:
                 return
@@ -1778,7 +1699,6 @@ class AgentOrchestrator:
             )
             return
 
-        # 3-Zone Autonomous Banter Command: !zonechatter, !zone_chatter [work|cafe|night]
         if content.startswith(("!zonechatter", "!zone_chatter")):
             if not message.guild:
                 return
@@ -1802,7 +1722,6 @@ class AgentOrchestrator:
 
         # ==================== VOICE ENGINE TEXT COMMANDS ====================
 
-        # Voice Speech: !speak <bot> <text> or !say <bot> <text>
         if content.startswith(("!speak", "!say")):
             parts = content.split(maxsplit=2)
             if len(parts) < 3:
@@ -1829,7 +1748,6 @@ class AgentOrchestrator:
             await message.channel.send(f"🔊 **{prof['name']}** speaking in `{voice_state.channel.name}`: *\"{text_arg}\"*")
             return
 
-        # Voice Banter: !vcbanter [bot_a] [bot_b] [topic]
         if content.startswith(("!vcbanter", "!voicebanter")):
             mem = message.guild.get_member(message.author.id) if message.guild else message.author
             voice_state = getattr(mem, "voice", None)
@@ -1860,7 +1778,6 @@ class AgentOrchestrator:
             )
             return
 
-        # Voice Listen: !vclisten (Start Real-Time Human Speech Recognition & Sub-2s AI Reply)
         if content.startswith(("!vclisten", "!voicerecv")):
             mem = message.guild.get_member(message.author.id) if message.guild else message.author
             voice_state = getattr(mem, "voice", None)
@@ -1874,7 +1791,7 @@ class AgentOrchestrator:
                 await message.channel.send(
                     f"🎙️ **Bidirectional AI Voice Engine Active in `{vc.name}`!**\n"
                     f"• Listening to human speech in real-time.\n"
-                    f"• Address any bot by name (*\"Hey Vasan\"*, *\"Vijay bro\"*, *\"Pradeep review this\"*) or speak naturally.\n"
+                    f"• Address any bot by name or speak naturally.\n"
                     f"• Continuous voice responses delivered in **under 2 seconds**!\n"
                     f"• Type `!vcstop` to stop listening."
                 )
@@ -1882,7 +1799,6 @@ class AgentOrchestrator:
                 await message.channel.send("⚠️ Could not activate voice listening in this channel.")
             return
 
-        # Voice Stop: !vcstop
         if content.startswith(("!vcstop", "!vcdisconnect")):
             mem = message.guild.get_member(message.author.id) if message.guild else message.author
             voice_state = getattr(mem, "voice", None)
@@ -1894,11 +1810,10 @@ class AgentOrchestrator:
                 await message.channel.send("⚠️ You are not in a voice channel.")
             return
 
-        # Voice Profiles Catalog: !voices
         if content.startswith("!voices"):
             embed = discord.Embed(
                 title="🎙️ Vaelkry Dev Labs - Neural Voice Catalog",
-                description="All 22 bot personas configured with authentic Microsoft Edge-TTS / Azure neural voices, custom pitch offsets, and dynamic speed rates:",
+                description="All 32 bot personas configured with authentic Microsoft Edge-TTS neural voices:",
                 color=0x3498DB,
             )
             females = [
@@ -1915,7 +1830,6 @@ class AgentOrchestrator:
             await message.channel.send(embed=embed)
             return
 
-        # Master VC Wakeup & Override Command: !wakevc [optional_channel_name] or !unmuteall
         if content.startswith(("!wakevc", "!unmuteall", "!wake_all_vc", "!wakeall")):
             if not message.guild:
                 return
@@ -1944,7 +1858,6 @@ class AgentOrchestrator:
                 target_vc=target_vc,
             )
 
-            # Ensure voice listener is actively listening so TTF Vasan and team can hear speech and execute tasks
             if hasattr(self, "voice_service") and self.voice_service:
                 try:
                     self.voice_service.start_listening_in_channel(resolved_vc)
@@ -1954,7 +1867,7 @@ class AgentOrchestrator:
             embed = discord.Embed(
                 title="⚡ Master VC Wakeup & Override Activated",
                 description=(
-                    f"**Successfully initiated staggered gathering of {count}/22 bots into `{resolved_vc.name}`!**\n\n"
+                    f"**Successfully initiated staggered gathering of {count}/32 bots into `{resolved_vc.name}`!**\n\n"
                     f"• **Human Jitter:** Bots filtering into voice with realistic **1s to 10s staggered delays**.\n"
                     f"• **Voice State:** All bots explicitly **unmuted & undeafened** (`mute=False, deafen=False`).\n"
                     f"• **Sleep Override:** `ACTIVE` (scheduler will preserve bots awake and active in this VC).\n"
@@ -1962,12 +1875,10 @@ class AgentOrchestrator:
                 ),
                 color=0xF1C40F,
             )
-            embed.set_footer(text="Vaelkry Dev Labs Master Voice Override • All 22 Bots Online")
+            embed.set_footer(text="Vaelkry Dev Labs Master Voice Override • All 32 Bots Online")
             await message.channel.send(embed=embed)
             return
 
-
-        # AI Sprint Command: !project <idea>
         if content.startswith("!project"):
             ch_name = getattr(message.channel, "name", "").lower()
             is_valid_project_ch = (
@@ -1998,13 +1909,12 @@ class AgentOrchestrator:
             asyncio.create_task(self.run_project_discussion_chain(message, idea))
             return
 
-        # Prefix command: !delegate_task <domain> <task>, !delegate
         if content.startswith(("!delegate_task", "!delegate")):
             if not message.guild:
                 return
             parts = content.split(maxsplit=2)
             if len(parts) < 3:
-                await message.channel.send("⚠️ Usage: `!delegate_task <domain> <task description>` (e.g. `!delegate_task mobile Flutter glassmorphic drawer`)")
+                await message.channel.send("⚠️ Usage: `!delegate_task <domain> <task description>`")
                 return
             domain_arg = parts[1].strip()
             task_arg = parts[2].strip()
@@ -2057,7 +1967,6 @@ class AgentOrchestrator:
             await message.channel.send(embed=confirm_embed)
             return
 
-        # Prefix command: !spawn_squad <team_name> <lead_name>
         if content.startswith("!spawn_squad"):
             if not message.guild:
                 return
@@ -2090,7 +1999,6 @@ class AgentOrchestrator:
             await message.channel.send(embed=embed)
             return
 
-        # Prefix command: !executive_dashboard, !dashboard
         if content.startswith(("!executive_dashboard", "!dashboard")):
             if not message.guild:
                 return
@@ -2099,7 +2007,6 @@ class AgentOrchestrator:
             await message.channel.send(content=msg, embed=dashboard_embed)
             return
 
-        # Prefix command: !movie_hangout, !hangout
         if content.startswith(("!movie_hangout", "!hangout")):
             if not message.guild:
                 return
@@ -2107,7 +2014,6 @@ class AgentOrchestrator:
             await message.channel.send(msg)
             return
 
-        # Prefix command: !autonomous_sprint, !autonomous
         if content.startswith(("!autonomous_sprint", "!autonomous")):
             if not message.guild:
                 return
@@ -2128,41 +2034,10 @@ class AgentOrchestrator:
             "• `/start` (or `!start`): Start company operations & activate 24h IST shift scheduler.\n"
             "• `/stop` (or `!stop`): Pause operations & disconnect bots from voice.\n"
             "• `/status` (or `!status`): Generate live TTF Vasan status logs routed to #yogesh-chat.\n"
-            "• `/reset_and_build_server` (or `!reset_and_build_server`): Build CEO Handwritten Blueprint.\n"
-            "• `/sync_layout` (or `!sync_layout`): Enforce strict category hierarchy & clean duplicate voice channels.\n"
-            "• `/delegate_task <domain> <task>` (or `!delegate_task`): Smart task routing to Team Vaasan or Team Vijay.\n"
-            "• `/spawn_squad <team> <lead>` (or `!spawn_squad`): Dynamic squad scaling above Night Spend.\n"
-            "• `/executive_dashboard` (or `!dashboard`): Dispatch executive audit dashboard to #managers-space & #yogesh-chat.\n"
-            "• `/movie_hangout` (or `!movie_hangout`): Move 2-3 dev bots into The Hangout Zone for a movie party.\n"
-            "• `/autonomous_sprint` (or `!autonomous_sprint`): Trigger AI-to-AI prototype launch in #the-launchpad.\n"
-            "• `/teamcategory <name>` (or `!teamcategory <name>`): Dynamically scale a new team category.\n"
-            "• `/follow` (or `!follow`): SadieSink & MillieBobbyBrown escort CEO in voice.\n"
-            "• `/unfollow` (or `!unfollow`): Disengage executive voice escort.\n"
-            "• `!project <tech idea>`: Launch full 5-agent Tanglish architecture sprint.\n\n"
-            "🪪 **Enterprise Identity & Roles:**\n"
-            "• `/idcard [member]` (or `!idcard`): View your or another employee's Digital Corporate ID Card.\n"
-            "• `/provision_roles` (or `!provision_roles`): Provision and sync all 8 enterprise roles.\n\n"
-            "☕ **Common Pantry & Cafeteria (#cafeteria):**\n"
-            "• `/coffee` (or `!coffee`, `!chai`, `!break`): Launch a fun 5-agent Tanglish coffee/chai break banter.\n"
-            "• `/pantrydebate [topic]` (or `!pantrydebate`): Start an interactive debate with 🅰️ vs 🅱️ voting.\n"
-            "• `/watercooler` (or `!watercooler`): Post daily pantry snack special & workplace trivia.\n"
-            "• `/night_chatter` (or `!nightchatter`): Late-Night Banter with 2-4 sneaky bots in #cafeteria during Night Spend.\n\n"
-            "💬 **Real Discord Player Chat & Roasts:**\n"
-            "• `/chat <character> <message>` (or `!chat`): Chat casually in Tanglish with Vijay, SK, Anirudh, Trisha, etc.\n"
-            "• `/roast <target> [character]` (or `!roast`): Drop a savage Tanglish roast on a teammate or code.\n"
-            "• `/banter [topic]` (or `!banter`): Launch a 4-line mini banter battle between community characters.\n"
-            "• `/clash [topic]` (or `!clash`): Full Team Vasan vs Team Vijay witty roast battle.\n"
-            "• Shortcuts: `!v <msg>`, `!sk <msg>`, `!ani <msg>`, `!trisha <msg>`, `!loki <msg>`.\n"
-            "• Direct mentions: Tag any bot (`@TTF Vasan`, `@Pradeep`, `@SadieSink`, etc.) for an instant comeback!\n"
-            "• Cafeteria chatter: Type in `#cafeteria` or ping `@everyone` for natural instant bot replies!\n\n"
-            "**Squad Leadership:**\n"
-            "• 🏍️ **TTF Vasan**: Team Lead & Hype Commander\n"
-            "• 🧠 **Pradeep Ranganathan**: Tech Lead & Solutions Architect\n"
-            "• 🎨 **Mamitha**: UI/UX Designer\n"
-            "• ⚙️ **Kayadu**: DevOps & Backend Lead\n"
-            "• 🛡️ **Muthazhagi**: QA & Security Lead\n"
-            "• 🌟 **SadieSink**: Executive Moderation & Onboarding Desk\n"
-            "• 📋 **MillieBobbyBrown**: Chief Audit Officer & Log Custodian\n"
+            "• `/reset_and_build_server`: Build CEO Handwritten Blueprint.\n"
+            "• `/sync_layout`: Enforce strict category hierarchy & clean duplicate voice channels.\n"
+            "• `!wakevc`: Gather all 32 bots to target VC unmuted & undeafened.\n"
+            "• `!project <tech idea>`: Launch full architecture sprint.\n"
         )
         await channel.send(help_text)
 
@@ -2241,7 +2116,7 @@ class AgentOrchestrator:
 
 
 async def main():
-    logger.info("Starting Vaelkry Dev Labs Multi-Agent System (Team Vaasan, Team Vijay & Executive Suite)...")
+    logger.info("Starting Vaelkry Dev Labs Multi-Agent System (All 6 Squads + Executive Suite)...")
 
     try:
         config = load_config()
@@ -2249,23 +2124,20 @@ async def main():
         logger.critical(f"Configuration error: {exc}")
         sys.exit(1)
 
-    # Initialize complete privileged intents for enterprise moderation & voice
+    # Privileged members intent omitted to avoid Discord PrivilegedIntentsRequired crash
     intents = discord.Intents.default()
     intents.message_content = True
     intents.guilds = True
-    intents.members = True
     intents.voice_states = True
 
     orchestrator = AgentOrchestrator(config)
 
-    # Instantiate all 7 bot clients
     bot_instances: List[tuple[VaelkryBotClient, str]] = []
     for key, agent_cfg in config.agents.items():
         client = VaelkryBotClient(agent_config=agent_cfg, orchestrator=orchestrator, intents=intents)
         orchestrator.clients[key] = client
         bot_instances.append((client, agent_cfg.token))
 
-    # Background connectivity watcher
     asyncio.create_task(orchestrator.wait_until_all_ready())
 
     try:
@@ -2277,17 +2149,15 @@ async def main():
         logger.exception(f"Unexpected runtime error in bot runner: {exc}")
     finally:
         logger.info("Closing all Discord bot clients...")
-        # Stop moderator floor-patrol loop
         orchestrator.moderator_service.stop_patrol_loop()
-
-        # Stop and cleanup voice engine
         orchestrator.voice_service.cleanup_all()
 
-        # Stop scheduler if running
         if orchestrator.scheduler_service.is_active:
-            guild_obj = orchestrator.clients["ttf_vasan"].get_guild(config.guild_id)
-            if guild_obj:
-                await orchestrator.scheduler_service.stop(guild_obj)
+            lead = orchestrator.clients.get("ttf_vasan")
+            if lead:
+                guild_obj = lead.get_guild(config.guild_id)
+                if guild_obj:
+                    await orchestrator.scheduler_service.stop(guild_obj)
 
         close_tasks = [client.close() for client, _ in bot_instances if not client.is_closed()]
         if close_tasks:
