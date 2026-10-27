@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Yogesh Dev Labs (YDL) - 3D Autonomous Campus</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            overflow: hidden;
+            background: #070913;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        #canvas-container {
+            width: 100vw;
+            height: 100vh;
+            display: block;
+        }
+
+        #hud {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(13, 17, 23, 0.85);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(56, 189, 248, 0.3);
+            border-radius: 12px;
+            padding: 16px 22px;
+            color: #f8fafc;
+            z-index: 10;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+        }
+
+        #hud h1 {
+            font-size: 18px;
+            color: #38bdf8;
+            letter-spacing: 1px;
+            margin-bottom: 6px;
+        }
+
+        #hud p {
+            font-size: 13px;
+            color: #94a3b8;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .indicator {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #ef4444;
+            display: inline-block;
+        }
+
+        .indicator.online {
+            background: #10b981;
+            box-shadow: 0 0 10px #10b981;
+        }
+
+        #legend {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(13, 17, 23, 0.85);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 12px 18px;
+            color: #cbd5e1;
+            font-size: 12px;
+            z-index: 10;
+            display: flex;
+            gap: 16px;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .legend-box {
+            width: 12px;
+            height: 12px;
+            border-radius: 3px;
+        }
+    </style>
+    <!-- Three.js & OrbitControls CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+</head>
+
+<body>
+    <div id="hud">
+        <h1>🏢 YOGESH DEV LABS (YDL)</h1>
+        <p><span id="status-indicator" class="indicator"></span> <span id="status-text">Connecting to Visual
+                Bridge...</span></p>
+    </div>
+
+    <div id="legend">
+        <div class="legend-item">
+            <div class="legend-box" style="background:#3b82f6;"></div> Team Rooms
+        </div>
+        <div class="legend-item">
+            <div class="legend-box" style="background:#f59e0b;"></div> Food Court
+        </div>
+        <div class="legend-item">
+            <div class="legend-box" style="background:#10b981;"></div> Mega Gym
+        </div>
+        <div class="legend-item">
+            <div class="legend-box" style="background:#8b5cf6;"></div> Sports Turf
+        </div>
+        <div class="legend-item">
+            <div class="legend-box" style="background:#ec4899;"></div> CEO Suite
+        </div>
+    </div>
+
+    <div id="canvas-container"></div>
+
+    <script>
+        // 1. Scene, Camera, & Isometric Setup
+        const container = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x080c16);
+
+        const aspect = window.innerWidth / window.innerHeight;
+        const d = 55;
+        const camera = new THREE.OrthographicCamera(-d * aspect, d * aspect, d, -d, 1, 1000);
+        camera.position.set(60, 60, 60);
+        camera.lookAt(0, 0, 0);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        container.appendChild(renderer.domElement);
+
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.maxPolarAngle = Math.PI / 2.2;
+
+        // 2. Realistic Lighting
+        const ambient = new THREE.AmbientLight(0xffffff, 0.65);
+        scene.add(ambient);
+
+        const sun = new THREE.DirectionalLight(0xfff5e6, 0.9);
+        sun.position.set(80, 100, 50);
+        sun.castShadow = true;
+        sun.shadow.mapSize.width = 2048;
+        sun.shadow.mapSize.height = 2048;
+        scene.add(sun);
+
+        // 3. Ground Base
+        const groundGeo = new THREE.PlaneGeometry(140, 140);
+        const groundMat = new THREE.MeshLambertMaterial({ color: 0x111827 });
+        const ground = new THREE.Mesh(groundGeo, groundMat);
+        ground.rotation.x = -Math.PI / 2;
+        ground.receiveShadow = true;
+        scene.add(ground);
+
+        // Grid overlay
+        const grid = new THREE.GridHelper(140, 28, 0x1e293b, 0x1e293b);
+        grid.position.y = 0.05;
+        scene.add(grid);
+
+        // 4. Campus Zones Definition (From YDL Layout)
+        const zones = {
+            "CEO_SUITE": { x: 0, z: -35, w: 28, d: 14, h: 4, color: 0xec4899, name: "CEO Suite" },
+            "TEAM_VASAN": { x: -38, z: -18, w: 16, d: 12, h: 3, color: 0x3b82f6, name: "Team Vasan" },
+            "TEAM_VIJAY": { x: -19, z: -18, w: 16, d: 12, h: 3, color: 0x3b82f6, name: "Team Vijay" },
+            "TEAM_MESSI": { x: 19, z: -18, w: 16, d: 12, h: 3, color: 0x3b82f6, name: "Team Messi" },
+            "TEAM_DHONI": { x: 38, z: -18, w: 16, d: 12, h: 3, color: 0x3b82f6, name: "Team Dhoni" },
+            "MEGA_GYM": { x: -35, z: 8, w: 22, d: 16, h: 3, color: 0x10b981, name: "Mega Gym" },
+            "FOOD_COURT": { x: 18, z: 8, w: 16, d: 14, h: 3, color: 0xf59e0b, name: "Food Court" },
+            "SPORTS_TURF": { x: -30, z: 34, w: 26, d: 18, h: 1, color: 0x8b5cf6, name: "Football Turf" },
+            "CRICKET_GROUND": { x: 0, z: 34, w: 20, d: 18, h: 1, color: 0x06b6d4, name: "Cricket Ground" },
+            "CENTRAL_FOUNTAIN": { x: 0, z: -2, w: 12, d: 12, h: 2, color: 0x38bdf8, name: "Central Plaza" }
+        };
+
+        // Render Zone Platforms
+        Object.entries(zones).forEach(([key, z]) => {
+            const geo = new THREE.BoxGeometry(z.w, z.h, z.d);
+            const mat = new THREE.MeshLambertMaterial({ color: z.color, transparent: true, opacity: 0.85 });
+            const mesh = new THREE.Mesh(geo, mat);
+            mesh.position.set(z.x, z.h / 2, z.z);
+            mesh.receiveShadow = true;
+            mesh.castShadow = true;
+            scene.add(mesh);
+
+            // Subtle border
+            const edges = new THREE.EdgesGeometry(geo);
+            const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0xffffff, linewidth: 1 }));
+            line.position.copy(mesh.position);
+            scene.add(line);
+        });
+
+        // 5. Bot Avatars Dynamic Management
+        const botAvatars = {};
+
+        function createBotAvatar(name) {
+            const botGroup = new THREE.Group();
+
+            // Blocky Character Body (Minecraft Style)
+            const bodyGeo = new THREE.BoxGeometry(1.4, 2.2, 1.0);
+            const bodyMat = new THREE.MeshLambertMaterial({ color: 0x60a5fa });
+            const body = new THREE.Mesh(bodyGeo, bodyMat);
+            body.position.y = 1.6;
+            body.castShadow = true;
+            botGroup.add(body);
+
+            // Head
+            const headGeo = new THREE.BoxGeometry(1.2, 1.2, 1.2);
+            const headMat = new THREE.MeshLambertMaterial({ color: 0xfde047 });
+            const head = new THREE.Mesh(headGeo, headMat);
+            head.position.y = 3.3;
+            head.castShadow = true;
+            botGroup.add(head);
+
+            scene.add(botGroup);
+            botAvatars[name] = { group: botGroup, targetPos: new THREE.Vector3(0, 0, -2) };
+            return botAvatars[name];
+        }
+
+        // 6. WebSocket Connection
+        const indicator = document.getElementById('status-indicator');
+        const statusText = document.getElementById('status-text');
+
+        function connectWebSocket() {
+            const ws = new WebSocket("ws://127.0.0.1:8765/ws");
+
+            ws.onopen = () => {
+                indicator.className = "indicator online";
+                statusText.innerText = "Synced with Vaelkry Bot Ecosystem (ws://127.0.0.1:8765)";
+            };
+
+            ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    const botName = data.bot;
+                    const zoneKey = data.target_zone;
+                    const targetZone = zones[zoneKey] || zones["CENTRAL_FOUNTAIN"];
+
+                    let avatar = botAvatars[botName] || createBotAvatar(botName);
+
+                    // Assign target position with random offset inside the room
+                    const offsetX = (Math.random() - 0.5) * (targetZone.w * 0.6);
+                    const offsetZ = (Math.random() - 0.5) * (targetZone.d * 0.6);
+                    avatar.targetPos.set(targetZone.x + offsetX, 0, targetZone.z + offsetZ);
+                } catch (e) {
+                    console.error("Payload error:", e);
+                }
+            };
+
+            ws.onclose = () => {
+                indicator.className = "indicator";
+                statusText.innerText = "Bridge Offline. Retrying in 3s...";
+                setTimeout(connectWebSocket, 3000);
+            };
+        }
+        connectWebSocket();
+
+        // 7. Render & Smooth Motion Loop
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+
+            // Smooth linear interpolation for avatars
+            Object.values(botAvatars).forEach(avatar => {
+                avatar.group.position.lerp(avatar.targetPos, 0.05);
+            });
+
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        window.addEventListener('resize', () => {
+            const aspect = window.innerWidth / window.innerHeight;
+            camera.left = -d * aspect;
+            camera.right = d * aspect;
+            camera.top = d;
+            camera.bottom = -d;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+
+</html>

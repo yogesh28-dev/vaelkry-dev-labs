@@ -61,6 +61,7 @@ from groq_service import GroqService
 from image_service import ImageService
 from telegram_service import TelegramAlertService
 from database_service import DatabaseService
+from visual_bridge import VisualBridgeServer
 
 
 # Configure logging
@@ -88,6 +89,7 @@ class VaelkryBotClient(discord.Client):
         self.image_service = orchestrator.image_service
         self.telegram_service = orchestrator.telegram_service
         self.database_service = orchestrator.database_service
+        self.visual_bridge = getattr(orchestrator, "visual_bridge", None)
 
         # Attach CommandTree to TTF Vasan for corporate slash commands
         if agent_config.key == "ttf_vasan":
@@ -1241,6 +1243,111 @@ class VaelkryBotClient(discord.Client):
                     except Exception as exc:
                         logger.debug(f"Could not enforce undeafen/unmute for {self.user.name}: {exc}")
 
+        # 3D Visual Bridge State Synchronization
+        if hasattr(self, "visual_bridge") and self.visual_bridge:
+            try:
+                before_ch = getattr(before, "channel", None)
+                after_ch = getattr(after, "channel", None)
+
+                # Determine target zone and action
+                if after_ch:
+                    ch_name = (getattr(after_ch, "name", "") or "").lower()
+                    cat_name = (getattr(after_ch.category, "name", "") or "").lower() if getattr(after_ch, "category", None) else ""
+                    combined = f"{cat_name} {ch_name}"
+
+                    if any(k in combined for k in ("ceo", "yogesh", "executive")):
+                        target_zone = "CEO_SUITE"
+                        action = "WORKING"
+                    elif any(k in combined for k in ("vaasan", "vasan")):
+                        target_zone = "TEAM_VASAN"
+                        action = "WORKING"
+                    elif "vijay" in combined:
+                        target_zone = "TEAM_VIJAY"
+                        action = "WORKING"
+                    elif "messi" in combined:
+                        target_zone = "TEAM_MESSI"
+                        action = "WORKING"
+                    elif "dhoni" in combined:
+                        target_zone = "TEAM_DHONI"
+                        action = "WORKING"
+                    elif any(k in combined for k in ("gym", "workout", "fitness", "turf", "sports")):
+                        target_zone = "MEGA_GYM"
+                        action = "RESTING"
+                    elif any(k in combined for k in ("food", "court", "cafeteria", "pantry", "cafe", "slide", "hive", "hangout", "lounge", "byte", "seven")):
+                        target_zone = "FOOD_COURT"
+                        action = "RESTING"
+                    elif any(k in combined for k in ("sleep", "night spend", "dorm", "night")):
+                        target_zone = "FOOD_COURT"
+                        action = "SLEEPING"
+                    else:
+                        target_zone = "TEAM_VASAN"
+                        action = "WORKING"
+                else:
+                    target_zone = "CENTRAL_FOUNTAIN"
+                    action = "IDLE"
+
+                # Determine squad
+                squad = getattr(member, "squad", None) or getattr(member, "team", None)
+                if not squad:
+                    bot_k = ""
+                    orch = getattr(self, "orchestrator", self)
+                    if hasattr(orch, "bot_user_ids"):
+                        bot_k = orch.bot_user_ids.get(getattr(member, "id", None), "")
+                    if not bot_k and hasattr(orch, "clients"):
+                        for k, cl in orch.clients.items():
+                            if cl.user and cl.user.id == getattr(member, "id", None):
+                                bot_k = k
+                                break
+                    if not bot_k:
+                        bot_k = (getattr(member, "name", "") or "").lower()
+
+                    if hasattr(orch, "config") and hasattr(orch.config, "agents"):
+                        agent_cfg = orch.config.agents.get(bot_k)
+                        if agent_cfg and hasattr(agent_cfg, "team") and agent_cfg.team:
+                            squad = agent_cfg.team
+
+                    if not squad:
+                        if bot_k in ("sadie", "millie") or "ceo" in bot_k:
+                            squad = "executives"
+                        elif any(k in bot_k for k in ("vasan", "pradeep", "mamitha", "kayadu", "muthazhagi")):
+                            squad = "team_vasan"
+                        elif any(k in bot_k for k in ("vijay", "siva", "anirudh", "trisha", "lokesh")):
+                            squad = "team_vijay"
+                        elif any(k in bot_k for k in ("messi", "ronaldo", "neymar", "haaland", "mbappe")):
+                            squad = "team_messi"
+                        elif any(k in bot_k for k in ("dhoni", "virat", "rohit", "jadeja", "hardik")):
+                            squad = "team_dhoni"
+                        elif target_zone in ("TEAM_VASAN", "TEAM_VIJAY", "TEAM_MESSI", "TEAM_DHONI"):
+                            squad = target_zone.lower()
+                        elif target_zone == "CEO_SUITE":
+                            squad = "executives"
+                        else:
+                            squad = "team_vasan"
+
+                # Deduplicate identical broadcast across concurrent calls within 0.3s
+                dedup_key = (
+                    getattr(member, "id", getattr(member, "display_name", None)),
+                    getattr(after_ch, "id", getattr(after_ch, "name", None)),
+                    action,
+                    target_zone,
+                )
+                now = asyncio.get_event_loop().time()
+                orch = getattr(self, "orchestrator", self)
+                last_map = getattr(orch, "_last_voice_broadcasts", None)
+                if last_map is None and hasattr(orch, "__dict__"):
+                    orch._last_voice_broadcasts = {}
+                    last_map = orch._last_voice_broadcasts
+
+                if last_map is not None:
+                    last_time = last_map.get(dedup_key, 0)
+                    if now - last_time < 0.3:
+                        return
+                    last_map[dedup_key] = now
+
+                await self.visual_bridge.broadcast_state(member.display_name, squad, action, target_zone)
+            except Exception as exc:
+                logger.debug(f"Error broadcasting visual bridge state: {exc}")
+
 
 class AgentOrchestrator:
     """
@@ -1263,6 +1370,7 @@ class AgentOrchestrator:
         self.image_service = ImageService()
         self.telegram_service = TelegramAlertService()
         self.database_service = DatabaseService()
+        self.visual_bridge = VisualBridgeServer(host="0.0.0.0", port=8765)
         self.clients: Dict[str, VaelkryBotClient] = {}
         self.bot_user_ids: Dict[int, str] = {}
         self.bot_mentions: Dict[str, str] = {}
@@ -1280,7 +1388,30 @@ class AgentOrchestrator:
             self.bot_mentions[agent_key] = client.user.mention
         self.ready_events[agent_key].set()
 
+    async def run(self):
+        """Starts the visual bridge background task and waits until all bots are ready."""
+        if not getattr(self, "_bridge_started", False):
+            self._bridge_started = True
+            asyncio.create_task(self.visual_bridge.start())
+        await self.wait_until_all_ready()
+
+    async def on_voice_state_update(self, member: discord.Member, before: discord.VoiceState, after: discord.VoiceState):
+        """Allows orchestrator-level voice state updates to dispatch to the visual bridge."""
+        lead = next(iter(self.clients.values()), None)
+        if lead and hasattr(lead, "on_voice_state_update"):
+            await lead.on_voice_state_update(member, before, after)
+        elif hasattr(self, "visual_bridge") and self.visual_bridge:
+            after_ch = getattr(after, "channel", None)
+            target_zone = "TEAM_VASAN" if after_ch else "CENTRAL_FOUNTAIN"
+            action = "WORKING" if after_ch else "IDLE"
+            squad = getattr(member, "squad", "team_vasan")
+            await self.visual_bridge.broadcast_state(member.display_name, squad, action, target_zone)
+
     async def wait_until_all_ready(self, timeout: float = 40.0):
+        if not getattr(self, "_bridge_started", False):
+            self._bridge_started = True
+            asyncio.create_task(self.visual_bridge.start())
+
         logger.info(f"Waiting for all {len(self.ready_events)} bots to connect to Discord gateway...")
         tasks = [event.wait() for event in self.ready_events.values()]
         try:
