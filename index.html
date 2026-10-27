@@ -385,16 +385,17 @@
         const botListContainer = document.getElementById('bot-list-container');
 
         // ==================== 1. THREE.JS ISOMETRIC SETUP ====================
+        // ==================== 1. THREE.JS ISOMETRIC SETUP ====================
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0x060913);
-        scene.fog = new THREE.FogExp2(0x060913, 0.0016);
+        scene.fog = new THREE.FogExp2(0x060913, 0.0012);
 
         const aspect = window.innerWidth / window.innerHeight;
-        const d = 98; // Camera frustum width
-        const camera = new THREE.OrthographicCamera(-d * aspect, d * aspect, d, -d, 1, 2500);
+        const d = 160; // Camera frustum width (optimally fits expanded 340-unit campus)
+        const camera = new THREE.OrthographicCamera(-d * aspect, d * aspect, d, -d, 1, 3500);
 
         // Classic isometric angle
-        camera.position.set(130, 140, 140);
+        camera.position.set(220, 240, 220);
         camera.lookAt(0, 0, 0);
 
         const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' });
@@ -412,63 +413,135 @@
         controls.enableDamping = true;
         controls.dampingFactor = 0.06;
         controls.maxPolarAngle = Math.PI / 2.15;
-        controls.minDistance = 25;
-        controls.maxDistance = 600;
+        controls.minDistance = 35;
+        controls.maxDistance = 800;
         controls.target.set(0, 0, 0);
 
         // ==================== 2. LIGHTING & ENVIRONMENT ====================
         const ambientLight = new THREE.AmbientLight(0xffffff, 0.70);
         scene.add(ambientLight);
 
-        // Main Sun Light (Warm daylight with crisp shadows)
-        const sun = new THREE.DirectionalLight(0xfff7ed, 1.0);
-        sun.position.set(130, 190, 95);
+        // Warm Minecraft Sunlight
+        const sun = new THREE.DirectionalLight(0xfffbeb, 1.15);
+        sun.position.set(160, 240, 130);
         sun.castShadow = true;
         sun.shadow.mapSize.width = 4096;
         sun.shadow.mapSize.height = 4096;
         sun.shadow.camera.near = 10;
-        sun.shadow.camera.far = 500;
-        sun.shadow.camera.left = -170;
-        sun.shadow.camera.right = 170;
-        sun.shadow.camera.top = 170;
-        sun.shadow.camera.bottom = -170;
-        sun.shadow.bias = -0.0004;
+        sun.shadow.camera.far = 800;
+        sun.shadow.camera.left = -220;
+        sun.shadow.camera.right = 220;
+        sun.shadow.camera.top = 220;
+        sun.shadow.camera.bottom = -220;
+        sun.shadow.bias = -0.0003;
         scene.add(sun);
 
-        // Soft Cyan Secondary Fill Light
-        const fillLight = new THREE.DirectionalLight(0x38bdf8, 0.4);
-        fillLight.position.set(-110, 80, -90);
+        // Sky Fill Light
+        const fillLight = new THREE.DirectionalLight(0x93c5fd, 0.40);
+        fillLight.position.set(-140, 90, -110);
         scene.add(fillLight);
 
-        // ==================== 3. GROUND BASE & ROADS ====================
-        const groundGeo = new THREE.PlaneGeometry(290, 270);
-        const groundMat = new THREE.MeshLambertMaterial({ color: 0x0f172a });
-        const ground = new THREE.Mesh(groundGeo, groundMat);
-        ground.rotation.x = -Math.PI / 2;
-        ground.receiveShadow = true;
-        scene.add(ground);
-
-        // Tech Grid Pattern
-        const grid = new THREE.GridHelper(290, 58, 0x1e293b, 0x1e293b);
-        grid.position.y = 0.05;
-        scene.add(grid);
-
-        // Perimeter Roads & Walkways
-        function createRoad(x, z, w, d) {
-            const geo = new THREE.PlaneGeometry(w, d);
-            const mat = new THREE.MeshLambertMaterial({ color: 0x1e293b });
-            const road = new THREE.Mesh(geo, mat);
-            road.rotation.x = -Math.PI / 2;
-            road.position.set(x, 0.08, z);
-            road.receiveShadow = true;
-            scene.add(road);
+        // ==================== 3. PROCEDURAL MINECRAFT VOXEL TEXTURES ====================
+        function createMinecraftGrassTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 64; canvas.height = 64;
+            const ctx = canvas.getContext('2d');
+            const colors = ['#558a2f', '#4d7c2a', '#5d9932', '#487527', '#629e34', '#52832b'];
+            for (let x = 0; x < 64; x += 4) {
+                for (let y = 0; y < 64; y += 4) {
+                    ctx.fillStyle = colors[Math.floor(Math.random() * colors.length)];
+                    ctx.fillRect(x, y, 4, 4);
+                }
+            }
+            return new THREE.CanvasTexture(canvas);
         }
-        createRoad(0, -56, 270, 4.5); // Top sector divider
-        createRoad(0, -2, 270, 4.5);  // Mid work divider
-        createRoad(0, 36, 270, 4.5);  // Sports arena divider
-        createRoad(0, 0, 4.5, 250);   // Grand central avenue
 
-        // ==================== 4. PROCEDURAL TEXTURE GENERATORS ====================
+        function createMinecraftDirtSideTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 64; canvas.height = 64;
+            const ctx = canvas.getContext('2d');
+            const dirtCols = ['#866043', '#734f35', '#67442d', '#916949', '#7e573a'];
+            for (let x = 0; x < 64; x += 4) {
+                for (let y = 0; y < 64; y += 4) {
+                    ctx.fillStyle = dirtCols[Math.floor(Math.random() * dirtCols.length)];
+                    ctx.fillRect(x, y, 4, 4);
+                }
+            }
+            // Green grass overhang fringe
+            const grassCols = ['#558a2f', '#4d7c2a', '#5d9932'];
+            for (let x = 0; x < 64; x += 4) {
+                const fringeLen = 8 + (x % 8 === 0 ? 8 : 4);
+                for (let y = 0; y < fringeLen; y += 4) {
+                    ctx.fillStyle = grassCols[Math.floor(Math.random() * grassCols.length)];
+                    ctx.fillRect(x, y, 4, 4);
+                }
+            }
+            return new THREE.CanvasTexture(canvas);
+        }
+
+        function createMinecraftCobblestoneTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 64; canvas.height = 64;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#404040';
+            ctx.fillRect(0, 0, 64, 64);
+            const stoneCols = ['#6b6b6b', '#7d7d7d', '#595959', '#858585', '#636363'];
+            for (let x = 2; x < 64; x += 8) {
+                for (let y = 2; y < 64; y += 8) {
+                    ctx.fillStyle = stoneCols[Math.floor(Math.random() * stoneCols.length)];
+                    ctx.fillRect(x, y, 6, 6);
+                }
+            }
+            return new THREE.CanvasTexture(canvas);
+        }
+
+        function createMinecraftOakPlanksTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 64; canvas.height = 64;
+            const ctx = canvas.getContext('2d');
+            const plankCols = ['#b8945f', '#a6824e', '#c4a26e', '#8f6c3b'];
+            for (let p = 0; p < 4; p++) {
+                ctx.fillStyle = plankCols[p % plankCols.length];
+                ctx.fillRect(0, p * 16, 64, 15);
+                ctx.fillStyle = '#5c4033';
+                ctx.fillRect(0, p * 16 + 15, 64, 1); // Dark seam
+            }
+            // Vertical seam divisions
+            ctx.fillStyle = '#5c4033';
+            ctx.fillRect(28, 0, 1, 15);
+            ctx.fillRect(44, 16, 1, 15);
+            ctx.fillRect(18, 32, 1, 15);
+            ctx.fillRect(36, 48, 1, 15);
+            return new THREE.CanvasTexture(canvas);
+        }
+
+        function createMinecraftGymTileTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 64; canvas.height = 64;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#0f172a';
+            ctx.fillRect(0, 0, 64, 64);
+            ctx.fillStyle = '#1e293b';
+            ctx.fillRect(0, 0, 32, 32);
+            ctx.fillRect(32, 32, 32, 32);
+            ctx.strokeStyle = '#334155';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(1, 1, 62, 62);
+            return new THREE.CanvasTexture(canvas);
+        }
+
+        function createMinecraftCheckerTileTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 64; canvas.height = 64;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#f8fafc';
+            ctx.fillRect(0, 0, 64, 64);
+            ctx.fillStyle = '#ea580c';
+            ctx.fillRect(0, 0, 32, 32);
+            ctx.fillRect(32, 32, 32, 32);
+            return new THREE.CanvasTexture(canvas);
+        }
+
         function createRunwayCanvas() {
             const canvas = document.createElement('canvas');
             canvas.width = 256; canvas.height = 512;
@@ -633,41 +706,132 @@
             return new THREE.CanvasTexture(canvas);
         }
 
-        // ==================== 5. MASTER CAMPUS ZONES DEFINITION ====================
+        // ==================== 4. MINECRAFT VOXEL GROUND & COBBLESTONE AVENUES ====================
+        const groundGroup = new THREE.Group();
+
+        // 3D Voxel Grass Block Island (330 wide, 380 deep, 6 units thick)
+        const islandW = 330;
+        const islandD = 380;
+        const islandH = 6;
+
+        const grassTopTex = createMinecraftGrassTexture();
+        grassTopTex.wrapS = THREE.RepeatWrapping;
+        grassTopTex.wrapT = THREE.RepeatWrapping;
+        grassTopTex.repeat.set(82, 95);
+
+        const dirtSideTex = createMinecraftDirtSideTexture();
+        dirtSideTex.wrapS = THREE.RepeatWrapping;
+        dirtSideTex.wrapT = THREE.RepeatWrapping;
+        dirtSideTex.repeat.set(40, 2);
+
+        const stoneUnderTex = createMinecraftCobblestoneTexture();
+        stoneUnderTex.wrapS = THREE.RepeatWrapping;
+        stoneUnderTex.wrapT = THREE.RepeatWrapping;
+        stoneUnderTex.repeat.set(40, 40);
+
+        const islandMaterials = [
+            new THREE.MeshLambertMaterial({ map: dirtSideTex }), // +X
+            new THREE.MeshLambertMaterial({ map: dirtSideTex }), // -X
+            new THREE.MeshLambertMaterial({ map: grassTopTex }),  // +Y (Top Grass)
+            new THREE.MeshLambertMaterial({ map: stoneUnderTex }), // -Y (Bottom)
+            new THREE.MeshLambertMaterial({ map: dirtSideTex }), // +Z
+            new THREE.MeshLambertMaterial({ map: dirtSideTex })  // -Z
+        ];
+
+        const islandGeo = new THREE.BoxGeometry(islandW, islandH, islandD);
+        const islandMesh = new THREE.Mesh(islandGeo, islandMaterials);
+        islandMesh.position.y = -islandH / 2; // Top surface at y = 0
+        islandMesh.receiveShadow = true;
+        groundGroup.add(islandMesh);
+
+        // Cobblestone Pathways & Grand Avenues
+        const cobbleTex = createMinecraftCobblestoneTexture();
+        cobbleTex.wrapS = THREE.RepeatWrapping;
+        cobbleTex.wrapT = THREE.RepeatWrapping;
+
+        function createCobblestoneRoad(x, z, w, d) {
+            const roadTex = cobbleTex.clone();
+            roadTex.needsUpdate = true;
+            roadTex.repeat.set(Math.max(1, Math.round(w / 4)), Math.max(1, Math.round(d / 4)));
+            const roadGeo = new THREE.BoxGeometry(w, 0.22, d);
+            const roadMat = new THREE.MeshLambertMaterial({ map: roadTex });
+            const roadMesh = new THREE.Mesh(roadGeo, roadMat);
+            roadMesh.position.set(x, 0.11, z);
+            roadMesh.receiveShadow = true;
+            groundGroup.add(roadMesh);
+
+            // Smooth Stone Kerbs along major roads
+            if (w > d && w > 40) {
+                const curbMat = new THREE.MeshLambertMaterial({ color: 0x94a3b8 });
+                const curbN = new THREE.Mesh(new THREE.BoxGeometry(w, 0.32, 0.6), curbMat);
+                curbN.position.set(x, 0.16, z - d / 2 + 0.3);
+                groundGroup.add(curbN);
+                const curbS = curbN.clone();
+                curbS.position.z = z + d / 2 - 0.3;
+                groundGroup.add(curbS);
+            }
+        }
+
+        // Horizontal Sector Grand Avenues
+        createCobblestoneRoad(0, -100, 300, 8); // Aviation promenade
+        createCobblestoneRoad(0, -38, 300, 8);  // Between Upper and Lower Pods
+        createCobblestoneRoad(0, 16, 300, 10);  // Promenade between Lower Pods and Recreation
+        createCobblestoneRoad(0, 84, 300, 8);   // Grand avenue between Recreation and Sports
+
+        // Grand Central Boulevard (North to South through entire campus)
+        createCobblestoneRoad(0, 0, 12, 350);
+
+        // Branch Pathways into Each Building Entrance
+        createCobblestoneRoad(-82, -120, 6, 40); // Runway / Helipad connector
+        createCobblestoneRoad(-7, -120, 6, 40);  // CEO Suite path
+        createCobblestoneRoad(58, -120, 6, 40);  // Residential path
+        createCobblestoneRoad(-66, -50, 6, 16);  // Vasan path
+        createCobblestoneRoad(-22, -50, 6, 16);  // Vijay path
+        createCobblestoneRoad(22, -50, 6, 16);   // Messi path
+        createCobblestoneRoad(66, -50, 6, 16);   // Dhoni path
+        createCobblestoneRoad(-66, -2, 6, 16);   // Elon path
+        createCobblestoneRoad(-22, -2, 6, 16);   // Tony path
+        createCobblestoneRoad(22, -2, 6, 16);    // Quantum path
+        createCobblestoneRoad(66, -2, 6, 16);    // Cyber path
+        createCobblestoneRoad(0, 50, 44, 44);    // Central Fountain Quad Plaza
+
+        scene.add(groundGroup);
+
+        // ==================== 5. MASTER CAMPUS ZONES (DE-COLLIDED & SPACED) ====================
         const zones = {
-            // --- TOP SECTOR (Aviation & Luxury) ---
-            "PRIVATE_JET_RUNWAY": { x: -80, z: -76, w: 26, d: 74, h: 1.2, color: 0x334155, name: "PRIVATE JET RUNWAY", subtitle: "AVIATION SECTOR", icon: "✈️", customTex: createRunwayCanvas() },
-            "HELIPADS": { x: -44, z: -76, w: 28, d: 24, h: 1.8, color: 0x475569, name: "HELIPADS H1 & H2", subtitle: "EXECUTIVE AIRPORT", icon: "🚁", customTex: createHelipadCanvas() },
-            "CEO_SUITE": { x: 0, z: -76, w: 38, d: 26, h: 6.5, color: 0xec4899, name: "CEO LUXURY PENTHOUSE", subtitle: "EXECUTIVE COMMAND", icon: "👑", isBuilding: true, glowColor: 0xf43f5e },
-            "RESIDENTIAL_APARTMENTS": { x: 58, z: -76, w: 56, d: 26, h: 9.0, color: 0x6366f1, name: "RESIDENTIAL APARTMENTS", subtitle: "4-TIER LUXURY TOWERS", icon: "🏢", isBuilding: true, glowColor: 0x818cf8 },
+            // --- SECTOR 1: TOP AVIATION & LUXURY (Z = -160 to -120) ---
+            "PRIVATE_JET_RUNWAY": { x: -105, z: -140, w: 24, d: 70, h: 1.2, color: 0x334155, name: "PRIVATE JET RUNWAY", subtitle: "AVIATION SECTOR", icon: "✈️", customTex: createRunwayCanvas() },
+            "HELIPADS": { x: -58, z: -140, w: 28, d: 26, h: 1.8, color: 0x475569, name: "HELIPADS H1 & H2", subtitle: "EXECUTIVE AIRPORT", icon: "🚁", customTex: createHelipadCanvas() },
+            "CEO_SUITE": { x: -7, z: -140, w: 34, d: 28, h: 10.0, color: 0xec4899, name: "CEO LUXURY PENTHOUSE", subtitle: "EXECUTIVE COMMAND", icon: "👑", isBuilding: true, glowColor: 0xf43f5e },
+            "RESIDENTIAL_APARTMENTS": { x: 58, z: -140, w: 56, d: 32, h: 12.0, color: 0x6366f1, name: "RESIDENTIAL APARTMENTS", subtitle: "4-TIER LUXURY TOWERS", icon: "🏢", isBuilding: true, glowColor: 0x818cf8 },
 
-            // --- MIDDLE WORK PODS (Row 1: Active Squads) ---
-            "TEAM_VASAN": { x: -54, z: -40, w: 28, d: 18, h: 4.2, color: 0x06b6d4, name: "TEAM VASAN", subtitle: "RAPID WEB3 & HYBRID APPS", icon: "🏍️", isPod: true, glowColor: 0x22d3ee },
-            "TEAM_VIJAY": { x: -18, z: -40, w: 28, d: 18, h: 4.2, color: 0xf59e0b, name: "TEAM VIJAY", subtitle: "MEDIA & CINEMATIC LAB", icon: "👑", isPod: true, glowColor: 0xfbbf24 },
-            "TEAM_MESSI": { x: 18, z: -40, w: 28, d: 18, h: 4.2, color: 0x38bdf8, name: "TEAM MESSI", subtitle: "ALGORITHMS & HIGH-SPEED", icon: "⚽", isPod: true, glowColor: 0x7dd3fc },
-            "TEAM_DHONI": { x: 54, z: -40, w: 28, d: 18, h: 4.2, color: 0xeab308, name: "TEAM DHONI", subtitle: "CLUTCH INCIDENT OPS", icon: "🚁", isPod: true, glowColor: 0xfacc15 },
+            // --- SECTOR 2: UPPER SQUAD ROOMS (Z = -80 to -50, Center Z = -65) ---
+            "TEAM_VASAN": { x: -66, z: -65, w: 26, d: 22, h: 8.5, color: 0x06b6d4, name: "TEAM VASAN", subtitle: "RAPID WEB3 & HYBRID APPS", icon: "🏍️", isPod: true, glowColor: 0x22d3ee },
+            "TEAM_VIJAY": { x: -22, z: -65, w: 26, d: 22, h: 8.5, color: 0xf59e0b, name: "TEAM VIJAY", subtitle: "MEDIA & CINEMATIC LAB", icon: "👑", isPod: true, glowColor: 0xfbbf24 },
+            "TEAM_MESSI": { x: 22, z: -65, w: 26, d: 22, h: 8.5, color: 0x38bdf8, name: "TEAM MESSI", subtitle: "ALGORITHMS & HIGH-SPEED", icon: "⚽", isPod: true, glowColor: 0x7dd3fc },
+            "TEAM_DHONI": { x: 66, z: -65, w: 26, d: 22, h: 8.5, color: 0xeab308, name: "TEAM DHONI", subtitle: "CLUTCH INCIDENT OPS", icon: "🚁", isPod: true, glowColor: 0xfacc15 },
 
-            // --- MIDDLE WORK PODS (Row 2: Future Teams) ---
-            "FUTURE_POD_1": { x: -54, z: -18, w: 28, d: 18, h: 4.2, color: 0xa855f7, name: "TEAM ELON", subtitle: "AUTONOMOUS AI SWARMS", icon: "🚀", isPod: true, glowColor: 0xc084fc },
-            "FUTURE_POD_2": { x: -18, z: -18, w: 28, d: 18, h: 4.2, color: 0xef4444, name: "TEAM TONY", subtitle: "SYSTEMS & ARC REACTOR", icon: "🦾", isPod: true, glowColor: 0xf87171 },
-            "FUTURE_POD_3": { x: 18, z: -18, w: 28, d: 18, h: 4.2, color: 0x10b981, name: "QUANTUM LAB", subtitle: "RESERVED FUTURE POD 3", icon: "🔬", isPod: true, glowColor: 0x34d399 },
-            "FUTURE_POD_4": { x: 54, z: -18, w: 28, d: 18, h: 4.2, color: 0x64748b, name: "CYBER VAULT", subtitle: "RESERVED FUTURE POD 4", icon: "🛡️", isPod: true, glowColor: 0x94a3b8 },
+            // --- SECTOR 3: LOWER SQUAD ROOMS (Z = -30 to 0, Center Z = -15) ---
+            "FUTURE_POD_1": { x: -66, z: -15, w: 26, d: 22, h: 8.5, color: 0xa855f7, name: "TEAM ELON", subtitle: "AUTONOMOUS AI SWARMS", icon: "🚀", isPod: true, glowColor: 0xc084fc },
+            "FUTURE_POD_2": { x: -22, z: -15, w: 26, d: 22, h: 8.5, color: 0xef4444, name: "TEAM TONY", subtitle: "SYSTEMS & ARC REACTOR", icon: "🦾", isPod: true, glowColor: 0xf87171 },
+            "FUTURE_POD_3": { x: 22, z: -15, w: 26, d: 22, h: 8.5, color: 0x10b981, name: "QUANTUM LAB", subtitle: "RESERVED FUTURE POD 3", icon: "🔬", isPod: true, glowColor: 0x34d399 },
+            "FUTURE_POD_4": { x: 66, z: -15, w: 26, d: 22, h: 8.5, color: 0x64748b, name: "CYBER VAULT", subtitle: "RESERVED FUTURE POD 4", icon: "🛡️", isPod: true, glowColor: 0x94a3b8 },
 
-            // --- RECREATION CORE ---
-            "MEGA_GYM": { x: -62, z: 14, w: 32, d: 24, h: 5.5, color: 0x10b981, name: "MEGA GYM", subtitle: "FITNESS & WEIGHTS", icon: "💪", isBuilding: true, glowColor: 0x34d399 },
-            "FOOD_COURT": { x: -22, z: 14, w: 34, d: 24, h: 4.8, color: 0xf97316, name: "FOOD COURT", subtitle: "CAFETERIA & CHAI PANTRY", icon: "☕", isBuilding: true, glowColor: 0xfb923c },
-            "ARCADE_ZONE": { x: 22, z: 14, w: 30, d: 24, h: 4.5, color: 0x8b5cf6, name: "ARCADE ZONE", subtitle: "RETRO LOUNGE & VR", icon: "🕹️", isBuilding: true, glowColor: 0xa78bfa },
-            "SLEEP_PODS": { x: 58, z: 14, w: 30, d: 24, h: 4.0, color: 0x4338ca, name: "SLEEP PODS", subtitle: "NAP CAPSULES & DORMS", icon: "🌙", isBuilding: true, glowColor: 0x6366f1 },
-            "SWIMMING_POOL": { x: 96, z: 14, w: 32, d: 22, h: 1.8, color: 0x0284c7, name: "SWIMMING POOL", subtitle: "RESORT LAP POOL", icon: "🏊", customTex: createPoolCanvas() },
-            "CENTRAL_FOUNTAIN": { x: 0, z: 8, w: 24, d: 24, h: 2.2, color: 0x06b6d4, name: "CENTRAL FOUNTAIN", subtitle: "CAMPUS PLAZA", icon: "⛲" },
+            // --- SECTOR 4: CENTRAL PLAZA & RECREATION (Z = 30 to 70, Center Z = 50) ---
+            "MEGA_GYM": { x: -78, z: 50, w: 28, d: 24, h: 9.0, color: 0x10b981, name: "MEGA GYM", subtitle: "FITNESS & WEIGHTS", icon: "💪", isBuilding: true, glowColor: 0x34d399 },
+            "FOOD_COURT": { x: -34, z: 50, w: 28, d: 24, h: 8.5, color: 0xf97316, name: "FOOD COURT", subtitle: "CAFETERIA & CHAI PANTRY", icon: "☕", isBuilding: true, glowColor: 0xfb923c },
+            "CENTRAL_FOUNTAIN": { x: 0, z: 50, w: 20, d: 20, h: 2.5, color: 0x06b6d4, name: "CENTRAL FOUNTAIN", subtitle: "CAMPUS PLAZA QUAD", icon: "⛲" },
+            "ARCADE_ZONE": { x: 34, z: 50, w: 28, d: 24, h: 8.5, color: 0x8b5cf6, name: "ARCADE ZONE", subtitle: "RETRO LOUNGE & VR", icon: "🕹️", isBuilding: true, glowColor: 0xa78bfa },
+            "SLEEP_PODS": { x: 78, z: 50, w: 28, d: 24, h: 8.5, color: 0x4338ca, name: "SLEEP PODS", subtitle: "NAP CAPSULES & DORMS", icon: "🌙", isBuilding: true, glowColor: 0x6366f1 },
+            "SWIMMING_POOL": { x: 122, z: 50, w: 26, d: 26, h: 2.0, color: 0x0284c7, name: "SWIMMING POOL", subtitle: "RESORT LAP POOL", icon: "🏊", customTex: createPoolCanvas() },
 
-            // --- BOTTOM SPORTS ARENA ---
-            "SPORTS_TURF": { x: -62, z: 66, w: 42, d: 32, h: 1.5, color: 0x15803d, name: "FOOTBALL TURF", subtitle: "REGULATION ARENA", icon: "⚽", customTex: createTurfCanvas() },
-            "CRICKET_GROUND": { x: -8, z: 66, w: 48, d: 48, h: 1.5, color: 0x166534, name: "CRICKET STADIUM", subtitle: "OVAL & TURF PITCH", icon: "🏏", customTex: createCricketCanvas() },
-            "RUNNING_TRACK": { x: 46, z: 66, w: 44, d: 32, h: 1.5, color: 0xb91c1c, name: "OLYMPIC TRACK", subtitle: "4-LANE TARTAN RUBBER", icon: "🏃", customTex: createTrackCanvas() },
-            "SAND_VOLLEYBALL": { x: 92, z: 52, w: 26, d: 18, h: 1.2, color: 0xfde047, name: "SAND VOLLEYBALL", subtitle: "BEACH SAND COURT", icon: "🏐", customTex: createVolleyballCanvas() },
-            "BADMINTON_COURT": { x: 92, z: 74, w: 26, d: 18, h: 1.2, color: 0x059669, name: "BADMINTON COURT", subtitle: "REGULATION SINGLES/DOUBLES", icon: "🏸", customTex: createBadmintonCanvas() },
-            "TUG_OF_WAR": { x: 92, z: 96, w: 26, d: 14, h: 1.0, color: 0x78350f, name: "TUG-OF-WAR PIT", subtitle: "CONTEST MUD TRENCH", icon: "🪢" }
+            // --- SECTOR 5: BOTTOM SPORTS ARENA (Z = 100 to 160) ---
+            "SPORTS_TURF": { x: -72, z: 125, w: 44, d: 34, h: 1.5, color: 0x15803d, name: "FOOTBALL TURF", subtitle: "REGULATION ARENA", icon: "⚽", customTex: createTurfCanvas() },
+            "CRICKET_GROUND": { x: 0, z: 125, w: 50, d: 44, h: 1.5, color: 0x166534, name: "CRICKET STADIUM", subtitle: "OVAL & TURF PITCH", icon: "🏏", customTex: createCricketCanvas() },
+            "RUNNING_TRACK": { x: 68, z: 125, w: 46, d: 34, h: 1.5, color: 0xb91c1c, name: "OLYMPIC TRACK", subtitle: "4-LANE TARTAN RUBBER", icon: "🏃", customTex: createTrackCanvas() },
+            "SAND_VOLLEYBALL": { x: 122, z: 108, w: 24, d: 16, h: 1.2, color: 0xfde047, name: "SAND VOLLEYBALL", subtitle: "BEACH SAND COURT", icon: "🏐", customTex: createVolleyballCanvas() },
+            "BADMINTON_COURT": { x: 122, z: 132, w: 24, d: 16, h: 1.2, color: 0x059669, name: "BADMINTON COURT", subtitle: "REGULATION SINGLES/DOUBLES", icon: "🏸", customTex: createBadmintonCanvas() },
+            "TUG_OF_WAR": { x: 122, z: 154, w: 24, d: 12, h: 1.0, color: 0x78350f, name: "TUG-OF-WAR PIT", subtitle: "CONTEST MUD TRENCH", icon: "🪢" }
         };
 
         const zoneAliases = {
@@ -702,69 +866,68 @@
         // ==================== 6. SLEEK 3D ROOM BILLBOARD HEADERS ====================
         function createRoomHeaderSprite(zone) {
             const canvas = document.createElement('canvas');
-            canvas.width = 512;
-            canvas.height = 140;
+            canvas.width = 480;
+            canvas.height = 130;
             const ctx = canvas.getContext('2d');
 
             // Dark Glass Pill
-            ctx.fillStyle = 'rgba(10, 15, 29, 0.88)';
-            roundRect(ctx, 8, 8, 496, 124, 24);
+            ctx.fillStyle = 'rgba(10, 15, 29, 0.90)';
+            roundRect(ctx, 8, 8, 464, 114, 22);
             ctx.fill();
 
             // Accent Glow Border
             let bColor = zone.glowColor ? `#${zone.glowColor.toString(16).padStart(6, '0')}` : '#38bdf8';
             ctx.strokeStyle = bColor;
-            ctx.lineWidth = 5;
-            roundRect(ctx, 8, 8, 496, 124, 24);
+            ctx.lineWidth = 4;
+            roundRect(ctx, 8, 8, 464, 114, 22);
             ctx.stroke();
 
-            // Icon / Emoji
-            ctx.font = '36px sans-serif';
+            // Icon
+            ctx.font = '34px sans-serif';
             ctx.textAlign = 'left';
-            ctx.fillText(zone.icon || '📍', 26, 68);
+            ctx.fillText(zone.icon || '📍', 22, 64);
 
             // Title
             ctx.fillStyle = '#ffffff';
-            ctx.font = '800 36px Outfit, sans-serif';
-            ctx.fillText(zone.name, 78, 64);
+            ctx.font = '800 32px Outfit, sans-serif';
+            ctx.fillText(zone.name, 68, 60);
 
             // Subtitle
             ctx.fillStyle = bColor;
-            ctx.font = '700 18px JetBrains Mono, monospace';
-            ctx.fillText((zone.subtitle || 'YDL MASTER CAMPUS').toUpperCase(), 78, 100);
+            ctx.font = '700 17px JetBrains Mono, monospace';
+            ctx.fillText((zone.subtitle || 'YDL MASTER CAMPUS').toUpperCase(), 68, 94);
 
             const tex = new THREE.CanvasTexture(canvas);
             const spriteMat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false });
             const sprite = new THREE.Sprite(spriteMat);
-            sprite.scale.set(11.0, 3.0, 1);
+            sprite.scale.set(9.0, 2.4, 1);
             return sprite;
         }
 
-        // ==================== 7. VOXEL PROPS GENERATOR ====================
-        function createVoxelTree(px, py, pz) {
+        // ==================== 7. VOXEL PROPS GENERATORS ====================
+        function createVoxelOakTree(px, py, pz) {
             const tree = new THREE.Group();
-            // Brown trunk
-            const trunkGeo = new THREE.BoxGeometry(0.8, 2.2, 0.8);
-            const trunkMat = new THREE.MeshLambertMaterial({ color: 0x78350f });
+            // Oak Wood Trunk
+            const trunkGeo = new THREE.BoxGeometry(1.2, 5.0, 1.2);
+            const trunkMat = new THREE.MeshLambertMaterial({ color: 0x5c4033 });
             const trunk = new THREE.Mesh(trunkGeo, trunkMat);
-            trunk.position.y = 1.1;
+            trunk.position.y = 2.5;
+            trunk.castShadow = true;
             tree.add(trunk);
 
-            // 3-tier voxel leaves
-            const leafMat1 = new THREE.MeshLambertMaterial({ color: 0x15803d });
-            const leafMat2 = new THREE.MeshLambertMaterial({ color: 0x16a34a });
-            const l1 = new THREE.Mesh(new THREE.BoxGeometry(3.2, 1.2, 3.2), leafMat1);
-            l1.position.y = 2.4;
+            // 3-Tier Stepped Cubic Foliage
+            const l1 = new THREE.Mesh(new THREE.BoxGeometry(4.8, 1.6, 4.8), new THREE.MeshLambertMaterial({ color: 0x4d7c2a }));
+            l1.position.y = 4.5;
             l1.castShadow = true;
             tree.add(l1);
 
-            const l2 = new THREE.Mesh(new THREE.BoxGeometry(2.4, 1.2, 2.4), leafMat2);
-            l2.position.y = 3.4;
+            const l2 = new THREE.Mesh(new THREE.BoxGeometry(3.6, 1.6, 3.6), new THREE.MeshLambertMaterial({ color: 0x5b8731 }));
+            l2.position.y = 5.8;
             l2.castShadow = true;
             tree.add(l2);
 
-            const l3 = new THREE.Mesh(new THREE.BoxGeometry(1.4, 1.0, 1.4), leafMat1);
-            l3.position.y = 4.3;
+            const l3 = new THREE.Mesh(new THREE.BoxGeometry(2.4, 1.2, 2.4), new THREE.MeshLambertMaterial({ color: 0x659d38 }));
+            l3.position.y = 7.0;
             l3.castShadow = true;
             tree.add(l3);
 
@@ -772,23 +935,91 @@
             return tree;
         }
 
-        function createGardenLamp(px, py, pz) {
+        function createVoxelCherryTree(px, py, pz) {
+            const tree = new THREE.Group();
+            // Dark Wood Trunk
+            const trunkGeo = new THREE.BoxGeometry(1.2, 5.0, 1.2);
+            const trunkMat = new THREE.MeshLambertMaterial({ color: 0x422006 });
+            const trunk = new THREE.Mesh(trunkGeo, trunkMat);
+            trunk.position.y = 2.5;
+            trunk.castShadow = true;
+            tree.add(trunk);
+
+            // Fluffy Cubic Pink Blossom Foliage
+            const b1 = new THREE.Mesh(new THREE.BoxGeometry(5.2, 1.6, 5.2), new THREE.MeshLambertMaterial({ color: 0xf472b6 }));
+            b1.position.y = 4.5;
+            b1.castShadow = true;
+            tree.add(b1);
+
+            const b2 = new THREE.Mesh(new THREE.BoxGeometry(3.8, 1.6, 3.8), new THREE.MeshLambertMaterial({ color: 0xfbcfe8 }));
+            b2.position.y = 5.8;
+            b2.castShadow = true;
+            tree.add(b2);
+
+            const b3 = new THREE.Mesh(new THREE.BoxGeometry(2.6, 1.2, 2.6), new THREE.MeshLambertMaterial({ color: 0xf43f5e }));
+            b3.position.y = 7.0;
+            b3.castShadow = true;
+            tree.add(b3);
+
+            tree.position.set(px, py, pz);
+            return tree;
+        }
+
+        function createGlowstoneLantern(px, py, pz) {
             const lamp = new THREE.Group();
-            const postGeo = new THREE.CylinderGeometry(0.08, 0.12, 3.2, 8);
+            // Obsidian / Iron Post
+            const postGeo = new THREE.BoxGeometry(0.3, 3.6, 0.3);
             const postMat = new THREE.MeshLambertMaterial({ color: 0x334155 });
             const post = new THREE.Mesh(postGeo, postMat);
-            post.position.y = 1.6;
+            post.position.y = 1.8;
             lamp.add(post);
 
-            // Glowing Lantern Cube
-            const lightGeo = new THREE.BoxGeometry(0.5, 0.5, 0.5);
-            const lightMat = new THREE.MeshBasicMaterial({ color: 0xfef08a });
-            const lightCube = new THREE.Mesh(lightGeo, lightMat);
-            lightCube.position.y = 3.2;
-            lamp.add(lightCube);
+            // Glowing Warm Glowstone Cube
+            const glowGeo = new THREE.BoxGeometry(1.0, 1.0, 1.0);
+            const glowMat = new THREE.MeshBasicMaterial({ color: 0xfbbf24 });
+            const glowCube = new THREE.Mesh(glowGeo, glowMat);
+            glowCube.position.y = 3.6;
+            lamp.add(glowCube);
+
+            // Iron Cap
+            const capGeo = new THREE.BoxGeometry(1.3, 0.25, 1.3);
+            const cap = new THREE.Mesh(capGeo, postMat);
+            cap.position.y = 4.2;
+            lamp.add(cap);
 
             lamp.position.set(px, py, pz);
             return lamp;
+        }
+
+        function createVoxelFence(x, z, length, isHorizontal = true) {
+            const fenceGroup = new THREE.Group();
+            const woodMat = new THREE.MeshLambertMaterial({ color: 0x9c7a4b });
+            const postSpacing = 3.5;
+            const postCount = Math.floor(length / postSpacing);
+
+            for (let i = 0; i <= postCount; i++) {
+                const post = new THREE.Mesh(new THREE.BoxGeometry(0.35, 1.5, 0.35), woodMat);
+                if (isHorizontal) {
+                    post.position.set(i * postSpacing - length / 2, 0.75, 0);
+                } else {
+                    post.position.set(0, 0.75, i * postSpacing - length / 2);
+                }
+                fenceGroup.add(post);
+            }
+
+            // Upper and Lower Horizontal Rails
+            const railGeo = isHorizontal ?
+                new THREE.BoxGeometry(length, 0.16, 0.16) :
+                new THREE.BoxGeometry(0.16, 0.16, length);
+            const rail1 = new THREE.Mesh(railGeo, woodMat);
+            rail1.position.y = 0.55;
+            fenceGroup.add(rail1);
+            const rail2 = new THREE.Mesh(railGeo, woodMat);
+            rail2.position.y = 1.15;
+            fenceGroup.add(rail2);
+
+            fenceGroup.position.set(x, 0, z);
+            return fenceGroup;
         }
 
         function createArcadeCabinet(colorHex, gameName, px, pz) {
@@ -814,18 +1045,16 @@
             marq.position.set(0, 2.7, 0.55);
             cab.add(marq);
 
-            cab.position.set(px, 0, pz);
+            cab.position.set(px, 0.8, pz);
             return cab;
         }
 
         function createTreadmill(px, pz) {
             const tm = new THREE.Group();
-            // Deck
             const deck = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.3, 2.4), new THREE.MeshLambertMaterial({ color: 0x1e293b }));
             deck.position.y = 0.15;
             tm.add(deck);
 
-            // Posts & Console
             const post = new THREE.Mesh(new THREE.BoxGeometry(0.1, 1.6, 0.1), new THREE.MeshLambertMaterial({ color: 0x64748b }));
             post.position.set(-0.55, 0.9, -0.9);
             tm.add(post);
@@ -837,18 +1066,16 @@
             consoleScreen.position.set(0, 1.7, -0.9);
             tm.add(consoleScreen);
 
-            tm.position.set(px, 0, pz);
+            tm.position.set(px, 0.8, pz);
             return tm;
         }
 
         function createCafeParasol(colorHex, px, pz) {
             const parasol = new THREE.Group();
-            // Center pole
             const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 3.2, 8), new THREE.MeshLambertMaterial({ color: 0x475569 }));
             pole.position.y = 1.6;
             parasol.add(pole);
 
-            // Fabric Canopy
             const canopyGeo = new THREE.ConeGeometry(2.6, 1.0, 8);
             const canopyMat = new THREE.MeshLambertMaterial({ color: colorHex });
             const canopy = new THREE.Mesh(canopyGeo, canopyMat);
@@ -856,16 +1083,15 @@
             canopy.castShadow = true;
             parasol.add(canopy);
 
-            // Round Café Table underneath
             const tableTop = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.1, 0.1, 12), new THREE.MeshLambertMaterial({ color: 0xf8fafc }));
             tableTop.position.y = 1.0;
             parasol.add(tableTop);
 
-            parasol.position.set(px, 0, pz);
+            parasol.position.set(px, 0.8, pz);
             return parasol;
         }
 
-        // ==================== 8. ASSEMBLE 3D BUILDINGS & MODELS ====================
+        // ==================== 8. MINECRAFT VOXEL BUILDING GENERATOR & PROPS ====================
         const zoneMeshes = {};
         const animatedObjects = [];
 
@@ -873,95 +1099,157 @@
             const group = new THREE.Group();
             group.position.set(z.x, 0, z.z);
 
-            // Base Floor Platform
-            const baseGeo = new THREE.BoxGeometry(z.w, z.h, z.d);
-            let baseMat;
+            const wallH = z.isBuilding ? (z.h || 10) : (z.isPod ? 8.5 : (z.h || 5));
+
+            // 1. Raised Interior Floor Slab with specialized voxel pattern
+            const floorH = 0.8;
+            let floorMat;
             if (z.customTex) {
-                const sideMat = new THREE.MeshLambertMaterial({ color: 0x1e293b });
+                const sideMat = new THREE.MeshLambertMaterial({ color: 0x334155 });
                 const topMat = new THREE.MeshLambertMaterial({ map: z.customTex });
-                baseMat = [sideMat, sideMat, topMat, sideMat, sideMat, sideMat];
+                floorMat = [sideMat, sideMat, topMat, sideMat, sideMat, sideMat];
+            } else if (key === "MEGA_GYM") {
+                const sideMat = new THREE.MeshLambertMaterial({ color: 0x1e293b });
+                const topMat = new THREE.MeshLambertMaterial({ map: createMinecraftGymTileTexture() });
+                floorMat = [sideMat, sideMat, topMat, sideMat, sideMat, sideMat];
+            } else if (key === "FOOD_COURT") {
+                const sideMat = new THREE.MeshLambertMaterial({ color: 0x78350f });
+                const topMat = new THREE.MeshLambertMaterial({ map: createMinecraftCheckerTileTexture() });
+                floorMat = [sideMat, sideMat, topMat, sideMat, sideMat, sideMat];
             } else if (z.isPod) {
-                baseMat = new THREE.MeshLambertMaterial({ color: 0x0f172a, transparent: true, opacity: 0.95 });
-            } else if (z.isBuilding) {
-                baseMat = new THREE.MeshLambertMaterial({ color: z.color, transparent: true, opacity: 0.85 });
+                const sideMat = new THREE.MeshLambertMaterial({ color: 0x4a3525 });
+                const topMat = new THREE.MeshLambertMaterial({ map: createMinecraftOakPlanksTexture() });
+                floorMat = [sideMat, sideMat, topMat, sideMat, sideMat, sideMat];
             } else {
-                baseMat = new THREE.MeshLambertMaterial({ color: z.color, transparent: true, opacity: 0.9 });
+                const sideMat = new THREE.MeshLambertMaterial({ color: 0x334155 });
+                const topMat = new THREE.MeshLambertMaterial({ color: z.color || 0x1e293b });
+                floorMat = [sideMat, sideMat, topMat, sideMat, sideMat, sideMat];
             }
 
-            const baseMesh = new THREE.Mesh(baseGeo, baseMat);
-            baseMesh.position.y = z.h / 2;
-            baseMesh.receiveShadow = true;
-            baseMesh.castShadow = true;
-            group.add(baseMesh);
+            const floorMesh = new THREE.Mesh(new THREE.BoxGeometry(z.w, floorH, z.d), floorMat);
+            floorMesh.position.y = floorH / 2;
+            floorMesh.receiveShadow = true;
+            group.add(floorMesh);
 
-            // Glowing Contour Borders
-            const edges = new THREE.EdgesGeometry(baseGeo);
-            const lineMat = new THREE.LineBasicMaterial({
-                color: z.glowColor || z.color || 0x38bdf8,
-                linewidth: 2,
-                transparent: true,
-                opacity: 0.85
-            });
-            const line = new THREE.LineSegments(edges, lineMat);
-            line.position.copy(baseMesh.position);
-            group.add(line);
+            // 2. Raised Voxel Walls with Contrasting Oak Log Pillars & Framed Windows
+            if (z.isBuilding || z.isPod) {
+                const logMat = new THREE.MeshLambertMaterial({ color: 0x4a3525 }); // Minecraft Oak/Spruce Log
+                const wallPlankMat = new THREE.MeshLambertMaterial({ color: z.color || 0x9c7a4b });
+                const glassMat = new THREE.MeshPhysicalMaterial({
+                    color: 0xbfdbfe,
+                    transparent: true,
+                    opacity: 0.35,
+                    roughness: 0.1,
+                    metalness: 0.1,
+                    transmission: 0.75
+                });
 
-            // 1. Sleek 3D Room Header Billboard
+                // Contrasting Corner Log Pillars (4 corners)
+                const pillarW = 1.6;
+                const px = z.w / 2 - pillarW / 2;
+                const pz = z.d / 2 - pillarW / 2;
+                const pillarGeo = new THREE.BoxGeometry(pillarW, wallH, pillarW);
+                [
+                    [-px, -pz], [px, -pz], [-px, pz], [px, pz]
+                ].forEach(([cx, cz]) => {
+                    const pillar = new THREE.Mesh(pillarGeo, logMat);
+                    pillar.position.set(cx, wallH / 2 + floorH, cz);
+                    pillar.castShadow = true;
+                    group.add(pillar);
+                });
+
+                // Back Wall (Lower solid wood panel + framed glass + upper beam)
+                const backLow = new THREE.Mesh(new THREE.BoxGeometry(z.w - pillarW * 2, 3.8, 0.8), wallPlankMat);
+                backLow.position.set(0, 1.9 + floorH, -pz);
+                group.add(backLow);
+
+                const backGlass = new THREE.Mesh(new THREE.BoxGeometry(z.w - pillarW * 2, wallH - 5.2, 0.6), glassMat);
+                backGlass.position.set(0, 3.8 + (wallH - 5.2) / 2 + floorH, -pz);
+                group.add(backGlass);
+
+                const backTop = new THREE.Mesh(new THREE.BoxGeometry(z.w - pillarW * 2, 1.4, 0.8), wallPlankMat);
+                backTop.position.set(0, wallH - 0.7 + floorH, -pz);
+                group.add(backTop);
+
+                // Left & Right Side Walls
+                [-px, px].forEach(sx => {
+                    const sideLow = new THREE.Mesh(new THREE.BoxGeometry(0.8, 3.2, z.d - pillarW * 2), wallPlankMat);
+                    sideLow.position.set(sx, 1.6 + floorH, 0);
+                    group.add(sideLow);
+
+                    const sideGlass = new THREE.Mesh(new THREE.BoxGeometry(0.6, wallH - 4.8, z.d - pillarW * 2), glassMat);
+                    sideGlass.position.set(sx, 3.2 + (wallH - 4.8) / 2 + floorH, 0);
+                    group.add(sideGlass);
+
+                    const sideTop = new THREE.Mesh(new THREE.BoxGeometry(0.8, 1.6, z.d - pillarW * 2), wallPlankMat);
+                    sideTop.position.set(sx, wallH - 0.8 + floorH, 0);
+                    group.add(sideTop);
+                });
+
+                // Front Wall with Open Entryway
+                const doorWidth = 6.0;
+                const frontSideW = (z.w - pillarW * 2 - doorWidth) / 2;
+                if (frontSideW > 0) {
+                    [- (doorWidth / 2 + frontSideW / 2), (doorWidth / 2 + frontSideW / 2)].forEach(fx => {
+                        const fLow = new THREE.Mesh(new THREE.BoxGeometry(frontSideW, 3.2, 0.8), wallPlankMat);
+                        fLow.position.set(fx, 1.6 + floorH, pz);
+                        group.add(fLow);
+
+                        const fGlass = new THREE.Mesh(new THREE.BoxGeometry(frontSideW, wallH - 4.8, 0.6), glassMat);
+                        fGlass.position.set(fx, 3.2 + (wallH - 4.8) / 2 + floorH, pz);
+                        group.add(fGlass);
+
+                        const fTop = new THREE.Mesh(new THREE.BoxGeometry(frontSideW, 1.6, 0.8), wallPlankMat);
+                        fTop.position.set(fx, wallH - 0.8 + floorH, pz);
+                        group.add(fTop);
+                    });
+                }
+                // Entrance Lintel
+                const lintel = new THREE.Mesh(new THREE.BoxGeometry(doorWidth, wallH - 4.8, 0.8), wallPlankMat);
+                lintel.position.set(0, 4.8 + (wallH - 4.8) / 2 + floorH, pz);
+                group.add(lintel);
+
+                // Overhanging Voxel Roof & Cornice
+                const roofOverhang = 1.2;
+                const roofGeo = new THREE.BoxGeometry(z.w + roofOverhang * 2, 0.8, z.d + roofOverhang * 2);
+                const roofMat = new THREE.MeshLambertMaterial({ color: 0x1e293b });
+                const roofMesh = new THREE.Mesh(roofGeo, roofMat);
+                roofMesh.position.y = wallH + floorH + 0.4;
+                roofMesh.castShadow = true;
+                group.add(roofMesh);
+
+                // Roof Accent Neon Strip
+                const accentStrip = new THREE.Mesh(
+                    new THREE.BoxGeometry(z.w + roofOverhang * 2 + 0.2, 0.25, z.d + roofOverhang * 2 + 0.2),
+                    new THREE.MeshBasicMaterial({ color: z.glowColor || z.color || 0x38bdf8 })
+                );
+                accentStrip.position.y = wallH + floorH + 0.85;
+                group.add(accentStrip);
+
+                // Warm Glowstone Lantern at Doorway
+                const lantern = createGlowstoneLantern(0, 4.2 + floorH, pz + 0.9);
+                group.add(lantern);
+            }
+
+            // Sleek 3D Room Header Billboard
             const headerSprite = createRoomHeaderSprite(z);
-            const headerY = z.h + (z.isPod ? 5.8 : (z.isBuilding ? (z.h > 7 ? 4.5 : 3.5) : 3.2));
+            const headerY = wallH + floorH + 4.2;
             headerSprite.position.set(0, headerY, 0);
             group.add(headerSprite);
 
-            // Architectural Details for Pods
-            if (z.isPod) {
-                const wallH = 3.6;
-                const glassGeo = new THREE.BoxGeometry(z.w - 1.2, wallH, z.d - 1.2);
-                const glassMat = new THREE.MeshPhysicalMaterial({
-                    color: z.glowColor || 0x38bdf8,
-                    transparent: true,
-                    opacity: 0.22,
-                    roughness: 0.1,
-                    metalness: 0.2,
-                    transmission: 0.6
-                });
-                const glassMesh = new THREE.Mesh(glassGeo, glassMat);
-                glassMesh.position.y = z.h + wallH / 2;
-                group.add(glassMesh);
-
-                // Roof Frame
-                const roofGeo = new THREE.BoxGeometry(z.w + 0.8, 0.4, z.d + 0.8);
-                const roofMat = new THREE.MeshLambertMaterial({ color: 0x1e293b });
-                const roof = new THREE.Mesh(roofGeo, roofMat);
-                roof.position.y = z.h + wallH + 0.2;
-                roof.castShadow = true;
-                group.add(roof);
-
-                // Neon Sign Strip
-                const neonGeo = new THREE.BoxGeometry(z.w + 1, 0.2, 0.3);
-                const neonMat = new THREE.MeshBasicMaterial({ color: z.glowColor || z.color });
-                const neon = new THREE.Mesh(neonGeo, neonMat);
-                neon.position.set(0, z.h + wallH + 0.2, z.d / 2 + 0.3);
-                group.add(neon);
-            }
-
-            // 2. Specific Voxel Props & Models
+            // Specific Voxel Props & Models
             if (key === "PRIVATE_JET_RUNWAY") {
-                // Detailed 3D Executive Private Jet
                 const jetGroup = new THREE.Group();
-                // Fuselage
                 const fuselage = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 1.0, 16, 12), new THREE.MeshLambertMaterial({ color: 0xf8fafc }));
                 fuselage.rotation.x = Math.PI / 2;
                 jetGroup.add(fuselage);
-                // Nose cone
                 const nose = new THREE.Mesh(new THREE.ConeGeometry(0.9, 2.8, 12), new THREE.MeshLambertMaterial({ color: 0xe2e8f0 }));
                 nose.rotation.x = -Math.PI / 2;
                 nose.position.z = 9.4;
                 jetGroup.add(nose);
-                // Cockpit Windshield (tinted glass)
                 const wind = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.5, 1.8), new THREE.MeshBasicMaterial({ color: 0x0284c7 }));
                 wind.position.set(0, 0.6, 7.2);
                 jetGroup.add(wind);
-                // Swept Wings with Winglets
                 const wingL = new THREE.Mesh(new THREE.BoxGeometry(8, 0.18, 3.2), new THREE.MeshLambertMaterial({ color: 0xf8fafc }));
                 wingL.position.set(-4.5, -0.1, 0.5);
                 wingL.rotation.y = 0.2;
@@ -970,7 +1258,6 @@
                 wingR.position.x = 4.5;
                 wingR.rotation.y = -0.2;
                 jetGroup.add(wingR);
-                // Dual Tail Engines
                 const engineGeo = new THREE.CylinderGeometry(0.4, 0.4, 3.2, 8);
                 const engineMat = new THREE.MeshLambertMaterial({ color: 0x334155 });
                 const engL = new THREE.Mesh(engineGeo, engineMat);
@@ -980,7 +1267,6 @@
                 const engR = engL.clone();
                 engR.position.x = 1.4;
                 jetGroup.add(engR);
-                // T-Tail
                 const vertTail = new THREE.Mesh(new THREE.BoxGeometry(0.2, 3.2, 2.4), new THREE.MeshLambertMaterial({ color: 0x0284c7 }));
                 vertTail.position.set(0, 1.8, -6.8);
                 jetGroup.add(vertTail);
@@ -994,16 +1280,13 @@
             }
 
             if (key === "HELIPADS") {
-                // Executive Helicopter with Animated Rotor
                 const heliGroup = new THREE.Group();
                 const heliBody = new THREE.Mesh(new THREE.BoxGeometry(2.4, 2.2, 5.5), new THREE.MeshLambertMaterial({ color: 0x0f172a }));
                 heliBody.position.y = 1.6;
                 heliGroup.add(heliBody);
-                // Cockpit Glass
                 const heliGlass = new THREE.Mesh(new THREE.BoxGeometry(2.2, 1.4, 1.8), new THREE.MeshBasicMaterial({ color: 0x38bdf8 }));
                 heliGlass.position.set(0, 1.8, 2.0);
                 heliGroup.add(heliGlass);
-                // Skids
                 const skidGeo = new THREE.CylinderGeometry(0.08, 0.08, 5.0, 6);
                 const skidMat = new THREE.MeshLambertMaterial({ color: 0x64748b });
                 const skidL = new THREE.Mesh(skidGeo, skidMat);
@@ -1013,12 +1296,10 @@
                 const skidR = skidL.clone();
                 skidR.position.x = 1.1;
                 heliGroup.add(skidR);
-                // Tail Boom
                 const boom = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.35, 4.8, 6), new THREE.MeshLambertMaterial({ color: 0x0f172a }));
                 boom.rotation.x = Math.PI / 2;
                 boom.position.set(0, 2.0, -4.5);
                 heliGroup.add(boom);
-                // Main Spinning Rotor
                 const rotorGroup = new THREE.Group();
                 const rotorBlade = new THREE.Mesh(new THREE.BoxGeometry(11, 0.08, 0.9), new THREE.MeshBasicMaterial({ color: 0x94a3b8 }));
                 rotorGroup.add(rotorBlade);
@@ -1031,21 +1312,18 @@
             }
 
             if (key === "MEGA_GYM") {
-                // Treadmills Row inside Gym
-                for (let tm = -3; tm <= 3; tm += 2.5) {
+                for (let tm = -6; tm <= 6; tm += 3.5) {
                     group.add(createTreadmill(tm, 2.5));
                 }
             }
 
             if (key === "FOOD_COURT") {
-                // Outdoor Café Parasols & Dining Patio
-                group.add(createCafeParasol(0xf97316, -6, 3));
-                group.add(createCafeParasol(0xfbbf24, 6, 3));
-                group.add(createCafeParasol(0xef4444, 0, -4));
+                group.add(createCafeParasol(0xf97316, -6, 2));
+                group.add(createCafeParasol(0xfbbf24, 6, 2));
+                group.add(createCafeParasol(0xef4444, 0, -3));
             }
 
             if (key === "ARCADE_ZONE") {
-                // Row of Retro Arcade Cabinets
                 group.add(createArcadeCabinet(0xec4899, 'PACMAN', -7, 0));
                 group.add(createArcadeCabinet(0x3b82f6, 'STREET', -2.5, 0));
                 group.add(createArcadeCabinet(0x10b981, 'INVADER', 2.5, 0));
@@ -1053,7 +1331,6 @@
             }
 
             if (key === "SPORTS_TURF") {
-                // 3D Regulation Goalposts
                 function createGoalpost(zPos) {
                     const gp = new THREE.Group();
                     const pMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
@@ -1074,7 +1351,6 @@
             }
 
             if (key === "CRICKET_GROUND") {
-                // 3D Stumps & Wickets
                 function createWickets(zPos) {
                     const wg = new THREE.Group();
                     const wMat = new THREE.MeshLambertMaterial({ color: 0xfef08a });
@@ -1111,16 +1387,15 @@
             }
 
             if (key === "CENTRAL_FOUNTAIN") {
-                const basin1 = new THREE.Mesh(new THREE.CylinderGeometry(9, 10, 1.5, 24), new THREE.MeshLambertMaterial({ color: 0x334155 }));
+                const basin1 = new THREE.Mesh(new THREE.CylinderGeometry(8.5, 9.5, 1.5, 24), new THREE.MeshLambertMaterial({ color: 0x334155 }));
                 basin1.position.y = z.h + 0.75;
                 group.add(basin1);
 
-                const basin2 = new THREE.Mesh(new THREE.CylinderGeometry(4.5, 5, 1.2, 18), new THREE.MeshLambertMaterial({ color: 0x475569 }));
+                const basin2 = new THREE.Mesh(new THREE.CylinderGeometry(4.2, 4.8, 1.2, 18), new THREE.MeshLambertMaterial({ color: 0x475569 }));
                 basin2.position.y = z.h + 2.0;
                 group.add(basin2);
 
-                // Water Spray Particles
-                const partCount = 160;
+                const partCount = 180;
                 const partGeo = new THREE.BufferGeometry();
                 const pos = new Float32Array(partCount * 3);
                 for (let p = 0; p < partCount * 3; p += 3) {
@@ -1139,19 +1414,44 @@
             zoneMeshes[key] = group;
         });
 
-        // ==================== 9. TREES, LAMPS & LANDSCAPING AVENUES ====================
-        // Plant trees and garden lamps along the grand roads and parks
-        const foliageCoords = [
-            [-100, -56], [-60, -56], [25, -56], [70, -56], [110, -56],
-            [-100, -2], [-50, -2], [50, -2], [100, -2],
-            [-90, 36], [-40, 36], [35, 36], [75, 36], [115, 36],
-            [-22, -2], [-22, 18], [22, -2], [22, 18]
+        // ==================== 9. TREES, LANTERNS & FENCES ====================
+        // Minecraft Oak & Cherry Trees along Pedestrian Avenues and Plazas
+        const oakTreesCoords = [
+            [-125, -100], [95, -100],
+            [-44, -38], [0, -38], [44, -38],
+            [-55, 16], [110, 16],
+            [-115, 84], [-40, 84], [35, 84], [105, 84]
         ];
-
-        foliageCoords.forEach(([x, z]) => {
-            scene.add(createVoxelTree(x, 0, z));
-            scene.add(createGardenLamp(x + 3, 0, z + 2));
+        oakTreesCoords.forEach(([x, z]) => {
+            scene.add(createVoxelOakTree(x, 0, z));
         });
+
+        const cherryTreesCoords = [
+            [-82, -100], [35, -100],
+            [-95, -38], [95, -38],
+            [-110, 16], [55, 16],
+            [-18, 32], [18, 32], [-18, 68], [18, 68]
+        ];
+        cherryTreesCoords.forEach(([x, z]) => {
+            scene.add(createVoxelCherryTree(x, 0, z));
+        });
+
+        // Warm Glowstone Lantern Posts along Pathways
+        const lanternCoords = [
+            [-82, -96], [35, -96],
+            [-44, -34], [44, -34],
+            [-12, 38], [12, 38], [-12, 62], [12, 62],
+            [-55, 20], [55, 20],
+            [-40, 88], [35, 88]
+        ];
+        lanternCoords.forEach(([x, z]) => {
+            scene.add(createGlowstoneLantern(x, 0, z));
+        });
+
+        // Minecraft Oak Fences along sports fields and sector borders
+        scene.add(createVoxelFence(-72, 105, 42, true));  // Football north fence
+        scene.add(createVoxelFence(68, 105, 44, true));   // Track north fence
+        scene.add(createVoxelFence(-58, -125, 26, true)); // Helipad south fence
 
         // ==================== 10. DEFAULT CONFIGURED BOTS (AUTO-SPAWN ROSTER) ====================
         const DEFAULT_CONFIGURED_BOTS = [
@@ -1328,11 +1628,11 @@
 
             // Calculate Initial Position inside Target Home Pod
             const targetZone = zones[spawnZoneKey] || zones["TEAM_VASAN"];
-            const offsetX = (Math.random() - 0.5) * (targetZone.w * 0.65);
-            const offsetZ = (Math.random() - 0.5) * (targetZone.d * 0.65);
+            const offsetX = (Math.random() - 0.5) * (targetZone.w * 0.5);
+            const offsetZ = (Math.random() - 0.5) * (targetZone.d * 0.5);
             const spawnX = targetZone.x + offsetX;
             const spawnZ = targetZone.z + offsetZ;
-            const spawnY = targetZone.h || 0;
+            const spawnY = 0.8; // Raised on top of interior floor slab
 
             group.position.set(spawnX, spawnY, spawnZ);
             scene.add(group);
@@ -1439,12 +1739,12 @@
                     avatar.zone = targetZone.name;
 
                     // Smooth target position inside zone
-                    const offsetX = (Math.random() - 0.5) * (targetZone.w * 0.65);
-                    const offsetZ = (Math.random() - 0.5) * (targetZone.d * 0.65);
+                    const offsetX = (Math.random() - 0.5) * (targetZone.w * 0.5);
+                    const offsetZ = (Math.random() - 0.5) * (targetZone.d * 0.5);
 
                     avatar.targetPos.set(
                         targetZone.x + offsetX,
-                        targetZone.h || 0,
+                        0.8,
                         targetZone.z + offsetZ
                     );
 
@@ -1500,19 +1800,19 @@
 
             switch (preset) {
                 case 'overview':
-                    smoothMoveCamera(130, 140, 140, 0, 0, 0);
+                    smoothMoveCamera(220, 240, 220, 0, 0, 0);
                     break;
                 case 'aviation':
-                    smoothMoveCamera(-42, 75, -24, -20, 0, -76);
+                    smoothMoveCamera(-45, 120, -70, -25, 0, -140);
                     break;
                 case 'work_pods':
-                    smoothMoveCamera(30, 75, 20, 0, 0, -29);
+                    smoothMoveCamera(45, 110, 30, 0, 0, -40);
                     break;
                 case 'recreation':
-                    smoothMoveCamera(40, 70, 70, 15, 0, 14);
+                    smoothMoveCamera(50, 120, 130, 15, 0, 50);
                     break;
                 case 'sports':
-                    smoothMoveCamera(30, 85, 125, 10, 0, 68);
+                    smoothMoveCamera(40, 130, 210, 15, 0, 125);
                     break;
             }
         }
