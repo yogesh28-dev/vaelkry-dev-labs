@@ -380,6 +380,7 @@
             <button class="nav-btn" onclick="jumpCamera('recreation')">☕ Recreation & Fountain</button>
             <button class="nav-btn" onclick="jumpCamera('sports')">⚽ Sports Arena</button>
             <button id="cam-follow-btn" class="nav-btn active" onclick="toggleCameraFollow()">🎥 Follow Me (P)</button>
+            <button id="view-mode-btn" class="nav-btn" onclick="toggleViewMode()">👁️ 3rd Person (V)</button>
             <button class="nav-btn" onclick="focusPlayer()">👤 Focus Me (F)</button>
         </div>
     </div>
@@ -438,9 +439,12 @@
         <div id="controls-hint" class="glass-panel">
             <span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Move</span>
             <span><kbd>Shift</kbd> Sprint</span>
-            <span><kbd>E</kbd> Greet Bot</span>
-            <span><kbd>P</kbd> Follow Cam</span>
-            <span><kbd>F</kbd> Focus Me</span>
+            <span><kbd>V</kbd> 1st/3rd Person</span>
+            <span><kbd>Drag</kbd> Free Look</span>
+            <span><kbd>Scroll</kbd> Zoom</span>
+            <span><kbd>E</kbd> Greet</span>
+            <span><kbd>P</kbd> Follow</span>
+            <span><kbd>F</kbd> Focus</span>
         </div>
     </div>
 
@@ -455,19 +459,18 @@
         const rosterCount = document.getElementById('roster-count');
         const botListContainer = document.getElementById('bot-list-container');
 
-        // ==================== 1. THREE.JS ISOMETRIC SETUP ====================
-        // ==================== 1. THREE.JS ISOMETRIC SETUP ====================
+        // ==================== 1. THREE.JS 3D ISOMETRIC / PERSPECTIVE SETUP ====================
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0x060913);
         scene.fog = new THREE.FogExp2(0x060913, 0.0012);
 
         const aspect = window.innerWidth / window.innerHeight;
-        const d = 160; // Camera frustum width (optimally fits expanded 340-unit campus)
-        const camera = new THREE.OrthographicCamera(-d * aspect, d * aspect, d, -d, 1, 3500);
+        // 45° Perspective Camera enables seamless zoom from close 3rd person to full campus overview & 1st person
+        const camera = new THREE.PerspectiveCamera(45, aspect, 0.5, 3500);
 
-        // Classic isometric angle
-        camera.position.set(220, 240, 220);
-        camera.lookAt(0, 0, 0);
+        // Initial camera position centered on player spawn at Central Plaza [0, 0.8, 50]
+        camera.position.set(45, 55, 95);
+        camera.lookAt(0, 2.5, 50);
 
         const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' });
         renderer.setSize(window.innerWidth, window.innerHeight);
@@ -482,11 +485,44 @@
 
         const controls = new THREE.OrbitControls(camera, renderer.domElement);
         controls.enableDamping = true;
-        controls.dampingFactor = 0.06;
-        controls.maxPolarAngle = Math.PI / 2.15;
-        controls.minDistance = 35;
-        controls.maxDistance = 800;
-        controls.target.set(0, 0, 0);
+        controls.dampingFactor = 0.08;
+        controls.maxPolarAngle = Math.PI / 2.05; // Horizon view without going underground
+        controls.minPolarAngle = 0.05;          // Overhead view
+        controls.minDistance = 6;               // Close 3rd-person over-shoulder view
+        controls.maxDistance = 550;             // Full campus isometric overview
+        controls.zoomSpeed = 1.0;
+        controls.target.set(0, 2.5, 50);
+
+        // ==================== PROCEDURAL SOFT GROUND SHADOW ====================
+        function createSoftShadowTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 128;
+            canvas.height = 128;
+            const ctx = canvas.getContext('2d');
+            const grad = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
+            grad.addColorStop(0, 'rgba(0, 0, 0, 0.70)');
+            grad.addColorStop(0.35, 'rgba(0, 0, 0, 0.48)');
+            grad.addColorStop(0.70, 'rgba(0, 0, 0, 0.16)');
+            grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, 128, 128);
+            return new THREE.CanvasTexture(canvas);
+        }
+        const softShadowTexture = createSoftShadowTexture();
+
+        function createShadowMesh(size = 3.6) {
+            const geo = new THREE.PlaneGeometry(size, size);
+            const mat = new THREE.MeshBasicMaterial({
+                map: softShadowTexture,
+                transparent: true,
+                opacity: 0.75,
+                depthWrite: false
+            });
+            const mesh = new THREE.Mesh(geo, mat);
+            mesh.rotation.x = -Math.PI / 2;
+            mesh.position.y = 0.04;
+            return mesh;
+        }
 
         // ==================== 2. LIGHTING & ENVIRONMENT ====================
         const ambientLight = new THREE.AmbientLight(0xffffff, 0.70);
@@ -1093,6 +1129,345 @@
             return fenceGroup;
         }
 
+        // --- DENSE GREENERY & ENVIRONMENTAL PROP GENERATORS ---
+        function createHedgeBush(x, z, length, width = 1.6, height = 1.8, isRotated = false) {
+            const hedge = new THREE.Group();
+            const w = isRotated ? length : width;
+            const d = isRotated ? width : length;
+            // Base dense hedge block
+            const baseGeo = new THREE.BoxGeometry(w, height, d);
+            const baseMat = new THREE.MeshLambertMaterial({ color: 0x2d6a1e });
+            const baseMesh = new THREE.Mesh(baseGeo, baseMat);
+            baseMesh.position.y = height / 2;
+            baseMesh.castShadow = true;
+            hedge.add(baseMesh);
+
+            // Layered leafy voxel accent cubes along top
+            const step = 2.4;
+            const count = Math.max(1, Math.floor(length / step));
+            const leafMat1 = new THREE.MeshLambertMaterial({ color: 0x3a8226 });
+            const leafMat2 = new THREE.MeshLambertMaterial({ color: 0x245417 });
+            for (let i = 0; i < count; i++) {
+                const s = 1.0 + Math.random() * 0.4;
+                const leafCube = new THREE.Mesh(new THREE.BoxGeometry(s, 0.4, s), (i % 2 === 0) ? leafMat1 : leafMat2);
+                if (isRotated) {
+                    leafCube.position.set(i * step - length / 2 + step / 2, height + 0.15, (Math.random() - 0.5) * 0.4);
+                } else {
+                    leafCube.position.set((Math.random() - 0.5) * 0.4, height + 0.15, i * step - length / 2 + step / 2);
+                }
+                hedge.add(leafCube);
+            }
+            hedge.position.set(x, 0, z);
+            return hedge;
+        }
+
+        function createFlowerbed(x, z, w, d) {
+            const fb = new THREE.Group();
+            // Raised Stone Curb
+            const curbGeo = new THREE.BoxGeometry(w, 0.4, d);
+            const curbMat = new THREE.MeshLambertMaterial({ color: 0x475569 });
+            const curb = new THREE.Mesh(curbGeo, curbMat);
+            curb.position.y = 0.2;
+            fb.add(curb);
+
+            // Rich Dark Loam Soil
+            const soilGeo = new THREE.BoxGeometry(w - 0.6, 0.2, d - 0.6);
+            const soilMat = new THREE.MeshLambertMaterial({ color: 0x3d2817 });
+            const soil = new THREE.Mesh(soilGeo, soilMat);
+            soil.position.y = 0.35;
+            fb.add(soil);
+
+            // Colorful Blooming Flowers
+            const colors = [0xef4444, 0xf59e0b, 0xec4899, 0x38bdf8, 0xffffff, 0xa855f7];
+            const flowerCount = Math.floor((w * d) / 3.2);
+            for (let i = 0; i < flowerCount; i++) {
+                const fx = (Math.random() - 0.5) * (w - 1.2);
+                const fz = (Math.random() - 0.5) * (d - 1.2);
+
+                const stem = new THREE.Mesh(
+                    new THREE.BoxGeometry(0.12, 0.6, 0.12),
+                    new THREE.MeshLambertMaterial({ color: 0x16a34a })
+                );
+                stem.position.set(fx, 0.6, fz);
+                fb.add(stem);
+
+                const blossom = new THREE.Mesh(
+                    new THREE.BoxGeometry(0.4, 0.3, 0.4),
+                    new THREE.MeshLambertMaterial({ color: colors[i % colors.length] })
+                );
+                blossom.position.set(fx, 0.9, fz);
+                fb.add(blossom);
+            }
+            fb.position.set(x, 0, z);
+            return fb;
+        }
+
+        function createBirchTree(px, py, pz) {
+            const tree = new THREE.Group();
+            const trunkMat = new THREE.MeshLambertMaterial({ color: 0xe2e8f0 });
+            const trunk = new THREE.Mesh(new THREE.BoxGeometry(1.0, 6.0, 1.0), trunkMat);
+            trunk.position.y = 3.0;
+            trunk.castShadow = true;
+            tree.add(trunk);
+            const markMat = new THREE.MeshBasicMaterial({ color: 0x1e293b });
+            for (let y = 1.0; y < 5.0; y += 1.4) {
+                const mark = new THREE.Mesh(new THREE.BoxGeometry(1.05, 0.25, 0.4), markMat);
+                mark.position.set(0, y, 0.35);
+                tree.add(mark);
+            }
+            const leafMat = new THREE.MeshLambertMaterial({ color: 0x65a30d });
+            const l1 = new THREE.Mesh(new THREE.BoxGeometry(4.2, 1.8, 4.2), leafMat);
+            l1.position.y = 5.2;
+            l1.castShadow = true;
+            tree.add(l1);
+            const l2 = new THREE.Mesh(new THREE.BoxGeometry(3.0, 1.8, 3.0), leafMat);
+            l2.position.y = 6.6;
+            l2.castShadow = true;
+            tree.add(l2);
+            const l3 = new THREE.Mesh(new THREE.BoxGeometry(1.8, 1.2, 1.8), leafMat);
+            l3.position.y = 7.8;
+            l3.castShadow = true;
+            tree.add(l3);
+            tree.position.set(px, py, pz);
+            return tree;
+        }
+
+        function createPineTree(px, py, pz) {
+            const tree = new THREE.Group();
+            const trunk = new THREE.Mesh(new THREE.BoxGeometry(1.2, 5.0, 1.2), new THREE.MeshLambertMaterial({ color: 0x3f2e1e }));
+            trunk.position.y = 2.5;
+            trunk.castShadow = true;
+            tree.add(trunk);
+            const pineMat = new THREE.MeshLambertMaterial({ color: 0x14532d });
+            const tiers = [
+                { s: 5.4, h: 1.4, y: 4.2 },
+                { s: 4.2, h: 1.4, y: 5.4 },
+                { s: 3.0, h: 1.4, y: 6.6 },
+                { s: 1.6, h: 1.2, y: 7.7 }
+            ];
+            tiers.forEach(t => {
+                const mesh = new THREE.Mesh(new THREE.BoxGeometry(t.s, t.h, t.s), pineMat);
+                mesh.position.y = t.y;
+                mesh.castShadow = true;
+                tree.add(mesh);
+            });
+            tree.position.set(px, py, pz);
+            return tree;
+        }
+
+        // --- IT CAMPUS ROOFTOP PROPS ---
+        function createRooftopChiller(px, py, pz) {
+            const chiller = new THREE.Group();
+            const bodyGeo = new THREE.BoxGeometry(3.2, 2.0, 2.2);
+            const bodyMat = new THREE.MeshLambertMaterial({ color: 0x475569 });
+            const body = new THREE.Mesh(bodyGeo, bodyMat);
+            body.position.y = 1.0;
+            body.castShadow = true;
+            chiller.add(body);
+
+            const grillGeo = new THREE.BoxGeometry(2.8, 1.4, 0.1);
+            const grillMat = new THREE.MeshLambertMaterial({ color: 0x1e293b });
+            const grill = new THREE.Mesh(grillGeo, grillMat);
+            grill.position.set(0, 1.0, 1.12);
+            chiller.add(grill);
+
+            const shroudGeo = new THREE.CylinderGeometry(0.85, 0.9, 0.45, 16);
+            const shroudMat = new THREE.MeshLambertMaterial({ color: 0x334155 });
+            const shroud = new THREE.Mesh(shroudGeo, shroudMat);
+            shroud.position.y = 2.15;
+            chiller.add(shroud);
+
+            const fanGroup = new THREE.Group();
+            const bladeMat = new THREE.MeshBasicMaterial({ color: 0x94a3b8 });
+            const b1 = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.05, 0.28), bladeMat);
+            const b2 = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.05, 1.5), bladeMat);
+            fanGroup.add(b1);
+            fanGroup.add(b2);
+            fanGroup.position.y = 2.25;
+            chiller.add(fanGroup);
+            animatedObjects.push({ obj: fanGroup, rotSpeed: 0.22 });
+
+            const pipeGeo = new THREE.CylinderGeometry(0.12, 0.12, 2.2, 8);
+            const pipeMat = new THREE.MeshLambertMaterial({ color: 0x64748b });
+            const pipe = new THREE.Mesh(pipeGeo, pipeMat);
+            pipe.rotation.z = Math.PI / 2;
+            pipe.position.set(2.0, 0.5, 0);
+            chiller.add(pipe);
+
+            chiller.position.set(px, py, pz);
+            return chiller;
+        }
+
+        function createSolarPanelArray(px, py, pz, width = 6.0, depth = 3.6) {
+            const solarGroup = new THREE.Group();
+            const frameMat = new THREE.MeshLambertMaterial({ color: 0x94a3b8 });
+            const postFrontL = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.4, 0.15), frameMat);
+            postFrontL.position.set(-width / 2 + 0.4, 0.2, depth / 2 - 0.4);
+            solarGroup.add(postFrontL);
+            const postFrontR = postFrontL.clone();
+            postFrontR.position.x = width / 2 - 0.4;
+            solarGroup.add(postFrontR);
+
+            const postBackL = new THREE.Mesh(new THREE.BoxGeometry(0.15, 1.2, 0.15), frameMat);
+            postBackL.position.set(-width / 2 + 0.4, 0.6, -depth / 2 + 0.4);
+            solarGroup.add(postBackL);
+            const postBackR = postBackL.clone();
+            postBackR.position.x = width / 2 - 0.4;
+            solarGroup.add(postBackR);
+
+            const panelMat = new THREE.MeshPhysicalMaterial({
+                color: 0x1e3a8a,
+                roughness: 0.15,
+                metalness: 0.8,
+                reflectivity: 0.95,
+                clearcoat: 0.9
+            });
+            const panelMesh = new THREE.Mesh(new THREE.BoxGeometry(width, 0.12, depth), panelMat);
+            panelMesh.position.set(0, 0.75, 0);
+            panelMesh.rotation.x = 0.28;
+            panelMesh.castShadow = true;
+            solarGroup.add(panelMesh);
+
+            const gridMat = new THREE.MeshBasicMaterial({ color: 0x60a5fa });
+            const line = new THREE.Mesh(new THREE.BoxGeometry(width * 0.96, 0.14, 0.05), gridMat);
+            line.position.set(0, 0.75, 0);
+            line.rotation.x = 0.28;
+            solarGroup.add(line);
+
+            solarGroup.position.set(px, py, pz);
+            return solarGroup;
+        }
+
+        function createGlassTerraceRailing(w, d, roofY) {
+            const railing = new THREE.Group();
+            const glassMat = new THREE.MeshPhysicalMaterial({
+                color: 0x93c5fd,
+                transparent: true,
+                opacity: 0.45,
+                roughness: 0.1,
+                transmission: 0.8,
+                depthWrite: false
+            });
+            const postMat = new THREE.MeshLambertMaterial({ color: 0xe2e8f0 });
+            const railH = 1.1;
+            const halfW = w / 2;
+            const halfD = d / 2;
+
+            const fbGeo = new THREE.BoxGeometry(w - 0.4, railH, 0.1);
+            const fPanel = new THREE.Mesh(fbGeo, glassMat);
+            fPanel.position.set(0, railH / 2, halfD);
+            railing.add(fPanel);
+            const bPanel = fPanel.clone();
+            bPanel.position.z = -halfD;
+            railing.add(bPanel);
+
+            const lrGeo = new THREE.BoxGeometry(0.1, railH, d - 0.4);
+            const lPanel = new THREE.Mesh(lrGeo, glassMat);
+            lPanel.position.set(-halfW, railH / 2, 0);
+            railing.add(lPanel);
+            const rPanel = lPanel.clone();
+            rPanel.position.x = halfW;
+            railing.add(rPanel);
+
+            const postGeo = new THREE.BoxGeometry(0.2, railH + 0.1, 0.2);
+            [
+                [-halfW, -halfD], [halfW, -halfD], [-halfW, halfD], [halfW, halfD]
+            ].forEach(([cx, cz]) => {
+                const stanchion = new THREE.Mesh(postGeo, postMat);
+                stanchion.position.set(cx, (railH + 0.1) / 2, cz);
+                railing.add(stanchion);
+            });
+
+            const handMat = new THREE.MeshLambertMaterial({ color: 0xf8fafc });
+            const topF = new THREE.Mesh(new THREE.BoxGeometry(w, 0.1, 0.15), handMat);
+            topF.position.set(0, railH + 0.05, halfD);
+            railing.add(topF);
+            const topB = topF.clone();
+            topB.position.z = -halfD;
+            railing.add(topB);
+
+            const topL = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.1, d), handMat);
+            topL.position.set(-halfW, railH + 0.05, 0);
+            railing.add(topL);
+            const topR = topL.clone();
+            topR.position.x = halfW;
+            railing.add(topR);
+
+            railing.position.y = roofY;
+            return railing;
+        }
+
+        function createBleachers(x, z, length, tiers = 4, facingAngle = 0) {
+            const bleacher = new THREE.Group();
+            const frameMat = new THREE.MeshLambertMaterial({ color: 0x475569 });
+            const seatMatBlue = new THREE.MeshLambertMaterial({ color: 0x2563eb });
+            const seatMatRed = new THREE.MeshLambertMaterial({ color: 0xef4444 });
+
+            const tierDepth = 1.4;
+            const tierHeight = 0.8;
+
+            for (let t = 0; t < tiers; t++) {
+                const deckGeo = new THREE.BoxGeometry(length, 0.2, tierDepth);
+                const deck = new THREE.Mesh(deckGeo, frameMat);
+                deck.position.set(0, (t + 1) * tierHeight - 0.1, t * tierDepth);
+                deck.castShadow = true;
+                bleacher.add(deck);
+
+                const seatsPerRow = Math.floor(length / 1.4);
+                const startX = -length / 2 + 0.7;
+                for (let s = 0; s < seatsPerRow; s++) {
+                    const seatMat = ((s + t) % 2 === 0) ? seatMatBlue : seatMatRed;
+                    const seat = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.15, 0.8), seatMat);
+                    seat.position.set(startX + s * 1.4, (t + 1) * tierHeight + 0.15, t * tierDepth);
+                    bleacher.add(seat);
+                    const back = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.7, 0.12), seatMat);
+                    back.position.set(startX + s * 1.4, (t + 1) * tierHeight + 0.55, t * tierDepth - 0.35);
+                    bleacher.add(back);
+                }
+            }
+
+            const backRailH = tiers * tierHeight + 1.2;
+            const railMesh = new THREE.Mesh(new THREE.BoxGeometry(length, 0.12, 0.12), frameMat);
+            railMesh.position.set(0, backRailH, (tiers - 1) * tierDepth + 0.4);
+            bleacher.add(railMesh);
+
+            bleacher.rotation.y = facingAngle;
+            bleacher.position.set(x, 0.8, z);
+            return bleacher;
+        }
+
+        function createParkBench(x, z, rotY = 0) {
+            const bench = new THREE.Group();
+            const ironMat = new THREE.MeshLambertMaterial({ color: 0x1e293b });
+            const woodMat = new THREE.MeshLambertMaterial({ color: 0xa16207 });
+
+            [-1.1, 1.1].forEach(lx => {
+                const legFront = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.9, 0.12), ironMat);
+                legFront.position.set(lx, 0.45, 0.4);
+                bench.add(legFront);
+                const legBack = new THREE.Mesh(new THREE.BoxGeometry(0.12, 1.6, 0.12), ironMat);
+                legBack.position.set(lx, 0.8, -0.4);
+                bench.add(legBack);
+            });
+
+            for (let s = -0.25; s <= 0.35; s += 0.2) {
+                const slat = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.08, 0.15), woodMat);
+                slat.position.set(0, 0.85, s);
+                slat.castShadow = true;
+                bench.add(slat);
+            }
+            for (let b = 1.1; b <= 1.5; b += 0.2) {
+                const bSlat = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.15, 0.08), woodMat);
+                bSlat.position.set(0, b, -0.4);
+                bSlat.castShadow = true;
+                bench.add(bSlat);
+            }
+
+            bench.rotation.y = rotY;
+            bench.position.set(x, 0.8, z);
+            return bench;
+        }
+
         function createArcadeCabinet(colorHex, gameName, px, pz) {
             const cab = new THREE.Group();
             const bodyGeo = new THREE.BoxGeometry(1.4, 3.0, 1.2);
@@ -1300,6 +1675,21 @@
                 // Warm Glowstone Lantern at Doorway
                 const lantern = createGlowstoneLantern(0, 4.2 + floorH, pz + 0.9);
                 group.add(lantern);
+
+                // --- IT CAMPUS ROOFTOP DETAILS ---
+                const roofY = wallH + floorH + 0.8;
+                // 1. Glass Terrace Balustrade Railing
+                group.add(createGlassTerraceRailing(z.w + 1.2, z.d + 1.2, roofY));
+
+                // 2. Industrial Rooftop AC Chiller Unit with spinning exhaust fan
+                const chillerX = (z.w * 0.25);
+                const chillerZ = -(z.d * 0.25);
+                group.add(createRooftopChiller(chillerX, roofY, chillerZ));
+
+                // 3. Rooftop Solar Panel Array
+                const solarX = -(z.w * 0.22);
+                const solarZ = (z.d * 0.20);
+                group.add(createSolarPanelArray(solarX, roofY, solarZ, Math.min(8.0, z.w * 0.45), Math.min(5.0, z.d * 0.40)));
             }
 
             // Sleek 3D Room Header Billboard
@@ -1457,6 +1847,93 @@
                 group.add(rope);
             }
 
+            if (key === "SWIMMING_POOL") {
+                // Ceramic Tile Pool Coping Border
+                const copingMat = new THREE.MeshLambertMaterial({ color: 0xf8fafc });
+                const curb = new THREE.Mesh(new THREE.BoxGeometry(z.w, 0.4, z.d), copingMat);
+                curb.position.y = z.h + 0.2;
+                group.add(curb);
+
+                // Deep Recessed Pool Water Surface with Animated Shimmer & Reflections
+                const poolWaterGeo = new THREE.PlaneGeometry(z.w - 2.8, z.d - 2.8, 16, 16);
+                const poolWaterMat = new THREE.MeshPhysicalMaterial({
+                    color: 0x06b6d4,
+                    emissive: 0x0284c7,
+                    emissiveIntensity: 0.3,
+                    roughness: 0.05,
+                    metalness: 0.1,
+                    transmission: 0.7,
+                    transparent: true,
+                    opacity: 0.82,
+                    reflectivity: 0.95
+                });
+                const poolWater = new THREE.Mesh(poolWaterGeo, poolWaterMat);
+                poolWater.rotation.x = -Math.PI / 2;
+                poolWater.position.y = z.h + 0.22;
+                group.add(poolWater);
+                animatedObjects.push({ obj: poolWater, isPoolWater: true });
+
+                // Pool Lane Divider Float Line (red and white floats)
+                for (let lane = -6; lane <= 6; lane += 4) {
+                    const lineGeo = new THREE.CylinderGeometry(0.04, 0.04, z.d - 4.0, 6);
+                    const lineMesh = new THREE.Mesh(lineGeo, new THREE.MeshBasicMaterial({ color: 0xffffff }));
+                    lineMesh.position.set(lane, z.h + 0.26, 0);
+                    group.add(lineMesh);
+                    for (let f = -z.d / 2 + 3; f <= z.d / 2 - 3; f += 2.2) {
+                        const floatMesh = new THREE.Mesh(
+                            new THREE.SphereGeometry(0.18, 6, 6),
+                            new THREE.MeshBasicMaterial({ color: (Math.abs(f) % 4 < 2) ? 0xef4444 : 0xffffff })
+                        );
+                        floatMesh.position.set(lane, z.h + 0.27, f);
+                        group.add(floatMesh);
+                    }
+                }
+
+                // Chrome Pool Ladder
+                const lad = new THREE.Group();
+                const cMat = new THREE.MeshLambertMaterial({ color: 0xe2e8f0 });
+                [-0.45, 0.45].forEach(rx => {
+                    const rail = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 2.2, 8), cMat);
+                    rail.position.set(rx, 1.1, 0);
+                    lad.add(rail);
+                });
+                for (let r = 0.4; r <= 1.8; r += 0.5) {
+                    const rung = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.05, 0.05), cMat);
+                    rung.position.y = r;
+                    lad.add(rung);
+                }
+                lad.position.set(-z.w / 2 + 1.8, z.h, 0);
+                group.add(lad);
+
+                // Spring Diving Board
+                const dive = new THREE.Group();
+                const stand = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.8, 1.2), new THREE.MeshLambertMaterial({ color: 0x64748b }));
+                stand.position.y = 0.9;
+                dive.add(stand);
+                const board = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.15, 4.8), new THREE.MeshLambertMaterial({ color: 0x38bdf8 }));
+                board.position.set(0, 1.9, 1.8);
+                dive.add(board);
+                dive.position.set(0, z.h, -z.d / 2 + 0.8);
+                group.add(dive);
+
+                // Luxury Sun Loungers (Chaise Longues)
+                function createSunLounger(lx, lz) {
+                    const sl = new THREE.Group();
+                    const frame = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.3, 2.6), new THREE.MeshLambertMaterial({ color: 0xf8fafc }));
+                    frame.position.y = 0.15;
+                    sl.add(frame);
+                    const head = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.6, 0.8), new THREE.MeshLambertMaterial({ color: 0x38bdf8 }));
+                    head.position.set(0, 0.45, -0.9);
+                    sl.add(head);
+                    sl.rotation.y = -Math.PI / 2;
+                    sl.position.set(lx, z.h + 0.2, lz);
+                    return sl;
+                }
+                group.add(createSunLounger(z.w / 2 + 2.5, -6));
+                group.add(createSunLounger(z.w / 2 + 2.5, 0));
+                group.add(createSunLounger(z.w / 2 + 2.5, 6));
+            }
+
             if (key === "CENTRAL_FOUNTAIN") {
                 const basin1 = new THREE.Mesh(new THREE.CylinderGeometry(8.5, 9.5, 1.5, 24), new THREE.MeshLambertMaterial({ color: 0x334155 }));
                 basin1.position.y = z.h + 0.75;
@@ -1485,7 +1962,7 @@
             zoneMeshes[key] = group;
         });
 
-        // ==================== 9. TREES, LANTERNS & FENCES ====================
+        // ==================== 9. TREES, LANTERNS, BLEACHERS, BENCHES & GREENERY ====================
         // Minecraft Oak & Cherry Trees along Pedestrian Avenues and Plazas
         const oakTreesCoords = [
             [-125, -100], [95, -100],
@@ -1507,6 +1984,25 @@
             scene.add(createVoxelCherryTree(x, 0, z));
         });
 
+        // Dense Birch & Pine Trees
+        const birchTreesCoords = [
+            [-135, -120], [110, -120],
+            [-88, 16], [88, 16],
+            [-105, 125], [135, 80]
+        ];
+        birchTreesCoords.forEach(([x, z]) => {
+            scene.add(createBirchTree(x, 0, z));
+        });
+
+        const pineTreesCoords = [
+            [-140, -60], [135, -60],
+            [-140, 50], [145, 135],
+            [0, 155]
+        ];
+        pineTreesCoords.forEach(([x, z]) => {
+            scene.add(createPineTree(x, 0, z));
+        });
+
         // Warm Glowstone Lantern Posts along Pathways
         const lanternCoords = [
             [-82, -96], [35, -96],
@@ -1523,6 +2019,40 @@
         scene.add(createVoxelFence(-72, 105, 42, true));  // Football north fence
         scene.add(createVoxelFence(68, 105, 44, true));   // Track north fence
         scene.add(createVoxelFence(-58, -125, 26, true)); // Helipad south fence
+
+        // Stadium Grandstand Spectator Bleachers
+        scene.add(createBleachers(-72, 107, 36, 4, 0)); // Football turf north sideline bleachers
+        scene.add(createBleachers(0, 102, 38, 4, 0));   // Cricket stadium north bleachers
+
+        // Park Benches around Sports Fields, Fountain & Promenade
+        scene.add(createParkBench(-28, 125, Math.PI / 2));  // Cricket west boundary bench
+        scene.add(createParkBench(28, 125, -Math.PI / 2));  // Cricket east boundary bench
+        scene.add(createParkBench(68, 107, 0));             // Running track bench
+        scene.add(createParkBench(-16, 50, Math.PI / 2));   // Central Fountain west bench
+        scene.add(createParkBench(16, 50, -Math.PI / 2));   // Central Fountain east bench
+        scene.add(createParkBench(0, 36, 0));               // Central Fountain north bench
+        scene.add(createParkBench(0, 64, Math.PI));         // Central Fountain south bench
+        scene.add(createParkBench(106, 50, -Math.PI / 2));  // Poolside promenade bench
+
+        // Decorative Flowerbeds (Plazas, Terraces, Sports)
+        scene.add(createFlowerbed(-14, 38, 8, 4));    // Central Fountain NW corner
+        scene.add(createFlowerbed(14, 38, 8, 4));     // Central Fountain NE corner
+        scene.add(createFlowerbed(-14, 62, 8, 4));    // Central Fountain SW corner
+        scene.add(createFlowerbed(14, 62, 8, 4));     // Central Fountain SE corner
+        scene.add(createFlowerbed(-7, -124, 14, 3.5));// CEO Suite entrance flowerbed
+        scene.add(createFlowerbed(-34, 36, 12, 4));   // Food Court terrace flowerbed
+        scene.add(createFlowerbed(-72, 144, 20, 3.5));// Football south border flowerbed
+        scene.add(createFlowerbed(68, 144, 20, 3.5)); // Running track south border flowerbed
+
+        // Multi-layered Hedge Bushes along Central Avenues & Walkways
+        scene.add(createHedgeBush(-5, -70, 48, 1.6, 1.8, false)); // Main avenue west hedge
+        scene.add(createHedgeBush(5, -70, 48, 1.6, 1.8, false));  // Main avenue east hedge
+        scene.add(createHedgeBush(-5, 0, 30, 1.6, 1.8, false));   // Lower pods west hedge
+        scene.add(createHedgeBush(5, 0, 30, 1.6, 1.8, false));    // Lower pods east hedge
+        scene.add(createHedgeBush(-5, 85, 26, 1.6, 1.8, false));  // Sports approach west hedge
+        scene.add(createHedgeBush(5, 85, 26, 1.6, 1.8, false));   // Sports approach east hedge
+        scene.add(createHedgeBush(-44, -40, 24, 1.6, 1.8, true)); // Upper cross avenue hedge
+        scene.add(createHedgeBush(44, -40, 24, 1.6, 1.8, true));  // Upper cross avenue hedge
 
         // ==================== 10. DEFAULT CONFIGURED BOTS (AUTO-SPAWN ROSTER) ====================
         const DEFAULT_CONFIGURED_BOTS = [
@@ -1708,6 +2238,11 @@
             group.position.set(spawnX, spawnY, spawnZ);
             scene.add(group);
 
+            // Grounded Soft Shadow Disc for Bot
+            const shadow = createShadowMesh(3.2);
+            shadow.position.set(spawnX, 0.04, spawnZ);
+            scene.add(shadow);
+
             const avatarData = {
                 name: botName,
                 squad: squadName,
@@ -1715,6 +2250,7 @@
                 zone: targetZone.name,
                 group: group,
                 nameTag: nameTag,
+                shadow: shadow,
                 targetPos: new THREE.Vector3(spawnX, spawnY, spawnZ)
             };
 
@@ -1887,13 +2423,22 @@
             group.position.set(0, 0.8, 50);
             scene.add(group);
 
+            // Grounded Soft Shadow Disc for Player
+            const shadow = createShadowMesh(3.8);
+            shadow.position.set(0, 0.04, 50);
+            scene.add(shadow);
+
             return {
                 group: group,
                 leftLegPivot: leftLegPivot,
                 rightLegPivot: rightLegPivot,
                 leftArmPivot: leftArmPivot,
                 rightArmPivot: rightArmPivot,
+                head: head,
+                visor: visor,
+                crown: crown,
                 nametag: nametag,
+                shadow: shadow,
                 speed: 0.65,
                 rotationAngle: Math.PI,
                 isMoving: false,
@@ -2020,6 +2565,11 @@
                 }
             }
 
+            // Hotkey 'V': Toggle First-Person / Third-Person View Mode
+            if (e.code === 'KeyV') {
+                toggleViewMode();
+            }
+
             // Hotkey 'P': Toggle Follow Camera
             if (e.code === 'KeyP') {
                 toggleCameraFollow();
@@ -2077,9 +2627,17 @@
             return false;
         }
 
-        // ==================== 16. CAMERA CONTROLLER & PRESETS ====================
+        // ==================== 16. CAMERA CONTROLLER, VIEW MODES & PRESETS ====================
         let isFollowCamActive = true;
+        let isFirstPerson = false;
+        let fpYaw = Math.PI;
+        let fpPitch = 0;
+        let isMouseDown = false;
+        let prevMouseX = 0;
+        let prevMouseY = 0;
+
         const camFollowBtn = document.getElementById('cam-follow-btn');
+        const viewModeBtn = document.getElementById('view-mode-btn');
 
         function toggleCameraFollow() {
             isFollowCamActive = !isFollowCamActive;
@@ -2094,21 +2652,92 @@
             }
         }
 
+        function toggleViewMode() {
+            isFirstPerson = !isFirstPerson;
+            const btn = viewModeBtn || document.getElementById('view-mode-btn');
+            if (isFirstPerson) {
+                if (btn) {
+                    btn.classList.add('active');
+                    btn.innerText = "👁️ 1st Person (V)";
+                }
+                player.nametag.visible = false;
+                if (player.head) player.head.visible = false;
+                if (player.visor) player.visor.visible = false;
+                if (player.crown) player.crown.visible = false;
+                controls.enabled = false;
+                fpYaw = player.group.rotation.y;
+                fpPitch = 0;
+            } else {
+                if (btn) {
+                    btn.classList.remove('active');
+                    btn.innerText = "👁️ 3rd Person (V)";
+                }
+                player.nametag.visible = true;
+                if (player.head) player.head.visible = true;
+                if (player.visor) player.visor.visible = true;
+                if (player.crown) player.crown.visible = true;
+                controls.enabled = true;
+                camera.fov = 45;
+                camera.updateProjectionMatrix();
+                const backVec = new THREE.Vector3(Math.sin(player.group.rotation.y), 0, Math.cos(player.group.rotation.y)).multiplyScalar(22);
+                camera.position.set(
+                    player.group.position.x - backVec.x,
+                    player.group.position.y + 16,
+                    player.group.position.z - backVec.z
+                );
+                controls.target.set(player.group.position.x, player.group.position.y + 2.5, player.group.position.z);
+            }
+        }
+
         function focusPlayer() {
             isFollowCamActive = true;
+            if (isFirstPerson) toggleViewMode();
             if (camFollowBtn) {
                 camFollowBtn.classList.add('active');
                 camFollowBtn.innerText = "🎥 Follow Me (P)";
             }
             smoothMoveCamera(
-                player.group.position.x + 52,
-                70,
-                player.group.position.z + 52,
+                player.group.position.x + 36,
+                player.group.position.y + 40,
+                player.group.position.z + 36,
                 player.group.position.x,
-                player.group.position.y + 3.0,
+                player.group.position.y + 2.5,
                 player.group.position.z
             );
         }
+
+        // Pointer Drag / Mouse Free-Look Listeners
+        renderer.domElement.addEventListener('pointerdown', (e) => {
+            isMouseDown = true;
+            prevMouseX = e.clientX;
+            prevMouseY = e.clientY;
+        });
+
+        window.addEventListener('pointermove', (e) => {
+            if (!isMouseDown) return;
+            const deltaX = e.clientX - prevMouseX;
+            const deltaY = e.clientY - prevMouseY;
+            prevMouseX = e.clientX;
+            prevMouseY = e.clientY;
+
+            if (isFirstPerson) {
+                const sens = 0.0032;
+                fpYaw -= deltaX * sens;
+                fpPitch -= deltaY * sens;
+                fpPitch = Math.max(-Math.PI / 2.3, Math.min(Math.PI / 2.3, fpPitch));
+            }
+        });
+
+        window.addEventListener('pointerup', () => {
+            isMouseDown = false;
+        });
+
+        renderer.domElement.addEventListener('wheel', (e) => {
+            if (isFirstPerson) {
+                camera.fov = Math.max(30, Math.min(85, camera.fov + e.deltaY * 0.04));
+                camera.updateProjectionMatrix();
+            }
+        }, { passive: true });
 
         // ==================== 17. WEBSOCKET REAL-TIME BRIDGE ====================
         function connectWebSocket() {
@@ -2257,7 +2886,9 @@
             const delta = clock.getDelta();
             const time = clock.getElapsedTime();
 
-            controls.update();
+            if (!isFirstPerson) {
+                controls.update();
+            }
 
             // Smooth Camera Preset Interpolation
             if (isCamTransitioning) {
@@ -2268,7 +2899,7 @@
                 }
             }
 
-            // Animate Voxel Props (Helicopter rotor, Fountain spray)
+            // Animate Voxel Props (Helicopter rotor, Fountain spray, Chiller fans, Swimming pool shimmer)
             animatedObjects.forEach(item => {
                 if (item.rotSpeed && item.obj) {
                     item.obj.rotation.y += item.rotSpeed;
@@ -2276,9 +2907,13 @@
                 if (item.isFountain && item.obj) {
                     item.obj.rotation.y += 0.012;
                 }
+                if (item.isPoolWater && item.obj) {
+                    item.obj.position.y = 2.22 + Math.sin(time * 2.5) * 0.04;
+                    item.obj.material.opacity = 0.82 + Math.sin(time * 3.2) * 0.05;
+                }
             });
 
-            // Smooth Bot Avatars Interpolation & Natural Bobbing
+            // Smooth Bot Avatars Interpolation & Grounded Shadows
             Object.values(botAvatars).forEach(avatar => {
                 if (!avatar || !avatar.group || !avatar.targetPos) return;
                 const dist = avatar.group.position.distanceTo(avatar.targetPos);
@@ -2288,34 +2923,71 @@
                 } else {
                     avatar.group.position.y = avatar.targetPos.y + Math.sin(time * 2) * 0.05;
                 }
+                if (avatar.shadow) {
+                    avatar.shadow.position.set(avatar.group.position.x, 0.04, avatar.group.position.z);
+                }
             });
 
             // ==================== PLAYER INTERACTIVE MOVEMENT & ANIMATION ====================
+            const dt = Math.min(delta, 0.05);
+            const isShift = keysDown['ShiftLeft'] || keysDown['ShiftRight'];
+            const curSpeed = (isShift ? 52.0 : 30.0) * dt;
+
             let moveX = 0;
             let moveZ = 0;
-
             if (keysDown['KeyW'] || keysDown['ArrowUp']) moveZ -= 1;
             if (keysDown['KeyS'] || keysDown['ArrowDown']) moveZ += 1;
             if (keysDown['KeyA'] || keysDown['ArrowLeft']) moveX -= 1;
             if (keysDown['KeyD'] || keysDown['ArrowRight']) moveX += 1;
 
-            const isShift = keysDown['ShiftLeft'] || keysDown['ShiftRight'];
-            const curSpeed = (isShift ? 0.95 : 0.60);
-
             if (moveX !== 0 || moveZ !== 0) {
                 player.isMoving = true;
-                const len = Math.hypot(moveX, moveZ);
-                const dirX = (moveX / len) * curSpeed;
-                const dirZ = (moveZ / len) * curSpeed;
+                let dirX = 0;
+                let dirZ = 0;
 
-                // Smoothly rotate character toward movement vector
-                const targetRot = Math.atan2(moveX, moveZ);
-                let diff = targetRot - player.group.rotation.y;
-                while (diff < -Math.PI) diff += Math.PI * 2;
-                while (diff > Math.PI) diff -= Math.PI * 2;
-                player.group.rotation.y += diff * 0.20;
+                if (isFirstPerson) {
+                    // First-person movement: move along player's yaw
+                    const sinY = Math.sin(fpYaw);
+                    const cosY = Math.cos(fpYaw);
+                    const fx = sinY;
+                    const fz = cosY;
+                    const rx = cosY;
+                    const rz = -sinY;
 
-                // Independent X and Z collision detection (enables wall sliding)
+                    const len = Math.hypot(moveX, moveZ);
+                    const normX = moveX / len;
+                    const normZ = moveZ / len;
+
+                    dirX = (fx * -normZ + rx * normX) * curSpeed;
+                    dirZ = (fz * -normZ + rz * normX) * curSpeed;
+                } else {
+                    // Third-person movement: move relative to camera horizontal orientation
+                    const camDir = new THREE.Vector3();
+                    camera.getWorldDirection(camDir);
+                    camDir.y = 0;
+                    if (camDir.lengthSq() < 0.001) camDir.set(0, 0, -1);
+                    camDir.normalize();
+
+                    const camRight = new THREE.Vector3();
+                    camRight.crossVectors(camDir, new THREE.Vector3(0, 1, 0)).normalize();
+
+                    const desiredDir = new THREE.Vector3();
+                    desiredDir.addScaledVector(camDir, -moveZ);
+                    desiredDir.addScaledVector(camRight, moveX);
+                    desiredDir.normalize();
+
+                    dirX = desiredDir.x * curSpeed;
+                    dirZ = desiredDir.z * curSpeed;
+
+                    // Smoothly rotate character toward movement vector
+                    const targetRot = Math.atan2(desiredDir.x, desiredDir.z);
+                    let diff = targetRot - player.group.rotation.y;
+                    while (diff < -Math.PI) diff += Math.PI * 2;
+                    while (diff > Math.PI) diff -= Math.PI * 2;
+                    player.group.rotation.y += diff * 0.22;
+                }
+
+                // Independent X and Z collision detection (smooth wall sliding)
                 const newX = player.group.position.x + dirX;
                 const newZ = player.group.position.z + dirZ;
 
@@ -2346,6 +3018,15 @@
                     player.rightArmPivot.rotation.x *= 0.75;
                 }
                 player.group.position.y = 0.8 + Math.sin(time * 2.5) * 0.04;
+            }
+
+            // Grounded Soft Shadow Disc update
+            if (player.shadow) {
+                player.shadow.position.set(player.group.position.x, 0.04, player.group.position.z);
+                const bobOffset = Math.max(0, player.group.position.y - 0.8);
+                const s = 1.0 - bobOffset * 0.45;
+                player.shadow.scale.set(s, s, 1);
+                player.shadow.material.opacity = Math.max(0.25, 0.78 - bobOffset * 0.35);
             }
 
             // Player Hand Waving
@@ -2381,32 +3062,39 @@
                 promptEl.style.display = 'none';
             }
 
-            // Third-Person Smooth Follow Camera
-            if (isFollowCamActive && !isCamTransitioning) {
-                const targetPos = new THREE.Vector3(
-                    player.group.position.x + 52,
-                    70,
-                    player.group.position.z + 52
-                );
-                camera.position.lerp(targetPos, 0.06);
-                controls.target.lerp(new THREE.Vector3(
+            // Third-Person Smooth Follow Camera (Preserves user free-look rotation & zoom)
+            if (isFollowCamActive && !isCamTransitioning && !isFirstPerson) {
+                const targetPoint = new THREE.Vector3(
                     player.group.position.x,
-                    player.group.position.y + 3.0,
+                    player.group.position.y + 2.5,
                     player.group.position.z
-                ), 0.06);
+                );
+                const deltaTarget = targetPoint.clone().sub(controls.target);
+                const step = deltaTarget.multiplyScalar(0.12);
+                controls.target.add(step);
+                camera.position.add(step);
+            }
+
+            // First-Person Mode Camera
+            if (isFirstPerson) {
+                camera.position.set(
+                    player.group.position.x,
+                    player.group.position.y + 3.6,
+                    player.group.position.z
+                );
+                camera.rotation.set(0, 0, 0);
+                camera.quaternion.setFromEuler(new THREE.Euler(fpPitch, fpYaw, 0, 'YXZ'));
+                player.group.rotation.y = fpYaw;
             }
 
             renderer.render(scene, camera);
         }
         animate();
 
-        // Window Resize Listener
+        // Window Resize Listener (Perspective Camera)
         window.addEventListener('resize', () => {
             const aspect = window.innerWidth / window.innerHeight;
-            camera.left = -d * aspect;
-            camera.right = d * aspect;
-            camera.top = d;
-            camera.bottom = -d;
+            camera.aspect = aspect;
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
         });
