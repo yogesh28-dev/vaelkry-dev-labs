@@ -299,6 +299,60 @@
         #bot-roster::-webkit-scrollbar { width: 5px; }
         #bot-roster::-webkit-scrollbar-track { background: rgba(0,0,0,0.2); }
         #bot-roster::-webkit-scrollbar-thumb { background: rgba(56, 189, 248, 0.3); border-radius: 3px; }
+
+        /* Playable Character Interactive HUD */
+        #player-hud {
+            position: absolute;
+            bottom: 24px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+            z-index: 25;
+            pointer-events: none;
+        }
+
+        #action-prompt {
+            padding: 9px 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 13px;
+            font-weight: 700;
+            color: #fef08a;
+            border-color: rgba(245, 158, 11, 0.6);
+            background: rgba(15, 23, 42, 0.94);
+            animation: bounce-prompt 1.5s infinite;
+            transition: opacity 0.2s, transform 0.2s;
+            pointer-events: auto;
+        }
+
+        @keyframes bounce-prompt {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-5px); }
+        }
+
+        #controls-hint {
+            padding: 7px 16px;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            font-size: 11px;
+            color: var(--text-secondary);
+            font-family: 'JetBrains Mono', monospace;
+            pointer-events: auto;
+        }
+
+        #controls-hint kbd {
+            background: rgba(255, 255, 255, 0.12);
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            border-radius: 4px;
+            padding: 2px 7px;
+            color: #38bdf8;
+            font-weight: 800;
+        }
     </style>
     <!-- Three.js CDN & Controls -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -318,13 +372,15 @@
             </div>
         </div>
 
-        <!-- Camera Navigation Presets -->
+        <!-- Camera Navigation Presets & Follower Toggle -->
         <div id="nav-toolbar" class="glass-panel">
-            <button class="nav-btn active" onclick="jumpCamera('overview')">🌐 Master Campus</button>
+            <button class="nav-btn" onclick="jumpCamera('overview')">🌐 Master Campus</button>
             <button class="nav-btn" onclick="jumpCamera('aviation')">✈️ Runway & Penthouse</button>
             <button class="nav-btn" onclick="jumpCamera('work_pods')">💻 Engineering Pods</button>
             <button class="nav-btn" onclick="jumpCamera('recreation')">☕ Recreation & Fountain</button>
             <button class="nav-btn" onclick="jumpCamera('sports')">⚽ Sports Arena</button>
+            <button id="cam-follow-btn" class="nav-btn active" onclick="toggleCameraFollow()">🎥 Follow Me (P)</button>
+            <button class="nav-btn" onclick="focusPlayer()">👤 Focus Me (F)</button>
         </div>
     </div>
 
@@ -370,6 +426,21 @@
             <div id="bot-list-container" class="bot-list">
                 <!-- Dynamically populated -->
             </div>
+        </div>
+    </div>
+
+    <!-- Playable Character Interactive HUD -->
+    <div id="player-hud">
+        <div id="action-prompt" class="glass-panel" style="display: none;">
+            <span class="pulse-beacon online" style="background:#f59e0b; box-shadow:0 0 12px #f59e0b;"></span>
+            <span id="action-prompt-text">Press [E] to greet TTF Vasan</span>
+        </div>
+        <div id="controls-hint" class="glass-panel">
+            <span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Move</span>
+            <span><kbd>Shift</kbd> Sprint</span>
+            <span><kbd>E</kbd> Greet Bot</span>
+            <span><kbd>P</kbd> Follow Cam</span>
+            <span><kbd>F</kbd> Focus Me</span>
         </div>
     </div>
 
@@ -1690,7 +1761,356 @@
         }
         autoSpawnCampusBots();
 
-        // ==================== 13. WEBSOCKET REAL-TIME BRIDGE ====================
+        // ==================== 13. PLAYABLE SELF-AVATAR (YOGESH - ADMIN/PLAYER) ====================
+        function createPlayerNametag() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 440;
+            canvas.height = 130;
+            const ctx = canvas.getContext('2d');
+
+            // Dark Glass Pill with golden neon glow
+            ctx.fillStyle = 'rgba(15, 23, 42, 0.94)';
+            roundRect(ctx, 8, 8, 424, 114, 22);
+            ctx.fill();
+
+            // Gold and Neon Emerald Border
+            ctx.strokeStyle = '#f59e0b';
+            ctx.lineWidth = 5;
+            roundRect(ctx, 8, 8, 424, 114, 22);
+            ctx.stroke();
+
+            // Status Beacon Dot (Online Emerald)
+            ctx.fillStyle = '#10b981';
+            ctx.beginPath();
+            ctx.arc(38, 46, 10, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Player Name Text
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 32px Outfit, sans-serif';
+            ctx.fillText('Yogesh (YOU) 👤', 60, 56);
+
+            // Subtitle
+            ctx.fillStyle = '#38bdf8';
+            ctx.font = '700 19px JetBrains Mono, monospace';
+            ctx.fillText('YDL FOUNDER & ADMIN • PLAYING', 36, 96);
+
+            const tex = new THREE.CanvasTexture(canvas);
+            const spriteMat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false });
+            const sprite = new THREE.Sprite(spriteMat);
+            sprite.scale.set(8.5, 2.7, 1);
+            sprite.position.y = 6.0;
+            return sprite;
+        }
+
+        function createPlayerAvatar() {
+            const group = new THREE.Group();
+
+            // Legs with pivots at hip for natural swinging
+            const legGeo = new THREE.BoxGeometry(0.5, 1.2, 0.6);
+            const legMat = new THREE.MeshLambertMaterial({ color: 0x0f172a }); // Dark carbon pants
+
+            const leftLegPivot = new THREE.Group();
+            leftLegPivot.position.set(-0.35, 1.2, 0);
+            const leftLeg = new THREE.Mesh(legGeo, legMat);
+            leftLeg.position.y = -0.6;
+            leftLegPivot.add(leftLeg);
+            group.add(leftLegPivot);
+
+            const rightLegPivot = new THREE.Group();
+            rightLegPivot.position.set(0.35, 1.2, 0);
+            const rightLeg = new THREE.Mesh(legGeo, legMat);
+            rightLeg.position.y = -0.6;
+            rightLegPivot.add(rightLeg);
+            group.add(rightLegPivot);
+
+            // Torso (Executive Admin Suit with gold cyber accents)
+            const bodyGeo = new THREE.BoxGeometry(1.6, 1.8, 0.9);
+            const bodyMat = new THREE.MeshLambertMaterial({ color: 0x1e293b });
+            const body = new THREE.Mesh(bodyGeo, bodyMat);
+            body.position.y = 2.1;
+            body.castShadow = true;
+            group.add(body);
+
+            // Gold tie
+            const tieGeo = new THREE.BoxGeometry(0.32, 1.2, 0.1);
+            const tieMat = new THREE.MeshBasicMaterial({ color: 0xf59e0b });
+            const tie = new THREE.Mesh(tieGeo, tieMat);
+            tie.position.set(0, 2.0, 0.5);
+            group.add(tie);
+
+            // Arms with pivots at shoulder for walking swing and waving
+            const armGeo = new THREE.BoxGeometry(0.5, 1.5, 0.5);
+            const armMat = new THREE.MeshLambertMaterial({ color: 0x334155 });
+
+            const leftArmPivot = new THREE.Group();
+            leftArmPivot.position.set(-1.1, 2.7, 0);
+            const leftArm = new THREE.Mesh(armGeo, armMat);
+            leftArm.position.y = -0.75;
+            leftArmPivot.add(leftArm);
+            group.add(leftArmPivot);
+
+            const rightArmPivot = new THREE.Group();
+            rightArmPivot.position.set(1.1, 2.7, 0);
+            const rightArm = new THREE.Mesh(armGeo, armMat);
+            rightArm.position.y = -0.75;
+            rightArmPivot.add(rightArm);
+            group.add(rightArmPivot);
+
+            // Head
+            const headGeo = new THREE.BoxGeometry(1.2, 1.2, 1.2);
+            const headMat = new THREE.MeshLambertMaterial({ color: 0xfef08a });
+            const head = new THREE.Mesh(headGeo, headMat);
+            head.position.y = 3.6;
+            head.castShadow = true;
+            group.add(head);
+
+            // Tech Visor
+            const visorGeo = new THREE.BoxGeometry(1.3, 0.35, 0.4);
+            const visorMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8 });
+            const visor = new THREE.Mesh(visorGeo, visorMat);
+            visor.position.set(0, 3.6, 0.5);
+            group.add(visor);
+
+            // Gold Crown Rim (Founder / Admin)
+            const crownGeo = new THREE.BoxGeometry(1.3, 0.25, 1.3);
+            const crownMat = new THREE.MeshLambertMaterial({ color: 0xf59e0b });
+            const crown = new THREE.Mesh(crownGeo, crownMat);
+            crown.position.y = 4.25;
+            group.add(crown);
+
+            // Overhead Nametag
+            const nametag = createPlayerNametag();
+            group.add(nametag);
+
+            // Initial Spawn Position at Central Fountain Plaza [0, 0.8, 50]
+            group.position.set(0, 0.8, 50);
+            scene.add(group);
+
+            return {
+                group: group,
+                leftLegPivot: leftLegPivot,
+                rightLegPivot: rightLegPivot,
+                leftArmPivot: leftArmPivot,
+                rightArmPivot: rightArmPivot,
+                nametag: nametag,
+                speed: 0.65,
+                rotationAngle: Math.PI,
+                isMoving: false,
+                isWaving: false,
+                waveTimer: 0
+            };
+        }
+
+        const player = createPlayerAvatar();
+
+        // ==================== 14. CHAT BUBBLES & GREETING SYSTEM ====================
+        function createSpeechBubbleSprite(text, accentColor = '#f59e0b') {
+            const canvas = document.createElement('canvas');
+            canvas.width = 460;
+            canvas.height = 140;
+            const ctx = canvas.getContext('2d');
+
+            ctx.fillStyle = 'rgba(15, 23, 42, 0.95)';
+            roundRect(ctx, 10, 10, 440, 95, 20);
+            ctx.fill();
+
+            ctx.strokeStyle = accentColor;
+            ctx.lineWidth = 4;
+            roundRect(ctx, 10, 10, 440, 95, 20);
+            ctx.stroke();
+
+            // Speech pointer triangle down
+            ctx.fillStyle = 'rgba(15, 23, 42, 0.95)';
+            ctx.beginPath();
+            ctx.moveTo(215, 105);
+            ctx.lineTo(230, 125);
+            ctx.lineTo(245, 105);
+            ctx.closePath();
+            ctx.fill();
+            ctx.strokeStyle = accentColor;
+            ctx.lineWidth = 4;
+            ctx.stroke();
+
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 24px Outfit, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(text, 230, 62);
+
+            const tex = new THREE.CanvasTexture(canvas);
+            const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false });
+            const sprite = new THREE.Sprite(mat);
+            sprite.scale.set(8.5, 2.6, 1);
+            sprite.position.y = 8.5;
+            return sprite;
+        }
+
+        let activePlayerBubble = null;
+        let activeBotBubble = null;
+        let bubbleTimeout = null;
+        let nearestNearbyBot = null;
+
+        function triggerGreeting(targetBot) {
+            if (!targetBot) return;
+
+            // Player wave animation
+            player.isWaving = true;
+            player.waveTimer = 2.0;
+
+            if (activePlayerBubble && player.group) {
+                player.group.remove(activePlayerBubble);
+                activePlayerBubble = null;
+            }
+            if (activeBotBubble && activeBotBubble.parent) {
+                activeBotBubble.parent.remove(activeBotBubble);
+                activeBotBubble = null;
+            }
+            if (bubbleTimeout) clearTimeout(bubbleTimeout);
+
+            const greetings = [
+                `Hey ${targetBot.name}! 👋 Keep crushing it!`,
+                `Great work squad! 🚀 YDL is flying!`,
+                `Looking sharp, ${targetBot.name}! 🔥`,
+                `Campus looking elite today! 💻`
+            ];
+            const pText = greetings[Math.floor(Math.random() * greetings.length)];
+            activePlayerBubble = createSpeechBubbleSprite(pText, '#f59e0b');
+            player.group.add(activePlayerBubble);
+
+            const responses = [
+                `Hey Boss! 👋 All systems nominal!`,
+                `Working hard for YDL! 🚀`,
+                `Always ready, Yogesh! 👑`,
+                `Code synced and green! ✅`
+            ];
+            const bText = responses[Math.floor(Math.random() * responses.length)];
+            activeBotBubble = createSpeechBubbleSprite(bText, '#38bdf8');
+            targetBot.group.add(activeBotBubble);
+
+            // Target bot turns towards player
+            const dx = player.group.position.x - targetBot.group.position.x;
+            const dz = player.group.position.z - targetBot.group.position.z;
+            targetBot.group.rotation.y = Math.atan2(dx, dz);
+
+            bubbleTimeout = setTimeout(() => {
+                if (activePlayerBubble && player.group) {
+                    player.group.remove(activePlayerBubble);
+                    activePlayerBubble = null;
+                }
+                if (activeBotBubble && activeBotBubble.parent) {
+                    activeBotBubble.parent.remove(activeBotBubble);
+                    activeBotBubble = null;
+                }
+            }, 3500);
+        }
+
+        // ==================== 15. KEYBOARD INPUT & COLLISION LOGIC ====================
+        const keysDown = {};
+        window.addEventListener('keydown', (e) => {
+            keysDown[e.code] = true;
+
+            // Re-engage follower camera when player moves
+            if (['KeyW', 'KeyS', 'KeyA', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) {
+                if (!isFollowCamActive) {
+                    isFollowCamActive = true;
+                    if (camFollowBtn) {
+                        camFollowBtn.classList.add('active');
+                        camFollowBtn.innerText = "🎥 Follow Me (P)";
+                    }
+                }
+            }
+
+            // Hotkey 'P': Toggle Follow Camera
+            if (e.code === 'KeyP') {
+                toggleCameraFollow();
+            }
+
+            // Hotkey 'F' or 'C': Focus Player
+            if (e.code === 'KeyF' || e.code === 'KeyC') {
+                focusPlayer();
+            }
+
+            // Hotkey 'E': Greet nearest dynamic bot
+            if (e.code === 'KeyE') {
+                if (nearestNearbyBot) {
+                    triggerGreeting(nearestNearbyBot);
+                }
+            }
+        });
+
+        window.addEventListener('keyup', (e) => {
+            keysDown[e.code] = false;
+        });
+
+        function checkBuildingCollision(x, z) {
+            // Island perimeter borders
+            if (x < -155 || x > 155 || z < -180 || z > 180) return true;
+
+            // Central fountain basin perimeter
+            if (Math.hypot(x - 0, z - 50) < 9.0) return true;
+
+            // Check against building footprints
+            for (const [key, b] of Object.entries(zones)) {
+                if (!b.isBuilding && !b.isPod) continue;
+
+                const halfW = b.w / 2;
+                const halfD = b.d / 2;
+                const minX = b.x - halfW;
+                const maxX = b.x + halfW;
+                const minZ = b.z - halfD;
+                const maxZ = b.z + halfD;
+
+                if (x >= minX - 0.6 && x <= maxX + 0.6 && z >= minZ - 0.6 && z <= maxZ + 0.6) {
+                    // Check open front entryway
+                    const isDoorX = Math.abs(x - b.x) < 3.2;
+                    const isFrontZ = Math.abs(z - (b.z + halfD)) < 1.4;
+                    if (isDoorX && isFrontZ) {
+                        return false; // Permitted to enter through door
+                    }
+                    // Inside interior floor
+                    if (x > minX + 1.2 && x < maxX - 1.2 && z > minZ + 1.2 && z < maxZ - 0.6) {
+                        return false; // Exploring room interior
+                    }
+                    return true; // Wall collision
+                }
+            }
+            return false;
+        }
+
+        // ==================== 16. CAMERA CONTROLLER & PRESETS ====================
+        let isFollowCamActive = true;
+        const camFollowBtn = document.getElementById('cam-follow-btn');
+
+        function toggleCameraFollow() {
+            isFollowCamActive = !isFollowCamActive;
+            if (camFollowBtn) {
+                if (isFollowCamActive) {
+                    camFollowBtn.classList.add('active');
+                    camFollowBtn.innerText = "🎥 Follow Me (P)";
+                } else {
+                    camFollowBtn.classList.remove('active');
+                    camFollowBtn.innerText = "🎥 Free Orbit (P)";
+                }
+            }
+        }
+
+        function focusPlayer() {
+            isFollowCamActive = true;
+            if (camFollowBtn) {
+                camFollowBtn.classList.add('active');
+                camFollowBtn.innerText = "🎥 Follow Me (P)";
+            }
+            smoothMoveCamera(
+                player.group.position.x + 52,
+                70,
+                player.group.position.z + 52,
+                player.group.position.x,
+                player.group.position.y + 3.0,
+                player.group.position.z
+            );
+        }
+
+        // ==================== 17. WEBSOCKET REAL-TIME BRIDGE ====================
         function connectWebSocket() {
             const host = window.location.hostname || "127.0.0.1";
             const wsUrl = `ws://${host}:8765/ws`;
@@ -1769,6 +2189,11 @@
         function focusBot(name) {
             const bot = botAvatars[name];
             if (bot) {
+                isFollowCamActive = false;
+                if (camFollowBtn) {
+                    camFollowBtn.classList.remove('active');
+                    camFollowBtn.innerText = "🎥 Free Orbit (P)";
+                }
                 smoothMoveCamera(
                     bot.group.position.x + 36,
                     52,
@@ -1780,7 +2205,7 @@
             }
         }
 
-        // ==================== 14. SMOOTH CAMERA PRESET JUMPS ====================
+        // ==================== 18. SMOOTH CAMERA PRESET JUMPS ====================
         let targetCamPos = camera.position.clone();
         let targetLookAt = controls.target.clone();
         let isCamTransitioning = false;
@@ -1796,6 +2221,13 @@
             if (typeof window !== 'undefined' && window.event && window.event.target) {
                 const targetBtn = window.event.target.closest('.nav-btn') || window.event.target;
                 if (targetBtn && targetBtn.classList) targetBtn.classList.add('active');
+            }
+
+            // Pause follower cam during specific preset inspections
+            isFollowCamActive = false;
+            if (camFollowBtn) {
+                camFollowBtn.classList.remove('active');
+                camFollowBtn.innerText = "🎥 Free Orbit (P)";
             }
 
             switch (preset) {
@@ -1817,7 +2249,7 @@
             }
         }
 
-        // ==================== 15. ANIMATION & RENDER LOOP ====================
+        // ==================== 19. ANIMATION & RENDER LOOP ====================
         let clock = new THREE.Clock();
 
         function animate() {
@@ -1827,7 +2259,7 @@
 
             controls.update();
 
-            // Smooth Camera Interpolation
+            // Smooth Camera Preset Interpolation
             if (isCamTransitioning) {
                 camera.position.lerp(targetCamPos, 0.06);
                 controls.target.lerp(targetLookAt, 0.06);
@@ -1846,7 +2278,7 @@
                 }
             });
 
-            // Smooth Avatar Interpolation & Natural Bobbing
+            // Smooth Bot Avatars Interpolation & Natural Bobbing
             Object.values(botAvatars).forEach(avatar => {
                 if (!avatar || !avatar.group || !avatar.targetPos) return;
                 const dist = avatar.group.position.distanceTo(avatar.targetPos);
@@ -1857,6 +2289,112 @@
                     avatar.group.position.y = avatar.targetPos.y + Math.sin(time * 2) * 0.05;
                 }
             });
+
+            // ==================== PLAYER INTERACTIVE MOVEMENT & ANIMATION ====================
+            let moveX = 0;
+            let moveZ = 0;
+
+            if (keysDown['KeyW'] || keysDown['ArrowUp']) moveZ -= 1;
+            if (keysDown['KeyS'] || keysDown['ArrowDown']) moveZ += 1;
+            if (keysDown['KeyA'] || keysDown['ArrowLeft']) moveX -= 1;
+            if (keysDown['KeyD'] || keysDown['ArrowRight']) moveX += 1;
+
+            const isShift = keysDown['ShiftLeft'] || keysDown['ShiftRight'];
+            const curSpeed = (isShift ? 0.95 : 0.60);
+
+            if (moveX !== 0 || moveZ !== 0) {
+                player.isMoving = true;
+                const len = Math.hypot(moveX, moveZ);
+                const dirX = (moveX / len) * curSpeed;
+                const dirZ = (moveZ / len) * curSpeed;
+
+                // Smoothly rotate character toward movement vector
+                const targetRot = Math.atan2(moveX, moveZ);
+                let diff = targetRot - player.group.rotation.y;
+                while (diff < -Math.PI) diff += Math.PI * 2;
+                while (diff > Math.PI) diff -= Math.PI * 2;
+                player.group.rotation.y += diff * 0.20;
+
+                // Independent X and Z collision detection (enables wall sliding)
+                const newX = player.group.position.x + dirX;
+                const newZ = player.group.position.z + dirZ;
+
+                if (!checkBuildingCollision(newX, player.group.position.z)) {
+                    player.group.position.x = newX;
+                }
+                if (!checkBuildingCollision(player.group.position.x, newZ)) {
+                    player.group.position.z = newZ;
+                }
+
+                // Leg & Arm walking swings
+                const walkCycle = time * (isShift ? 14 : 9);
+                const legSwing = Math.sin(walkCycle) * 0.65;
+                player.leftLegPivot.rotation.x = legSwing;
+                player.rightLegPivot.rotation.x = -legSwing;
+
+                if (!player.isWaving) {
+                    player.leftArmPivot.rotation.x = -legSwing * 0.75;
+                    player.rightArmPivot.rotation.x = legSwing * 0.75;
+                }
+                player.group.position.y = 0.8 + Math.abs(Math.sin(walkCycle)) * 0.20;
+            } else {
+                player.isMoving = false;
+                player.leftLegPivot.rotation.x *= 0.75;
+                player.rightLegPivot.rotation.x *= 0.75;
+                if (!player.isWaving) {
+                    player.leftArmPivot.rotation.x *= 0.75;
+                    player.rightArmPivot.rotation.x *= 0.75;
+                }
+                player.group.position.y = 0.8 + Math.sin(time * 2.5) * 0.04;
+            }
+
+            // Player Hand Waving
+            if (player.isWaving) {
+                player.waveTimer -= delta;
+                player.rightArmPivot.rotation.x = -2.7;
+                player.rightArmPivot.rotation.z = Math.sin(time * 16) * 0.45;
+                if (player.waveTimer <= 0) {
+                    player.isWaving = false;
+                    player.rightArmPivot.rotation.set(0, 0, 0);
+                }
+            }
+
+            // Proximity Detection to Nearest Campus Bot
+            let closestBot = null;
+            let closestDist = 14.0;
+            Object.values(botAvatars).forEach(b => {
+                if (!b || !b.group) return;
+                const dist = player.group.position.distanceTo(b.group.position);
+                if (dist < closestDist) {
+                    closestDist = dist;
+                    closestBot = b;
+                }
+            });
+            nearestNearbyBot = closestBot;
+
+            const promptEl = document.getElementById('action-prompt');
+            const promptText = document.getElementById('action-prompt-text');
+            if (closestBot && promptEl && promptText) {
+                promptText.innerText = `Press [E] to greet ${closestBot.name} (${closestBot.squad})`;
+                promptEl.style.display = 'flex';
+            } else if (promptEl) {
+                promptEl.style.display = 'none';
+            }
+
+            // Third-Person Smooth Follow Camera
+            if (isFollowCamActive && !isCamTransitioning) {
+                const targetPos = new THREE.Vector3(
+                    player.group.position.x + 52,
+                    70,
+                    player.group.position.z + 52
+                );
+                camera.position.lerp(targetPos, 0.06);
+                controls.target.lerp(new THREE.Vector3(
+                    player.group.position.x,
+                    player.group.position.y + 3.0,
+                    player.group.position.z
+                ), 0.06);
+            }
 
             renderer.render(scene, camera);
         }
